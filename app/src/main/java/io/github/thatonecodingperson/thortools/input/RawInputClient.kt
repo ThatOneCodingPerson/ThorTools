@@ -27,6 +27,9 @@ class RawInputClient(private val context: Context, private val executor: ShellEx
 
         /** A D-pad direction or stick flick went down or up, read raw from the pad while it is watched ([watchPad]). */
         fun onDirection(button: PadButton, down: Boolean)
+
+        /** The lid closed or opened. */
+        fun onLid(closed: Boolean)
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -168,6 +171,7 @@ class RawInputClient(private val context: Context, private val executor: ShellEx
                     is HelperMessage.Touch -> mainHandler.post { listener.onTouch(message.screen) }
                     is HelperMessage.Lift -> mainHandler.post { listener.onLift(message.screen) }
                     is HelperMessage.Direction -> mainHandler.post { listener.onDirection(message.button, message.down) }
+                    is HelperMessage.Lid -> mainHandler.post { listener.onLid(message.closed) }
                     is HelperMessage.Status ->
                         devices =
                             (devices.filterNot { it.startsWith(message.text.substringBefore(' ')) } + message.text)

@@ -12,14 +12,17 @@ import kotlin.system.exitProcess
 
 /**
  * Runs as root through `app_process` (started by [RawInputClient]): reports which screen was touched last and when
- * the last finger left it, the pad's D-pad directions and stick flicks while the app watches the pad, and runs the
- * commands an app may not (see [RootCommands]). It only reads input devices; it never grabs or injects anything on its
- * own. Arguments: abstract socket name, the app's uid.
+ * the last finger left it, the pad's D-pad directions and stick flicks while the app watches the pad, the lid opening
+ * and closing, and runs the commands an app may not (see [RootCommands]). It never grabs or injects anything on its
+ * own; it mutes input devices only when the app asks (the lid sandbox), and unmutes them the moment the lid opens.
+ * Arguments: abstract socket name, the app's uid.
  */
 object RawInputHelper {
     private const val EV_SYN = 0
     private const val EV_ABS = 3
+    private const val EV_SW = 5
     private const val SYN_REPORT = 0
+    private const val SW_LID = 0
     private const val EVENT_SIZE = 24
     private const val TOUCH_REPORT_GAP_MS = 300L
 
@@ -46,9 +49,13 @@ object RawInputHelper {
         val input = socket.inputStream.bufferedReader()
         if (input.readLine() != "hello") exitProcess(4)
 
-        startReader("top", { nodes -> nodes.firstOrNull { it.name == "fts_ts" } }) { stream -> readTouch(stream, Screen.TOP) }
-        startReader("bottom", { nodes -> nodes.firstOrNull { it.name == "fts_ts_3" } }) { stream -> readTouch(stream, Screen.BOTTOM) }
-        startReader("pad", ThorPad::pick, ::readPad)
+        startReader("top", { nodes -> nodes.firstOrNull { it.name == "fts_ts" } }) { _, stream -> readTouch(stream, Screen.TOP) }
+        startReader("bottom", { nodes -> nodes.firstOrNull { it.name == "fts_ts_3" } }) { _, stream -> readTouch(stream, Screen.BOTTOM) }
+        startReader("pad", ThorPad::pick) { node, stream ->
+            InputMute.padAppeared(node)
+            readPad(stream)
+        }
+        startReader("lid", { nodes -> nodes.firstOrNull { it.name == "hall_switch" } }) { _, stream -> readLid(stream) }
 
         // The readers can block in read() for hours, so this loop is the one that notices the app went away.
         while (true) {
@@ -100,7 +107,7 @@ object RawInputHelper {
     }
 
     /** One daemon thread per slot. A failing read means the device went away, so look again. */
-    private fun startReader(slot: String, pick: (List<InputNode>) -> InputNode?, read: (FileInputStream) -> Unit) {
+    private fun startReader(slot: String, pick: (List<InputNode>) -> InputNode?, read: (InputNode, FileInputStream) -> Unit) {
         Thread {
             var reported: String? = null
             while (true) {
@@ -114,7 +121,7 @@ object RawInputHelper {
                     reported = node.path
                 }
                 try {
-                    FileInputStream(node.path).use(read)
+                    FileInputStream(node.path).use { read(node, it) }
                 } catch (_: Exception) {
                     Thread.sleep(300)
                 }
@@ -125,7 +132,7 @@ object RawInputHelper {
         }.start()
     }
 
-    private fun scanNodes(): List<InputNode> = File("/sys/class/input").listFiles { file -> file.name.startsWith("event") }
+    fun scanNodes(): List<InputNode> = File("/sys/class/input").listFiles { file -> file.name.startsWith("event") }
         .orEmpty()
         .sortedBy { it.name.removePrefix("event").toIntOrNull() ?: Int.MAX_VALUE }
         .mapNotNull { dir ->
@@ -175,6 +182,17 @@ object RawInputHelper {
                     val changes = synchronized(padLock) { padDirections?.update(pad.sample()) }
                     changes?.forEach { send(HelperMessage.Direction(it.button, it.down)) }
                 }
+            }
+        }
+    }
+
+    /** The lid sensor: opening the lid unmutes every muted device right away, before the app hears of it. */
+    private fun readLid(stream: FileInputStream) {
+        forEachEvent(stream) { type, code, value ->
+            if (type == EV_SW && code == SW_LID) {
+                val closed = value == 1
+                if (!closed) InputMute.unmuteAll(scanNodes())
+                send(HelperMessage.Lid(closed))
             }
         }
     }

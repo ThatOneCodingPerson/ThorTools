@@ -17,6 +17,8 @@ class HelperMessagesTest {
             HelperMessage.Result(8, ok = false, text = "moveRootTaskToDisplay failed: no such method"),
             HelperMessage.Direction(PadButton.RSTICK_UP, down = true),
             HelperMessage.Direction(PadButton.DPAD_LEFT, down = false),
+            HelperMessage.Lid(closed = true),
+            HelperMessage.Lid(closed = false),
         )
         messages.forEach { assertEquals(it, HelperMessage.parse(HelperMessage.format(it))) }
         assertNull(HelperMessage.parse("b HOME 1"))
@@ -28,5 +30,6 @@ class HelperMessagesTest {
         assertNull(HelperMessage.parse("d rstick_up 2"))
         assertNull(HelperMessage.parse("d nothing 1"))
         assertNull(HelperMessage.parse("d home 1"))
+        assertNull(HelperMessage.parse("l 2"))
     }
 }

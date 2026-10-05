@@ -17,9 +17,10 @@ import io.github.thatonecodingperson.thortools.ui.composables.OverlapConfirmDial
 import io.github.thatonecodingperson.thortools.ui.composables.SettingsHeader
 import io.github.thatonecodingperson.thortools.ui.composables.SubScreen
 import io.github.thatonecodingperson.thortools.ui.composables.SwitchableTriggerPreference
+import io.github.thatonecodingperson.thortools.ui.composables.TriggerPreference
 
 @Composable
-fun ChargingScreen(viewModel: ChargingViewModel = hiltViewModel(), onBack: () -> Unit) {
+fun ChargingScreen(viewModel: ChargingViewModel = hiltViewModel(), onLid: () -> Unit, onBack: () -> Unit) {
     val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(Unit) { viewModel.refresh() }
@@ -53,7 +54,8 @@ fun ChargingScreen(viewModel: ChargingViewModel = hiltViewModel(), onBack: () ->
         )
     }
 
-    SubScreen(title = R.string.charging, onBack = onBack) {
+    SubScreen(title = R.string.powerManagement, onBack = onBack) {
+        SettingsHeader(R.string.charging)
         SwitchableTriggerPreference(
             icon = R.drawable.ic_electrical_services,
             title = R.string.chargeAlert,
@@ -76,5 +78,7 @@ fun ChargingScreen(viewModel: ChargingViewModel = hiltViewModel(), onBack: () ->
                 onChange = viewModel::updateChargeLimitPreference,
             )
         }
+        SettingsHeader(R.string.lidHeader)
+        TriggerPreference(icon = R.drawable.ic_lid, title = R.string.lidTitle, description = R.string.lidRowSummary, onClick = onLid)
     }
 }

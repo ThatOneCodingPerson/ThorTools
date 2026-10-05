@@ -26,7 +26,9 @@ import io.github.thatonecodingperson.thortools.actions.ActionHost
 import io.github.thatonecodingperson.thortools.actions.ActionRunner
 import io.github.thatonecodingperson.thortools.actions.CloseTarget
 import io.github.thatonecodingperson.thortools.actions.DisplayHome
+import io.github.thatonecodingperson.thortools.actions.FeedbackCue
 import io.github.thatonecodingperson.thortools.actions.StayAwake
+import io.github.thatonecodingperson.thortools.actions.ThorAction
 import io.github.thatonecodingperson.thortools.charging.ChargeMonitor
 import io.github.thatonecodingperson.thortools.coexist.OdinToolsDetector
 import io.github.thatonecodingperson.thortools.coexist.Overlap
@@ -50,12 +52,15 @@ import io.github.thatonecodingperson.thortools.input.Screen
 import io.github.thatonecodingperson.thortools.input.ScreenApps
 import io.github.thatonecodingperson.thortools.input.ScreenFocus
 import io.github.thatonecodingperson.thortools.input.WindowSnapshot
+import io.github.thatonecodingperson.thortools.lid.LidController
+import io.github.thatonecodingperson.thortools.lid.LidText
 import io.github.thatonecodingperson.thortools.main.MainActivity
 import io.github.thatonecodingperson.thortools.models.ControllerStyle
 import io.github.thatonecodingperson.thortools.models.ControllerStyle.Unknown
 import io.github.thatonecodingperson.thortools.models.FanMode
 import io.github.thatonecodingperson.thortools.models.L2R2Style
 import io.github.thatonecodingperson.thortools.models.PerfMode
+import io.github.thatonecodingperson.thortools.panel.CloseReason
 import io.github.thatonecodingperson.thortools.panel.FocusMover
 import io.github.thatonecodingperson.thortools.panel.QuickPanel
 import io.github.thatonecodingperson.thortools.tools.AynHooks
@@ -151,6 +156,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
     private var heldFrom: Int? = null
     private val panelMotion = PanelMotion { button, down, time -> if (!padWatching) onDirection(button, down, time) }
     private val catcherDue = Runnable { watchJoystick() }
+    private val focusReadAgain = Runnable { refreshFocusedDisplay() }
 
     /**
      * The display Android routes the controller to, for the joystick catcher: the last touched screen alone misses an
@@ -171,6 +177,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
     private lateinit var focusMover: FocusMover
     private lateinit var stayAwake: StayAwake
     private lateinit var controllerLock: ControllerLock
+    private lateinit var lidController: LidController
     private val actionHost = object : ActionHost {
         override val foregroundPackage: String? get() = lastAppPackage
 
@@ -194,14 +201,14 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         override fun controllerDisplayId(): Int = screenFocus.displayId()
 
         override fun goHome(displayId: Int?) {
-            quickPanel.close(returnFocus = false)
+            quickPanel.close(CloseReason.HOME, returnFocus = false)
             displayHome.goHome(displayId)
         }
 
         override fun homeAfterMove(displayId: Int) = displayHome.homeAfterMove(displayId)
 
         override fun goHomeBoth(bottomDisplayId: Int) {
-            quickPanel.close(returnFocus = false)
+            quickPanel.close(CloseReason.HOME, returnFocus = false)
             displayHome.goHomeBoth(bottomDisplayId)
         }
 
@@ -210,14 +217,21 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         override fun moveController(displayId: Int, onDone: (Boolean) -> Unit) {
             screenFocus.lastScreen = screenFocus.screenOf(displayId)
             focusMover.moveTo(displayId) { moved ->
-                if (moved) focusedDisplay = displayId
+                if (moved) {
+                    focusedDisplay = displayId
+                    quickPanel.controllerOn(displayId)
+                }
                 onDone(moved)
             }
         }
 
         override val lockedTo: Screen? get() = controllerLock.lockedTo
 
-        override fun setLock(target: Screen?, onDone: (Screen?) -> Unit) = controllerLock.set(target, onDone)
+        override fun setLock(target: Screen?, onDone: (Screen?) -> Unit) = controllerLock.set(target) { lockedTo ->
+            // Locking moves the controller to that screen, away from an open panel elsewhere.
+            lockedTo?.let { quickPanel.controllerOn(screenFocus.displayId(it)) }
+            onDone(lockedTo)
+        }
 
         override fun toggleStayAwake(): Boolean = stayAwake.toggle()
 
@@ -234,7 +248,9 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
     private val rawInputListener = object : RawInputClient.Listener {
         override fun onTouch(screen: Screen) {
             screenFocus.lastScreen = screen
-            if (hotkeys.usesMotion) focusedDisplay = screenFocus.displayId(screen)
+            // A finger on a screen gives that screen the controller, an open panel's or not.
+            if (hotkeys.usesMotion || quickPanel.isOpen) focusedDisplay = screenFocus.displayId(screen)
+            quickPanel.controllerOn(screenFocus.displayId(screen))
             controllerLock.onTouch(screen)
         }
 
@@ -243,6 +259,8 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         override fun onDirection(button: PadButton, down: Boolean) {
             if (padWatching) onPadDirection(button, down)
         }
+
+        override fun onLid(closed: Boolean) = lidController.onLid(closed)
     }
 
     // AYN re-creates its pad on a layout switch (also per game) and on sleep; a key held on the old one is never released.
@@ -259,8 +277,9 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         override fun onReceive(context: Context, intent: Intent) {
             val on = intent.action == Intent.ACTION_SCREEN_ON
             rawInput.setScreenOn(on)
+            lidController.onScreen(on)
             if (!on) {
-                quickPanel.close(returnFocus = false)
+                quickPanel.close(CloseReason.SCREEN_OFF, returnFocus = false)
                 forgetHeld()
                 joystickCatcher.stop()
             }
@@ -321,7 +340,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         val over = quickPanel.openedOver ?: return
         if (packageName == over || packageName == this.packageName || ignoredPackages.contains(packageName)) return
         if (currentIme.contains(packageName)) return
-        quickPanel.close()
+        quickPanel.close(CloseReason.OTHER_APP)
     }
 
     /** The app "Close the current app" acts on. A launcher in front means there is none. */
@@ -386,16 +405,27 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         }
     }
 
-    /** Reads Android's focused display on the IO scope after a window change: one read at a time, at most every 500 ms. */
+    /**
+     * Reads Android's focused display on the IO scope after a window change: one read at a time, at most every 500 ms,
+     * and once more at the end of a burst of changes, so the last one is never missed. Needed while direction combos
+     * exist, and while the quick panel is open (an app starting elsewhere takes the controller from it).
+     */
     private fun refreshFocusedDisplay() {
-        if (!hotkeys.usesMotion) return
+        if (!hotkeys.usesMotion && !quickPanel.isOpen) return
+        mainHandler.removeCallbacks(focusReadAgain)
         val now = SystemClock.uptimeMillis()
-        if (now - lastFocusRead < FOCUS_READ_GAP_MS || !readingFocus.compareAndSet(false, true)) return
+        if (now - lastFocusRead < FOCUS_READ_GAP_MS || !readingFocus.compareAndSet(false, true)) {
+            // Never sooner than a moment from now: a read still under way must not make this spin.
+            mainHandler.postAtTime(focusReadAgain, maxOf(lastFocusRead + FOCUS_READ_GAP_MS, now + FOCUS_READ_RETRY_MS))
+            return
+        }
         lastFocusRead = now
         scope.launch {
             try {
-                CloseTarget.parseFocusedDisplay(executor.executeAsRoot("dumpsys input | grep -m1 FocusedDisplayId").getOrNull())
-                    ?.let { focusedDisplay = it }
+                CloseTarget.parseFocusedDisplay(executor.executeAsRoot("dumpsys input | grep -m1 FocusedDisplayId").getOrNull())?.let {
+                    focusedDisplay = it
+                    mainHandler.post { quickPanel.controllerOn(it) }
+                }
             } finally {
                 readingFocus.set(false)
             }
@@ -460,7 +490,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
      */
     private fun panelHome() {
         val target = quickPanel.openedFrom
-        quickPanel.close()
+        quickPanel.close(CloseReason.HOME)
         displayHome.systemHome(target)
     }
 
@@ -484,10 +514,15 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
                     carryOut(out.effect)
                     quickPanel.refreshSoon()
                 }
-                is PanelKeys.Out.AfterClosing -> {
+                is PanelKeys.Out.AfterClosing -> if (quickPanel.closesFor(CloseReason.HOTKEY)) {
                     if (out.effect is HotkeyRecognizer.Effect.Run) joystickCatcher.finishPress()
-                    quickPanel.close()
+                    quickPanel.close(CloseReason.HOTKEY)
                     mainHandler.postDelayed({ carryOut(out.effect) }, out.delayMs)
+                } else {
+                    // The panel stays open (only AYN closes it): the action runs now, "here" already pinned to where
+                    // the panel was opened from.
+                    carryOut(out.effect)
+                    quickPanel.refreshSoon()
                 }
             }
         }
@@ -701,6 +736,16 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         status.onAccessChanged = { mainHandler.post { KeepAliveNotification.show(this) } }
         rawInput = RawInputClient(this, executor, rawInputListener)
         status.rawInput = rawInput
+        val lidNote = FeedbackCue(this, prefs, hideAfterMs = LID_NOTE_MS, windowTitle = "ThorToolsLidNote")
+        lidController = LidController(
+            context = this,
+            executor = executor,
+            prefs = prefs,
+            helper = { name, args, onResult -> rawInput.command(name, *args.toTypedArray(), onResult = onResult) },
+            closeBackground = { actionRunner.run(ActionCall(ThorAction.CLEAR_BACKGROUND)) },
+            sleepNow = { performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN) },
+            notRestored = { items -> lidNote.show(LidText.notRestored(this, items), Display.DEFAULT_DISPLAY) },
+        )
         systemPress = SystemPress(
             service = this,
             goHome = { displayHome.systemHome() },
@@ -719,6 +764,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         )
         // Swap screens, brightness, Home per screen and the controller lock need the helper whenever the service runs.
         rawInput.start()
+        lidController.start()
         val packageFilter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
             addAction(Intent.ACTION_PACKAGE_FULLY_REMOVED)
@@ -748,12 +794,13 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         overrideExecutor.shutdown()
         // Android can destroy a service that never got as far as onServiceConnected.
         if (::rawInput.isInitialized) {
-            quickPanel.close(returnFocus = false)
+            quickPanel.close(CloseReason.SERVICE_STOPPED, returnFocus = false)
             stayAwake.off()
             systemPress.stop()
             joystickCatcher.stop()
             getSystemService(InputManager::class.java).unregisterInputDeviceListener(inputDeviceListener)
             rawInput.stop()
+            lidController.stop()
             unregisterReceiver(screenReceiver)
             unregisterReceiver(odinToolsPackageReceiver)
         }
@@ -775,7 +822,9 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         private const val AYN_VENDOR = 0x2020
         private const val AYN_XBOX_PRODUCT = 0x0112
         private const val FOCUS_READ_GAP_MS = 500L
+        private const val FOCUS_READ_RETRY_MS = 100L
         private const val CATCH_AFTER_MS = 150L
+        private const val LID_NOTE_MS = 8_000L
 
         private val ignoredPackages = listOf(
             "com.android.launcher3",

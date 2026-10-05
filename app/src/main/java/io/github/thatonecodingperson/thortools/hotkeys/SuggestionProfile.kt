@@ -6,8 +6,14 @@ import io.github.thatonecodingperson.thortools.actions.ThorAction
 
 private val closeHere = CloseAppArg.encode(LaunchScreen.HERE)
 
-private fun hotkey(button: PadButton, second: PadButton?, press: PressKind, action: ThorAction, arg: String? = null) =
-    Hotkey(button, second, press, action, arg)
+private fun hotkey(
+    button: PadButton,
+    second: PadButton?,
+    press: PressKind,
+    action: ThorAction,
+    arg: String? = null,
+    lock: Boolean = false,
+) = Hotkey(button, second, press, action, arg, lock = lock)
 
 /**
  * Ready-made sets of hotkeys, shown as tabs under Suggestions; any single hotkey can be added. Users can't make their own
@@ -28,17 +34,15 @@ enum class SuggestionProfile(
         R.string.suggestionProfileThorInfo,
         listOf(
             HotkeyList.aynPanel,
+            hotkey(PadButton.AYN, null, PressKind.HOLD, ThorAction.AYN_DRAWER),
             hotkey(PadButton.HOME, null, PressKind.DOUBLE, ThorAction.HOME_BOTH),
+            hotkey(PadButton.HOME, PadButton.RSTICK_DOWN, PressKind.TAP, ThorAction.CONTROLLER_TO_BOTTOM, lock = true),
+            hotkey(PadButton.HOME, PadButton.RSTICK_UP, PressKind.TAP, ThorAction.CONTROLLER_TO_TOP, lock = true),
+            hotkey(PadButton.HOME, PadButton.R3, PressKind.DOUBLE, ThorAction.SWAP_SCREENS),
+            hotkey(PadButton.HOME, PadButton.R3, PressKind.TAP, ThorAction.RECENTS),
+            hotkey(PadButton.HOME, PadButton.R3, PressKind.TRIPLE, ThorAction.TOGGLE_REFRESH_RATE),
             hotkey(PadButton.HOME, null, PressKind.TRIPLE, ThorAction.CLEAR_BACKGROUND),
-            hotkey(PadButton.HOME, PadButton.R3, PressKind.TAP, ThorAction.SWAP_SCREENS),
-            hotkey(PadButton.HOME, PadButton.RSTICK_UP, PressKind.TAP, ThorAction.CONTROLLER_TO_TOP),
-            hotkey(PadButton.HOME, PadButton.RSTICK_DOWN, PressKind.TAP, ThorAction.CONTROLLER_TO_BOTTOM),
-            hotkey(PadButton.HOME, PadButton.X, PressKind.TAP, ThorAction.SCREENSHOT),
-            hotkey(PadButton.HOME, PadButton.START, PressKind.TAP, ThorAction.TOGGLE_CONTROLLER_LOCK),
-            hotkey(PadButton.BACK, null, PressKind.DOUBLE, ThorAction.RECENTS),
-            hotkey(PadButton.BACK, PadButton.LSTICK_UP, PressKind.TAP, ThorAction.BRIGHTER),
-            hotkey(PadButton.BACK, PadButton.LSTICK_DOWN, PressKind.TAP, ThorAction.DIMMER),
-            hotkey(PadButton.BACK, PadButton.L3, PressKind.TAP, ThorAction.CYCLE_PERFORMANCE),
+            hotkey(PadButton.AYN, null, PressKind.DOUBLE, ThorAction.TOGGLE_LAYOUT),
         ),
     ),
 

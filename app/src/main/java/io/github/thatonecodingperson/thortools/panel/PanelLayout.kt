@@ -1,29 +1,110 @@
 package io.github.thatonecodingperson.thortools.panel
 
 import io.github.thatonecodingperson.thortools.actions.ThorAction
+import io.github.thatonecodingperson.thortools.hotkeys.LaunchScreen
 
-/** The optional parts of a panel page besides its icon grid. [id] is stored, so it must never change. */
-enum class PanelWidget(val id: String) {
-    LEVELS("levels"),
-    DEVICE("device"),
+/** A widget's span on the page grid ([WidgetGrid]): [columns] of 4 across, [rows] down. */
+data class WidgetSize(val columns: Int, val rows: Int) {
+    /** Wider than tall: sliders lie down, for instance. */
+    val wide: Boolean get() = columns > rows
+
+    fun encode(): String = "${columns}x$rows"
+
+    companion object {
+        fun decode(text: String?): WidgetSize? {
+            val (columns, rows) = text?.split('x')?.takeIf { it.size == 2 }?.map { it.toIntOrNull() ?: return null } ?: return null
+            return WidgetSize(columns, rows)
+        }
+    }
+}
+
+private fun size(columns: Int, rows: Int) = WidgetSize(columns, rows)
+
+/**
+ * What a page can hold, each at most once, with the sizes it comes in (the first one is where a new one starts).
+ * [id] is stored, so it must never change.
+ */
+enum class WidgetType(val id: String, val sizes: List<WidgetSize>) {
+    /** The page's icons ([PanelPage.tiles]). */
+    TILES("tiles", listOf(size(3, 3), size(2, 2), size(3, 2), size(4, 2), size(2, 3), size(4, 3), size(2, 4), size(3, 4), size(4, 4))),
+
+    /** Volume and the brightness of both screens. */
+    LEVELS("levels", listOf(size(1, 3), size(1, 2), size(1, 4), size(2, 2), size(2, 1), size(3, 1), size(4, 1))),
+
+    /** Refresh rate, CPU, GPU, power, memory and temperatures. */
+    DEVICE("device", listOf(size(4, 1), size(4, 2), size(2, 2))),
+    MEDIA("media", listOf(size(4, 1), size(2, 1), size(2, 2), size(4, 2))),
+    BATTERY("battery", listOf(size(2, 1), size(1, 1), size(2, 2))),
+    GRAPH("graph", listOf(size(4, 1), size(2, 1), size(2, 2), size(4, 2))),
+    APPS("apps", listOf(size(4, 1), size(1, 1), size(2, 1), size(2, 2), size(4, 2))),
+    NOTES("notes", listOf(size(2, 2), size(4, 2), size(2, 3), size(4, 3), size(4, 4))),
+    ;
+
+    val defaultSize: WidgetSize get() = sizes.first()
+
+    companion object {
+        fun byId(id: String): WidgetType? = entries.find { it.id == id }
+    }
+}
+
+/** The sliders a [WidgetType.LEVELS] widget can show. [id] is stored. */
+enum class LevelSlider(val id: String) {
+    VOLUME("volume"),
+    TOP("top"),
+    BOTTOM("bottom"),
 }
 
 /**
- * One page, always laid out the same way: sliders on the left, the icon grid, the stats strip below. Every part is
- * optional. [tiles] are [PanelTiles] ids.
+ * One widget on a page. The options only matter to their type: [sliders] to the sliders, [apps] and [appsOn] to App
+ * shortcuts, [note] (the note's file name) to Notes.
+ */
+data class PanelWidget(
+    val type: WidgetType,
+    val size: WidgetSize = type.defaultSize,
+    val sliders: Set<LevelSlider> = LevelSlider.entries.toSet(),
+    val apps: List<String> = emptyList(),
+    val appsOn: LaunchScreen = LaunchScreen.TOP,
+    val note: String = "",
+)
+
+/**
+ * One page: its widgets in order, packed into the grid by [WidgetGrid.place]. [tiles] ([PanelTiles] ids) and [columns]
+ * (icons per row) belong to its icons widget.
  */
 data class PanelPage(
     val tiles: List<String> = emptyList(),
     val columns: Int = DEFAULT_COLUMNS,
-    val widgets: Set<PanelWidget> = emptySet(),
+    val widgets: List<PanelWidget> = emptyList(),
 ) {
-    val isEmpty: Boolean get() = tiles.isEmpty() && widgets.isEmpty()
+    /** Nothing to show: no widgets, or only an icons widget without icons. */
+    val isEmpty: Boolean get() = widgets.none { it.type != WidgetType.TILES || tiles.isNotEmpty() }
+
+    fun widget(type: WidgetType): PanelWidget? = widgets.find { it.type == type }
 
     fun withColumns(count: Int) = copy(columns = count.coerceIn(MIN_COLUMNS, MAX_COLUMNS))
 
-    fun toggle(widget: PanelWidget) = copy(widgets = if (widget in widgets) widgets - widget else widgets + widget)
+    /** Adds [type] at the end in its first size; [note] names a new Notes widget's file. */
+    fun addWidget(type: WidgetType, note: String = ""): PanelPage {
+        if (widget(type) != null) return this
+        return copy(widgets = widgets + PanelWidget(type, note = note.takeIf { type == WidgetType.NOTES }.orEmpty()))
+    }
 
-    fun addTile(id: String) = if (id in tiles) this else copy(tiles = tiles + id)
+    fun removeWidget(type: WidgetType) = copy(widgets = widgets.filter { it.type != type })
+
+    /** Moves a widget [by] places (negative = earlier), stopping at either end. */
+    fun moveWidget(type: WidgetType, by: Int): PanelPage {
+        val from = widgets.indexOfFirst { it.type == type }.takeIf { it >= 0 } ?: return this
+        val to = (from + by).coerceIn(0, widgets.lastIndex)
+        return copy(widgets = widgets.toMutableList().apply { add(to, removeAt(from)) })
+    }
+
+    fun resizeWidget(type: WidgetType, size: WidgetSize) = if (size !in type.sizes) this else updateWidget(type) { it.copy(size = size) }
+
+    fun updateWidget(type: WidgetType, change: (PanelWidget) -> PanelWidget) =
+        copy(widgets = widgets.map { if (it.type == type) change(it).copy(type = type) else it })
+
+    /** Adding an icon to a page without an icons widget adds one. */
+    fun addTile(id: String) = if (id in tiles) this else copy(tiles = tiles + id).addWidget(WidgetType.TILES)
 
     fun removeTile(id: String) = copy(tiles = tiles - id)
 
@@ -41,30 +122,80 @@ data class PanelPage(
     }
 }
 
+/** A widget's place on the grid: its top-left cell. */
+data class Placement(val widget: PanelWidget, val column: Int, val row: Int)
+
+/**
+ * The page grid: 4 columns, and 4 rows fit the bottom screen (the sliders, icons and stats of the first page take 1x3,
+ * 3x3 and 4x1). Pure.
+ */
+object WidgetGrid {
+    const val COLUMNS = 4
+    const val ROWS = 4
+
+    /** Each widget in order goes into the first free spot, row by row; the grid grows downwards when it is full. */
+    fun place(widgets: List<PanelWidget>): List<Placement> {
+        val taken = mutableListOf<BooleanArray>()
+        fun free(column: Int, row: Int, size: WidgetSize): Boolean {
+            for (r in row until row + size.rows) {
+                val cells = taken.getOrNull(r) ?: continue
+                for (c in column until column + size.columns) if (cells[c]) return false
+            }
+            return true
+        }
+        return widgets.map { widget ->
+            val size = widget.size.copy(columns = widget.size.columns.coerceIn(1, COLUMNS), rows = widget.size.rows.coerceAtLeast(1))
+            // Rows below the grid are always free, so a spot is always found.
+            val (row, column) = generateSequence(0) { it + 1 }.firstNotNullOf { row ->
+                (0..COLUMNS - size.columns).firstOrNull { free(it, row, size) }?.let { row to it }
+            }
+            while (taken.size < row + size.rows) taken += BooleanArray(COLUMNS)
+            for (r in row until row + size.rows) for (c in column until column + size.columns) taken[r][c] = true
+            Placement(widget.copy(size = size), column, row)
+        }
+    }
+
+    /** How many rows [placements] use. */
+    fun rows(placements: List<Placement>): Int = placements.maxOfOrNull { it.row + it.widget.size.rows } ?: 0
+}
+
 /** The quick panel's pages, stored as text in the `panel_layout` preference. */
 data class PanelLayout(val pages: List<PanelPage>) {
 
     fun addPage() = if (pages.size >= MAX_PAGES) this else copy(pages = pages + PanelPage())
 
-    fun removePage(index: Int) = if (pages.size <= 1 ||
-        index !in pages.indices
-    ) {
-        this
-    } else {
-        copy(pages = pages.filterIndexed { i, _ -> i != index })
-    }
+    fun removePage(index: Int) =
+        if (pages.size <= 1 || index !in pages.indices) this else copy(pages = pages.filterIndexed { i, _ -> i != index })
 
     fun updatePage(index: Int, change: (PanelPage) -> PanelPage) =
         if (index !in pages.indices) this else copy(pages = pages.mapIndexed { i, page -> if (i == index) change(page) else page })
 
-    /** Pages separated by `|`, each `columns=4;widgets=levels,device;tiles=a,b`. */
+    /**
+     * Pages separated by `|`, each like `columns=4;tiles=a,b;w=levels:1x3,tiles:3x3;sliders=volume,top;apps=x,y;
+     * appson=top;note=n1`. Version 1 (before widgets) had `widgets=levels,device` instead of `w=`.
+     */
     fun encode(): String = pages.joinToString(PAGE_SEPARATOR) { page ->
-        "columns=${page.columns};widgets=${page.widgets.joinToString(",") { it.id }};tiles=${page.tiles.joinToString(",")}"
+        buildList {
+            add("columns=${page.columns}")
+            add("tiles=${page.tiles.joinToString(",")}")
+            add("w=${page.widgets.joinToString(",") { "${it.type.id}:${it.size.encode()}" }}")
+            page.widget(WidgetType.LEVELS)?.let { levels ->
+                add("sliders=${levels.sliders.sortedBy(LevelSlider::ordinal).joinToString(",") { it.id }}")
+            }
+            page.widget(WidgetType.APPS)?.let {
+                add("apps=${it.apps.joinToString(",")}")
+                add("appson=${it.appsOn.id}")
+            }
+            page.widget(WidgetType.NOTES)?.let { add("note=${it.note}") }
+        }.joinToString(";")
     }
 
     companion object {
         const val MAX_PAGES = 5
         private const val PAGE_SEPARATOR = "|"
+
+        /** The Notes widget of the default layout writes to this file. */
+        const val DEFAULT_NOTE = "main"
 
         val DEFAULT = PanelLayout(
             listOf(
@@ -83,7 +214,11 @@ data class PanelLayout(val pages: List<PanelPage>) {
                         ThorAction.AYN_DRAWER,
                     ).map { it.id } + PanelTiles.THOR_TOOLS,
                     columns = 4,
-                    widgets = setOf(PanelWidget.LEVELS, PanelWidget.DEVICE),
+                    widgets = listOf(
+                        PanelWidget(WidgetType.LEVELS, size(1, 3)),
+                        PanelWidget(WidgetType.TILES, size(3, 3)),
+                        PanelWidget(WidgetType.DEVICE, size(4, 1)),
+                    ),
                 ),
                 PanelPage(
                     tiles = listOf(
@@ -95,25 +230,65 @@ data class PanelLayout(val pages: List<PanelPage>) {
                         ThorAction.CLEAR_BACKGROUND,
                     ).map { it.id },
                     columns = 3,
+                    widgets = listOf(PanelWidget(WidgetType.TILES, size(4, 4))),
+                ),
+                PanelPage(
+                    widgets = listOf(
+                        PanelWidget(WidgetType.MEDIA, size(4, 1)),
+                        PanelWidget(WidgetType.BATTERY, size(2, 1)),
+                        PanelWidget(WidgetType.GRAPH, size(2, 1)),
+                        PanelWidget(WidgetType.NOTES, size(4, 2), note = DEFAULT_NOTE),
+                    ),
                 ),
             ),
         )
 
-        /** Unknown tiles and widgets are dropped; anything unreadable gives [DEFAULT]. */
+        /** Unknown tiles, widgets and sizes are dropped; anything unreadable gives [DEFAULT]. */
         fun decode(text: String?, knownTiles: Set<String> = PanelTiles.ids): PanelLayout {
             if (text.isNullOrBlank()) return DEFAULT
             val pages = text.split(PAGE_SEPARATOR).take(MAX_PAGES).map { pageText ->
                 val values = pageText.split(';').associate { it.substringBefore('=') to it.substringAfter('=', "") }
+                val tiles = values["tiles"].orEmpty().split(',').filter { it in knownTiles }.distinct()
                 PanelPage(
-                    tiles = values["tiles"].orEmpty().split(',').filter { it in knownTiles }.distinct(),
-                    columns = (values["columns"]?.toIntOrNull() ?: PanelPage.DEFAULT_COLUMNS).coerceIn(
-                        PanelPage.MIN_COLUMNS,
-                        PanelPage.MAX_COLUMNS,
-                    ),
-                    widgets = values["widgets"].orEmpty().split(',').mapNotNull { id -> PanelWidget.entries.find { it.id == id } }.toSet(),
+                    tiles = tiles,
+                    columns = (values["columns"]?.toIntOrNull() ?: PanelPage.DEFAULT_COLUMNS)
+                        .coerceIn(PanelPage.MIN_COLUMNS, PanelPage.MAX_COLUMNS),
+                    widgets = if ("w" in values) widgets(values) else fromVersion1(values["widgets"], hasTiles = tiles.isNotEmpty()),
                 )
             }
             return if (pages.all { it.isEmpty }) DEFAULT else PanelLayout(pages)
+        }
+
+        private fun widgets(values: Map<String, String>): List<PanelWidget> {
+            val sliders = values["sliders"]?.split(',')?.mapNotNull { id -> LevelSlider.entries.find { it.id == id } }?.toSet()
+            return values["w"].orEmpty().split(',').mapNotNull { item ->
+                val type = WidgetType.byId(item.substringBefore(':')) ?: return@mapNotNull null
+                val size = WidgetSize.decode(item.substringAfter(':', ""))?.takeIf { it in type.sizes } ?: type.defaultSize
+                when (type) {
+                    WidgetType.LEVELS -> PanelWidget(type, size, sliders = sliders ?: LevelSlider.entries.toSet())
+                    WidgetType.APPS -> PanelWidget(
+                        type = type,
+                        size = size,
+                        apps = values["apps"].orEmpty().split(',').filter { it.isNotBlank() }.distinct(),
+                        appsOn = LaunchScreen.entries.find { it.id == values["appson"] } ?: LaunchScreen.TOP,
+                    )
+                    WidgetType.NOTES -> PanelWidget(type, size, note = values["note"].orEmpty())
+                    else -> PanelWidget(type, size)
+                }
+            }.distinctBy { it.type }
+        }
+
+        /** Version 1 had one fixed template: sliders on the left, the icons, the stats strip below. Same look on the grid. */
+        private fun fromVersion1(widgets: String?, hasTiles: Boolean): List<PanelWidget> {
+            val ids = widgets.orEmpty().split(',')
+            val levels = "levels" in ids
+            val device = "device" in ids
+            val height = if (device) 3 else 4
+            return listOfNotNull(
+                PanelWidget(WidgetType.LEVELS, size(1, height)).takeIf { levels },
+                PanelWidget(WidgetType.TILES, size(if (levels) 3 else 4, height)).takeIf { hasTiles },
+                PanelWidget(WidgetType.DEVICE, size(4, 1)).takeIf { device },
+            )
         }
     }
 }

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.database.ContentObserver
+import android.graphics.drawable.Drawable
 import android.media.AudioManager
 import android.os.BatteryManager
 import android.os.Handler
@@ -57,7 +58,21 @@ data class PanelUiState(
     val bottomBrightness: Float? = null,
     val stats: StatsReading = StatsReading(),
     val powerW: Float? = null,
+    val batteryTemp: Float? = null,
+    /** Android's estimate while charging, or the time left at today's drain otherwise. */
+    val toFullMinutes: Int? = null,
+    val leftMinutes: Int? = null,
+    /** The performance graph's last minute. */
+    val history: List<GraphPoint> = emptyList(),
+    val media: NowPlaying = NowPlaying(),
+    /** Name and icon of every app on an App shortcuts widget, by package. */
+    val apps: Map<String, PanelApp> = emptyMap(),
+    /** Every Notes widget's note, by its id. */
+    val notes: Map<String, PanelNote> = emptyMap(),
 )
+
+/** An app on an App shortcuts widget. */
+data class PanelApp(val name: String, val icon: Drawable)
 
 /** Sends a command to the root input helper; false when it isn't running. Results arrive on the main thread. */
 fun interface HelperCommand {
@@ -80,6 +95,10 @@ class QuickPanelModel(
         StatsSampler(read = { runCatching { File(it).readText() }.getOrNull() }, list = { File(it).list()?.toList().orEmpty() })
     private val _state = MutableStateFlow(PanelUiState())
     val state: StateFlow<PanelUiState> = _state.asStateFlow()
+    private val history = StatsHistory()
+    private val notes = PanelNotes(context)
+    private val noteSaves = mutableMapOf<String, Job>()
+    private val nowPlaying = NowPlayingWatch(context) { media -> _state.update { it.copy(media = media) } }
     private var sampling: Job? = null
     private var pendingRefresh: Job? = null
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -140,6 +159,13 @@ class QuickPanelModel(
                     bottomBrightness = it.bottomBrightness,
                     stats = it.stats,
                     powerW = it.powerW,
+                    batteryTemp = it.batteryTemp,
+                    toFullMinutes = it.toFullMinutes,
+                    leftMinutes = it.leftMinutes,
+                    history = it.history,
+                    media = it.media,
+                    apps = it.apps,
+                    notes = it.notes,
                 )
             }
         }
@@ -167,6 +193,46 @@ class QuickPanelModel(
         }
     }
 
+    /** The apps' names and icons and the notes the [layout]'s widgets show. */
+    fun load(layout: PanelLayout) {
+        val widgets = layout.pages.flatMap { it.widgets }
+        val packages = widgets.filter { it.type == WidgetType.APPS }.flatMap { it.apps }.distinct()
+        val noteIds = widgets.filter { it.type == WidgetType.NOTES }.map { it.note }.filter { it.isNotEmpty() }.distinct()
+        if (packages.isEmpty() && noteIds.isEmpty()) return
+        scope.launch {
+            val packageManager = context.packageManager
+            val apps = packages.mapNotNull { name ->
+                runCatching {
+                    val info = packageManager.getApplicationInfo(name, 0)
+                    name to PanelApp(packageManager.getApplicationLabel(info).toString(), packageManager.getApplicationIcon(info))
+                }.getOrNull()
+            }.toMap()
+            val loaded = noteIds.associateWith(notes::load)
+            _state.update { it.copy(apps = apps, notes = loaded) }
+        }
+    }
+
+    /** A stroke drawn or erased on a Notes widget: shown at once, written to disk a moment later. */
+    fun drawNote(id: String, strokes: List<NoteStroke>) {
+        _state.update { it.copy(notes = it.notes + (id to (it.notes[id] ?: PanelNote()).copy(strokes = strokes))) }
+        noteSaves.remove(id)?.cancel()
+        noteSaves[id] = scope.launch {
+            delay(NOTE_SAVE_DELAY_MS)
+            notes.saveStrokes(id, strokes)
+        }
+    }
+
+    fun media(command: MediaCommand) = nowPlaying.send(command)
+
+    /** Allows Thor Tools' media listener as root, then follows the media sessions. */
+    fun allowMedia() {
+        scope.launch {
+            executor.executeAsRoot(nowPlaying.allowCommand)
+            delay(ALLOW_SETTLE_MS)
+            mainHandler.post { if (sampling != null) nowPlaying.start() }
+        }
+    }
+
     /** While the panel is open: live stats once a second, slider writers, and watching for changes made elsewhere. */
     fun start() {
         sampling?.cancel()
@@ -181,11 +247,13 @@ class QuickPanelModel(
             runCatching { context.contentResolver.registerContentObserver(Settings.System.getUriFor(key), false, settingsObserver) }
         }
         context.registerReceiver(volumeReceiver, IntentFilter(VOLUME_CHANGED_ACTION), Context.RECEIVER_NOT_EXPORTED)
+        nowPlaying.start()
     }
 
     fun stop() {
         sampling?.cancel()
         sampling = null
+        nowPlaying.stop()
         pendingRefresh?.cancel()
         listOf(volumeWriter, topWriter, bottomWriter).forEach { it.stop() }
         context.contentResolver.unregisterContentObserver(settingsObserver)
@@ -195,11 +263,28 @@ class QuickPanelModel(
     private fun sample() {
         val reading = sampler.sample()
         val battery = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-        val power = StatsParser.watts(
-            batteryManager.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW),
-            battery?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, 0) ?: 0,
-        )
-        _state.update { it.copy(stats = reading.orElse(it.stats), powerW = power) }
+        val current = batteryManager.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
+        val power = StatsParser.watts(current, battery?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, 0) ?: 0)
+        val status = battery?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+        val charging = status == BatteryManager.BATTERY_STATUS_CHARGING
+        val temp = battery?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE)?.takeIf { it != Int.MIN_VALUE }?.let { it / 10f }
+        val toFull = if (charging) BatteryEstimate.toFullMinutes(batteryManager.computeChargeTimeRemaining()) else null
+        val left = if (charging) {
+            null
+        } else {
+            BatteryEstimate.leftMinutes(batteryManager.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER), current)
+        }
+        _state.update {
+            val stats = reading.orElse(it.stats)
+            it.copy(
+                stats = stats,
+                powerW = power,
+                batteryTemp = temp,
+                toFullMinutes = toFull,
+                leftMinutes = left,
+                history = history.add(GraphPoint(SystemClock.uptimeMillis(), stats.cpuLoad, stats.gpuLoad, stats.cpuTemp)),
+            )
+        }
         if (!reading.incomplete) return
         // SELinux keeps apps out of some of these files on some firmware; the helper reads them as root.
         helper.send("stats", emptyList()) { ok, text ->
@@ -293,6 +378,8 @@ class QuickPanelModel(
         const val CHANGE_COALESCE_MS = 150L
         const val TOUCH_HOLD_MS = 600L
         const val SAMPLE_MS = 1000L
+        const val NOTE_SAVE_DELAY_MS = 500L
+        const val ALLOW_SETTLE_MS = 500L
 
         // Hidden in AudioManager, but sent to every app.
         const val VOLUME_CHANGED_ACTION = "android.media.VOLUME_CHANGED_ACTION"

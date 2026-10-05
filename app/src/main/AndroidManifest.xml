@@ -8,6 +8,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="com.odin2.permission.RECEIVE_VIDEO_OUTPUT_PORT_CHANGE"/>
     <uses-permission android:name="com.retrostation.permission.RECEIVE_VIDEO_OUTPUT_PORT_CHANGE"/>
@@ -81,6 +82,16 @@
         <receiver
             android:name=".charging.ChargeAlertActionReceiver"
             android:exported="false" />
+
+        <service
+            android:name=".panel.MediaListener"
+            android:exported="true"
+            android:label="@string/mediaListenerLabel"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
 
         <service
             android:name=".service.ServiceWatchJob"

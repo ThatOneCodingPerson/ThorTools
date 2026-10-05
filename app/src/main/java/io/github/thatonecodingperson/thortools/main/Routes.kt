@@ -7,6 +7,7 @@ object Routes {
     const val CONTROLLER_MODES = "controller/modes"
     const val PROFILES = "profiles"
     const val CHARGING = "charging"
+    const val LID = "charging/lid"
     const val DISPLAY = "display"
     const val THEMES = "display/themes"
     const val THEME_EDIT = "display/theme/{id}"

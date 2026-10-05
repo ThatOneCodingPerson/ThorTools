@@ -11,6 +11,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.thatonecodingperson.thortools.BuildConfig
 import io.github.thatonecodingperson.thortools.coexist.OdinToolsDetector
 import io.github.thatonecodingperson.thortools.data.SharedPrefsRepo
+import io.github.thatonecodingperson.thortools.hotkeys.HotkeyList
 import io.github.thatonecodingperson.thortools.service.ServiceStatus
 import io.github.thatonecodingperson.thortools.setup.AccessChecker
 import io.github.thatonecodingperson.thortools.tools.DeviceUtils
@@ -80,6 +81,16 @@ class DiagnosticsCollector @Inject constructor(
         }
         section("Keys seen by the service, oldest first") {
             serviceKeys.snapshot().forEach { appendLine(it.toString()) }
+        }
+        section("Hotkeys (stored form: button;second;press;action;arg;switches)") {
+            HotkeyList.encode(prefs.hotkeys).lines().forEach(::appendLine)
+            appendLine("hotkeys_off_in=${prefs.hotkeyOffApps.sorted().joinToString(",")}")
+        }
+        section("Quick panel (stored form)") { appendLine(prefs.panelLayout.encode()) }
+        section("Lid") {
+            appendLine("choices=${prefs.lidChoices}")
+            appendLine("open_session=${prefs.lidSession?.encode() ?: "none"}")
+            appendLine("last=${prefs.lidLastResult?.encode() ?: "none"}")
         }
         section("Displays") { displays().forEach(::appendLine) }
         section("Input devices") { inputDevices().forEach(::appendLine) }

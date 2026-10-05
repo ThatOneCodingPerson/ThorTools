@@ -24,8 +24,10 @@ import io.github.thatonecodingperson.thortools.models.ControllerStyle
 import io.github.thatonecodingperson.thortools.models.FanMode
 import io.github.thatonecodingperson.thortools.models.L2R2Style
 import io.github.thatonecodingperson.thortools.models.PerfMode
+import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 /** The panel's size in dp on the bottom screen, where it normally opens, so a preview has the real proportions. */
 fun panelSizeDp(context: Context): Pair<Int, Int> {
@@ -51,6 +53,13 @@ fun samplePanelState() = PanelUiState(
     bottomBrightness = 0.5f,
     stats = StatsReading(2.4f, 0.6f, 680, 0.35f, 46f, 42f, 7.1f, 16f),
     powerW = 6.8f,
+    batteryTemp = 31f,
+    leftMinutes = 185,
+    history = (0..60).map { second ->
+        val wave = sin(second / 6f)
+        GraphPoint(second * 1000L, 0.55f + 0.2f * wave, 0.35f + 0.15f * cos(second / 4f), 44f + 3f * wave)
+    },
+    media = NowPlaying(title = "Song title", artist = "Artist", app = "Music", playing = true),
 )
 
 /**

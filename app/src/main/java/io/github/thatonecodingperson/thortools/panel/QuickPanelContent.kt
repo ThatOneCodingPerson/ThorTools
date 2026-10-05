@@ -1,5 +1,6 @@
 package io.github.thatonecodingperson.thortools.panel
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -34,6 +36,7 @@ import androidx.compose.material.icons.rounded.BatteryFull
 import androidx.compose.material.icons.rounded.BrightnessHigh
 import androidx.compose.material.icons.rounded.BrightnessLow
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -77,6 +80,7 @@ import androidx.compose.ui.unit.min
 import io.github.thatonecodingperson.thortools.R
 import io.github.thatonecodingperson.thortools.actions.ThorAction
 import io.github.thatonecodingperson.thortools.actions.icon
+import io.github.thatonecodingperson.thortools.hotkeys.LaunchScreen
 import io.github.thatonecodingperson.thortools.input.Screen
 import io.github.thatonecodingperson.thortools.ui.theme.LocalThorPalette
 import kotlinx.coroutines.delay
@@ -95,12 +99,15 @@ class PanelCallbacks(
     val onTopBrightness: (Float) -> Unit = {},
     val onBottomBrightness: (Float) -> Unit = {},
     val onClose: () -> Unit = {},
+    /** Opens Thor Tools on the panel editor. */
+    val onEdit: () -> Unit = {},
+    val onMedia: (MediaCommand) -> Unit = {},
+    val onAllowMedia: () -> Unit = {},
+    val onApp: (String, LaunchScreen) -> Unit = { _, _ -> },
+    val onNoteDrawn: (String, List<NoteStroke>) -> Unit = { _, _ -> },
 )
 
-/**
- * The panel: a header with page dots, then the pages. Every page follows one template: sliders on the left, the icon
- * grid, the stats strip below; each part is optional.
- */
+/** The panel: a header with page dots, then the pages, each a grid of widgets ([WidgetGrid]). */
 @Composable
 fun QuickPanelContent(state: PanelUiState, layout: PanelLayout, pagerState: PagerState, callbacks: PanelCallbacks) {
     val palette = LocalThorPalette.current
@@ -138,7 +145,13 @@ private fun PanelPages(
                 .fillMaxSize()
                 .padding(PADDING),
         ) {
-            Header(state, pages = layout.pages.size, current = pagerState.currentPage, onClose = callbacks.onClose)
+            Header(
+                state = state,
+                pages = layout.pages.size,
+                current = pagerState.currentPage,
+                onEdit = callbacks.onEdit,
+                onClose = callbacks.onClose,
+            )
             HorizontalPager(
                 state = pagerState,
                 beyondViewportPageCount = 0,
@@ -155,22 +168,21 @@ private fun PanelPages(
     }
 }
 
-private enum class FocusTarget { TILES, DEVICE, LEVELS }
+/** Whether [widget] has something the controller can land on, so a new page can start there. */
+private fun takesFocus(widget: PanelWidget, page: PanelPage, state: PanelUiState): Boolean = when (widget.type) {
+    WidgetType.TILES -> page.tiles.isNotEmpty()
+    WidgetType.LEVELS -> widget.sliders.isNotEmpty()
+    WidgetType.DEVICE, WidgetType.NOTES -> true
+    WidgetType.MEDIA -> !state.media.access || state.media.title != null
+    WidgetType.APPS -> widget.apps.isNotEmpty()
+    WidgetType.BATTERY, WidgetType.GRAPH -> false
+}
 
 @Composable
 private fun PageContent(page: PanelPage, state: PanelUiState, callbacks: PanelCallbacks, fits: Boolean, focus: FocusRequester?) {
-    val widgets = page.widgets
-    val hasTiles = page.tiles.isNotEmpty()
-    val showMiddle = hasTiles || PanelWidget.LEVELS in widgets
-    // The first thing the controller lands on when the page shows.
-    val focusOn = when {
-        hasTiles -> FocusTarget.TILES
-        PanelWidget.DEVICE in widgets -> FocusTarget.DEVICE
-        else -> FocusTarget.LEVELS
-    }
-    fun focusFor(target: FocusTarget) = focus.takeIf { focusOn == target }
-
-    if (page.isEmpty) {
+    // An icons widget without icons has nothing to show.
+    val placements = remember(page) { WidgetGrid.place(page.widgets.filter { it.type != WidgetType.TILES || page.tiles.isNotEmpty() }) }
+    if (placements.isEmpty()) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
             Text(
                 text = stringResource(R.string.panelPageEmpty),
@@ -181,40 +193,65 @@ private fun PageContent(page: PanelPage, state: PanelUiState, callbacks: PanelCa
         }
         return
     }
-    Column(
-        verticalArrangement = Arrangement.spacedBy(GAP),
-        modifier = Modifier
-            .fillMaxSize()
-            .then(if (fits) Modifier else Modifier.verticalScroll(rememberScrollState())),
-    ) {
-        if (showMiddle) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(GAP),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(if (fits) Modifier.weight(1f) else Modifier.height(FIXED_MIDDLE_HEIGHT)),
-            ) {
-                if (PanelWidget.LEVELS in widgets) LevelsCard(state, callbacks, focusFor(FocusTarget.LEVELS), Modifier.fillMaxHeight())
-                if (hasTiles) {
-                    ControlsCard(page, state, focusFor(FocusTarget.TILES), callbacks.onTile, Modifier.weight(1f).fillMaxHeight())
+    // The first thing the controller lands on when the page shows: the icons when there are any, as always.
+    val focusOn = placements.map { it.widget }.filter { takesFocus(it, page, state) }.let { widgets ->
+        widgets.find { it.type == WidgetType.TILES } ?: widgets.firstOrNull()
+    }?.type
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val rows = WidgetGrid.rows(placements)
+        val cellWidth = (maxWidth - GAP * (WidgetGrid.COLUMNS - 1)) / WidgetGrid.COLUMNS
+        // Too short for the grid to share the height: fixed rows and a scroll instead.
+        val cellHeight = if (fits) (maxHeight - GAP * (WidgetGrid.ROWS - 1)) / WidgetGrid.ROWS else FIXED_CELL_HEIGHT
+        val height = cellHeight * rows + GAP * (rows - 1)
+        Box(Modifier.fillMaxSize().then(if (height > maxHeight) Modifier.verticalScroll(rememberScrollState()) else Modifier)) {
+            Box(Modifier.fillMaxWidth().height(height)) {
+                placements.forEach { placement ->
+                    val size = placement.widget.size
+                    WidgetContent(
+                        widget = placement.widget,
+                        page = page,
+                        state = state,
+                        callbacks = callbacks,
+                        focus = focus.takeIf { placement.widget.type == focusOn },
+                        modifier = Modifier
+                            .offset(x = (cellWidth + GAP) * placement.column, y = (cellHeight + GAP) * placement.row)
+                            .size(cellWidth * size.columns + GAP * (size.columns - 1), cellHeight * size.rows + GAP * (size.rows - 1)),
+                    )
                 }
-                if (!hasTiles) Spacer(Modifier.weight(1f))
             }
-        }
-        if (PanelWidget.DEVICE in widgets) {
-            DeviceCard(state, callbacks.onRefreshRate, focusFor(FocusTarget.DEVICE), Modifier.fillMaxWidth().height(DEVICE_HEIGHT))
         }
     }
 }
 
+@Composable
+private fun WidgetContent(
+    widget: PanelWidget,
+    page: PanelPage,
+    state: PanelUiState,
+    callbacks: PanelCallbacks,
+    focus: FocusRequester?,
+    modifier: Modifier,
+) {
+    when (widget.type) {
+        WidgetType.TILES -> ControlsCard(page, state, focus, callbacks.onTile, modifier)
+        WidgetType.LEVELS -> LevelsCard(state, callbacks, widget, focus, modifier)
+        WidgetType.DEVICE -> DeviceCard(state, callbacks.onRefreshRate, focus, widget.size, modifier)
+        WidgetType.MEDIA -> MediaCard(state.media, widget.size, callbacks.onMedia, callbacks.onAllowMedia, focus, modifier)
+        WidgetType.BATTERY -> BatteryCard(state, widget.size, modifier)
+        WidgetType.GRAPH -> GraphCard(state, modifier)
+        WidgetType.APPS -> AppsCard(widget, state.apps, callbacks.onApp, focus, modifier)
+        WidgetType.NOTES -> NotesCard(widget.note, state.notes[widget.note], callbacks.onNoteDrawn, focus, modifier)
+    }
+}
+
 /** Click and focus handling that previews leave out. */
-private fun Modifier.tap(interactive: Boolean, onFocus: (Boolean) -> Unit, onClick: () -> Unit): Modifier =
+internal fun Modifier.tap(interactive: Boolean, onFocus: (Boolean) -> Unit, onClick: () -> Unit): Modifier =
     if (interactive) onFocusChanged { onFocus(it.isFocused) }.clickable(onClick = onClick) else this
 
-private fun Modifier.focusFrom(focus: FocusRequester?): Modifier = if (focus != null) focusRequester(focus) else this
+internal fun Modifier.focusFrom(focus: FocusRequester?): Modifier = if (focus != null) focusRequester(focus) else this
 
 @Composable
-private fun Header(state: PanelUiState, pages: Int, current: Int, onClose: () -> Unit) {
+private fun Header(state: PanelUiState, pages: Int, current: Int, onEdit: () -> Unit, onClose: () -> Unit) {
     val palette = LocalThorPalette.current
     var now by remember { mutableStateOf(Date()) }
     LaunchedEffect(Unit) {
@@ -258,17 +295,21 @@ private fun Header(state: PanelUiState, pages: Int, current: Int, onClose: () ->
             }
         }
         if (LocalPanelInteractive.current) {
+            IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Rounded.Edit, contentDescription = stringResource(R.string.editPanel))
+            }
             IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
                 Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.panelClose))
             }
         } else {
+            Icon(Icons.Rounded.Edit, contentDescription = null, modifier = Modifier.size(36.dp).padding(6.dp))
             Icon(Icons.Rounded.Close, contentDescription = null, modifier = Modifier.size(36.dp).padding(6.dp))
         }
     }
 }
 
 @Composable
-private fun Card(modifier: Modifier, content: @Composable () -> Unit) {
+internal fun PanelCard(modifier: Modifier, content: @Composable () -> Unit) {
     val palette = LocalThorPalette.current
     Box(
         modifier = modifier
@@ -278,41 +319,120 @@ private fun Card(modifier: Modifier, content: @Composable () -> Unit) {
     ) { content() }
 }
 
+/** One slider of the levels widget. Null [value]: it can't be set now. */
+private class Level(val value: Float?, val icon: ImageVector, @StringRes val label: Int, val onChange: (Float) -> Unit)
+
+/** The chosen sliders: standing side by side, or lying one above the other when the widget is wider than tall. */
 @Composable
-private fun LevelsCard(state: PanelUiState, callbacks: PanelCallbacks, focus: FocusRequester?, modifier: Modifier) {
-    Card(modifier) {
-        Row(horizontalArrangement = Arrangement.spacedBy(LEVEL_GAP), modifier = Modifier.fillMaxHeight()) {
-            VerticalLevel(
-                state.volume,
-                Icons.AutoMirrored.Rounded.VolumeUp,
-                stringResource(R.string.panelVolume),
-                focus,
-                callbacks.onVolume,
-            )
-            VerticalLevel(
-                state.topBrightness,
-                Icons.Rounded.BrightnessHigh,
-                stringResource(R.string.panelLevelTop),
-                null,
-                callbacks.onTopBrightness,
-            )
-            VerticalLevel(
-                state.bottomBrightness,
-                Icons.Rounded.BrightnessLow,
-                stringResource(R.string.panelLevelBottom),
-                null,
-                callbacks.onBottomBrightness,
-            )
+private fun LevelsCard(state: PanelUiState, callbacks: PanelCallbacks, widget: PanelWidget, focus: FocusRequester?, modifier: Modifier) {
+    val levels = listOfNotNull(
+        Level(state.volume, Icons.AutoMirrored.Rounded.VolumeUp, R.string.panelVolume, callbacks.onVolume)
+            .takeIf { LevelSlider.VOLUME in widget.sliders },
+        Level(state.topBrightness, Icons.Rounded.BrightnessHigh, R.string.panelLevelTop, callbacks.onTopBrightness)
+            .takeIf { LevelSlider.TOP in widget.sliders },
+        Level(state.bottomBrightness, Icons.Rounded.BrightnessLow, R.string.panelLevelBottom, callbacks.onBottomBrightness)
+            .takeIf { LevelSlider.BOTTOM in widget.sliders },
+    )
+    val focusIndex = levels.indexOfFirst { it.value != null }
+    PanelCard(modifier) {
+        if (widget.size.wide) {
+            Column(verticalArrangement = Arrangement.spacedBy(LEVEL_GAP_LYING), modifier = Modifier.fillMaxSize()) {
+                levels.forEachIndexed { index, level ->
+                    HorizontalLevel(level, focus.takeIf { index == focusIndex }, Modifier.weight(1f).fillMaxWidth())
+                }
+            }
+        } else {
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val count = levels.size.coerceAtLeast(1)
+                // Every slider gets the same slot; a slot too narrow for the words shows the icons only.
+                val slot = min(LEVEL_SLOT_MAX, (maxWidth - LEVEL_GAP * (count - 1)) / count)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(LEVEL_GAP, Alignment.CenterHorizontally),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    levels.forEachIndexed { index, level ->
+                        VerticalLevel(
+                            value = level.value,
+                            icon = level.icon,
+                            label = stringResource(level.label).takeIf { slot >= LEVEL_LABEL_MIN_SLOT },
+                            slot = slot,
+                            focus = focus.takeIf { index == focusIndex },
+                            onChange = level.onChange,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A lying slider: the icon, then the bar. Touch sets the level where the finger is; with focus, D-pad left and right step it. */
+@Composable
+private fun HorizontalLevel(level: Level, focus: FocusRequester?, modifier: Modifier) {
+    val palette = LocalThorPalette.current
+    val interactive = LocalPanelInteractive.current
+    val value = level.value
+    val current by rememberUpdatedState(value ?: 0f)
+    val change by rememberUpdatedState(level.onChange)
+    var focused by remember { mutableStateOf(false) }
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (value == null) DISABLED_ALPHA else 1f)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = modifier) {
+        Icon(level.icon, contentDescription = stringResource(level.label), tint = muted, modifier = Modifier.size(18.dp))
+        BoxWithConstraints(contentAlignment = Alignment.CenterStart, modifier = Modifier.weight(1f).fillMaxHeight()) {
+            val thickness = min(maxHeight, LEVEL_WIDTH)
+            val shape = RoundedCornerShape(thickness / 2)
+            Box(
+                contentAlignment = Alignment.CenterStart,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(thickness)
+                    .clip(shape)
+                    .background(Color(palette.tileOff))
+                    .border(FOCUS_BORDER, if (focused) Color(palette.primary) else Color.Transparent, shape)
+                    .then(
+                        if (value == null || !interactive) {
+                            Modifier
+                        } else {
+                            Modifier
+                                .focusFrom(focus)
+                                .onFocusChanged { focused = it.isFocused }
+                                .onKeyEvent { event ->
+                                    val step = when (event.key) {
+                                        Key.DirectionRight -> LEVEL_STEP
+                                        Key.DirectionLeft -> -LEVEL_STEP
+                                        else -> return@onKeyEvent false
+                                    }
+                                    if (event.type == KeyEventType.KeyDown) change((current + step).coerceIn(0f, 1f))
+                                    true
+                                }
+                                .focusable()
+                                .pointerInput(Unit) {
+                                    fun levelAt(position: Offset) = (position.x / size.width).coerceIn(0f, 1f)
+                                    awaitEachGesture {
+                                        val down = awaitFirstDown()
+                                        change(levelAt(down.position))
+                                        drag(down.id) { moved ->
+                                            change(levelAt(moved.position))
+                                            moved.consume()
+                                        }
+                                    }
+                                }
+                        },
+                    ),
+            ) {
+                if (value != null) Box(Modifier.fillMaxHeight().fillMaxWidth(value.coerceIn(0f, 1f)).background(Color(palette.primary)))
+            }
         }
     }
 }
 
 /** A vertical slider. Touch sets the level where the finger is; with focus, D-pad up and down step it. Null is disabled. */
 @Composable
-private fun VerticalLevel(value: Float?, icon: ImageVector, label: String, focus: FocusRequester?, onChange: (Float) -> Unit) {
+private fun VerticalLevel(value: Float?, icon: ImageVector, label: String?, slot: Dp, focus: FocusRequester?, onChange: (Float) -> Unit) {
     val palette = LocalThorPalette.current
     val interactive = LocalPanelInteractive.current
-    val shape = RoundedCornerShape(LEVEL_WIDTH / 2)
+    val width = min(LEVEL_WIDTH, slot)
+    val shape = RoundedCornerShape(width / 2)
     val current by rememberUpdatedState(value ?: 0f)
     val change by rememberUpdatedState(onChange)
     var focused by remember { mutableStateOf(false) }
@@ -320,13 +440,15 @@ private fun VerticalLevel(value: Float?, icon: ImageVector, label: String, focus
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
-        modifier = Modifier.fillMaxHeight(),
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(slot),
     ) {
         Box(
             contentAlignment = Alignment.BottomCenter,
             modifier = Modifier
                 .weight(1f)
-                .width(LEVEL_WIDTH)
+                .width(width)
                 .clip(shape)
                 .background(Color(palette.tileOff))
                 .border(FOCUS_BORDER, if (focused) Color(palette.primary) else Color.Transparent, shape)
@@ -365,14 +487,14 @@ private fun VerticalLevel(value: Float?, icon: ImageVector, label: String, focus
                 Box(Modifier.fillMaxWidth().fillMaxHeight(value.coerceIn(0f, 1f)).background(Color(palette.primary)))
             }
         }
-        Icon(icon, contentDescription = null, tint = muted, modifier = Modifier.size(18.dp))
-        Text(text = label, style = MaterialTheme.typography.labelSmall, color = muted, maxLines = 1)
+        Icon(icon, contentDescription = label, tint = muted, modifier = Modifier.size(18.dp))
+        if (label != null) Text(text = label, style = MaterialTheme.typography.labelSmall, color = muted, maxLines = 1)
     }
 }
 
 @Composable
 private fun ControlsCard(page: PanelPage, state: PanelUiState, focus: FocusRequester?, onTile: (String) -> Unit, modifier: Modifier) {
-    Card(modifier) {
+    PanelCard(modifier) {
         BoxWithConstraints {
             val rows = page.tiles.chunked(page.columns)
             val available = maxHeight / rows.size.coerceAtLeast(1)
@@ -494,43 +616,54 @@ private fun ToggleTile(id: String, state: PanelUiState, circle: Dp, focus: Focus
     }
 }
 
+/** Refresh rate, the four gauges and the temperatures: one strip (4x1, or bigger rings at 4x2), or two rows at 2x2. */
 @Composable
-private fun DeviceCard(state: PanelUiState, onRefreshRate: () -> Unit, focus: FocusRequester?, modifier: Modifier) {
+private fun DeviceCard(state: PanelUiState, onRefreshRate: () -> Unit, focus: FocusRequester?, size: WidgetSize, modifier: Modifier) {
     val palette = LocalThorPalette.current
     val stats = state.stats
     val none = stringResource(R.string.panelNoValue)
-    Card(modifier) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(GAP),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            RefreshRate(state.refreshHz, focus, onRefreshRate)
-            Gauge(
-                stats.cpuGhz?.let {
-                    "%.1f".format(it)
-                } ?: none,
-                stats.cpuLoad,
-                palette.chart[0],
-                R.string.panelStatCpu,
-                Modifier.weight(1f),
-            )
-            Gauge(stats.gpuMhz?.toString() ?: none, stats.gpuLoad, palette.chart[1], R.string.panelStatGpu, Modifier.weight(1f))
-            Gauge(
-                state.powerW?.let { "%.1f".format(it) } ?: none,
-                state.powerW?.let { it / POWER_FULL_SCALE_W },
-                palette.chart[2],
-                R.string.panelStatPower,
-                Modifier.weight(1f),
-            )
-            Gauge(
-                stats.ramUsedGb?.let { "%.1f".format(it) } ?: none,
-                stats.ramUsedGb?.let { used -> stats.ramTotalGb?.let { used / it } },
-                palette.chart[3],
-                R.string.panelStatRam,
-                Modifier.weight(1f),
-            )
-            Temperatures(stats)
+    val ring = if (size.rows >= 2 && size.columns >= WidgetGrid.COLUMNS) RING_SIZE_LARGE else RING_SIZE
+    val gauges: @Composable (Modifier) -> Unit = { each ->
+        Gauge(stats.cpuGhz?.let { "%.1f".format(it) } ?: none, stats.cpuLoad, palette.chart[0], R.string.panelStatCpu, ring, each)
+        Gauge(stats.gpuMhz?.toString() ?: none, stats.gpuLoad, palette.chart[1], R.string.panelStatGpu, ring, each)
+        Gauge(
+            state.powerW?.let { "%.1f".format(it) } ?: none,
+            state.powerW?.let { it / POWER_FULL_SCALE_W },
+            palette.chart[2],
+            R.string.panelStatPower,
+            ring,
+            each,
+        )
+        Gauge(
+            stats.ramUsedGb?.let { "%.1f".format(it) } ?: none,
+            stats.ramUsedGb?.let { used -> stats.ramTotalGb?.let { used / it } },
+            palette.chart[3],
+            R.string.panelStatRam,
+            ring,
+            each,
+        )
+    }
+    PanelCard(modifier) {
+        if (size.columns < WidgetGrid.COLUMNS) {
+            Column(verticalArrangement = Arrangement.spacedBy(GAP), modifier = Modifier.fillMaxSize()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(GAP), modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    RefreshRate(state.refreshHz, focus, onRefreshRate)
+                    Temperatures(stats)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    gauges(Modifier.weight(1f))
+                }
+            }
+        } else {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(GAP),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                RefreshRate(state.refreshHz, focus, onRefreshRate)
+                gauges(Modifier.weight(1f))
+                Temperatures(stats)
+            }
         }
     }
 }
@@ -572,14 +705,14 @@ private fun RefreshRate(hz: Int?, focus: FocusRequester?, onClick: () -> Unit) {
 
 /** A ring that fills with [fraction] (null leaves it empty), the value in the middle and the unit below. */
 @Composable
-private fun Gauge(value: String, fraction: Float?, color: Long, label: Int, modifier: Modifier) {
+private fun Gauge(value: String, fraction: Float?, color: Long, label: Int, ring: Dp, modifier: Modifier) {
     val track = Color(LocalThorPalette.current.tileOff)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
         modifier = modifier.fillMaxHeight(),
     ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.weight(1f, fill = false).size(RING_SIZE)) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.weight(1f, fill = false).size(ring)) {
             Canvas(Modifier.fillMaxSize()) {
                 val stroke = RING_STROKE.toPx()
                 val inset = stroke / 2
@@ -658,20 +791,23 @@ private const val POWER_FULL_SCALE_W = 20f
 private const val RING_START = 135f
 private const val RING_SWEEP = 270f
 private val MIN_FIT_HEIGHT = 380.dp
-private val FIXED_MIDDLE_HEIGHT = 230.dp
-private val DEVICE_HEIGHT = 96.dp
+private val FIXED_CELL_HEIGHT = 90.dp
 private val PADDING = 14.dp
 private val GAP = 10.dp
 private val CARD_PADDING = 10.dp
 private val LEVEL_WIDTH = 36.dp
-private val LEVEL_GAP = 8.dp
+private val LEVEL_GAP = 6.dp
+private val LEVEL_SLOT_MAX = 56.dp
+private val LEVEL_LABEL_MIN_SLOT = 44.dp
+private val LEVEL_GAP_LYING = 4.dp
 private val TILE_TEXT_HEIGHT = 36.dp
 private val TILE_SIDE_ROOM = 8.dp
 private val MIN_CIRCLE = 30.dp
 private val MAX_CIRCLE = 56.dp
-private val FOCUS_BORDER = 2.dp
+internal val FOCUS_BORDER = 2.dp
 private val DOT_SIZE = 7.dp
 private val REFRESH_WIDTH = 84.dp
 private val TEMP_WIDTH = 64.dp
 private val RING_SIZE = 56.dp
+private val RING_SIZE_LARGE = 84.dp
 private val RING_STROKE = 6.dp

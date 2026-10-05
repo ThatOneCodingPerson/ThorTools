@@ -57,6 +57,9 @@ sealed interface HelperMessage {
     /** A D-pad direction or stick flick of the Thor's pad went down or up, while the app watches the pad. */
     data class Direction(val button: PadButton, val down: Boolean) : HelperMessage
 
+    /** The lid closed or opened (`hall_switch`, `SW_LID`). */
+    data class Lid(val closed: Boolean) : HelperMessage
+
     companion object {
         fun parse(line: String): HelperMessage? {
             val trimmed = line.trim()
@@ -67,6 +70,11 @@ sealed interface HelperMessage {
                 "u" -> Screen.entries.find { it.name.equals(parts.getOrNull(1), ignoreCase = true) }?.let(::Lift)
                 "s" -> Status(parts.drop(1).joinToString(" "))
                 "d" -> parseDirection(parts)
+                "l" -> when (parts.getOrNull(1)) {
+                    "1" -> Lid(closed = true)
+                    "0" -> Lid(closed = false)
+                    else -> null
+                }
                 else -> null
             }
         }
@@ -97,6 +105,7 @@ sealed interface HelperMessage {
             is Status -> "s ${message.text.replace('\n', ' ')}"
             is Result -> "r ${message.id} ${if (message.ok) 1 else 0} ${message.text.replace('\n', ' ')}"
             is Direction -> "d ${message.button.id} ${if (message.down) 1 else 0}"
+            is Lid -> "l ${if (message.closed) 1 else 0}"
         }
     }
 }

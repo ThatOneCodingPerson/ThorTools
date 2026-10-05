@@ -10,6 +10,9 @@ import io.github.thatonecodingperson.thortools.coexist.OdinToolsDetector
 import io.github.thatonecodingperson.thortools.coexist.Overlap
 import io.github.thatonecodingperson.thortools.hotkeys.Hotkey
 import io.github.thatonecodingperson.thortools.hotkeys.HotkeyList
+import io.github.thatonecodingperson.thortools.lid.LidChoices
+import io.github.thatonecodingperson.thortools.lid.LidResult
+import io.github.thatonecodingperson.thortools.lid.LidSession
 import io.github.thatonecodingperson.thortools.models.ControllerStyle
 import io.github.thatonecodingperson.thortools.models.L2R2Style
 import io.github.thatonecodingperson.thortools.panel.PanelLayout
@@ -190,6 +193,64 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
         get() = prefs.getBoolean(KEY_PANEL_CLEAN_MEMORY, false)
         set(value) = prefs.edit().putBoolean(KEY_PANEL_CLEAN_MEMORY, value).apply()
 
+    /** Only a tap of the AYN button or the panel's close button closes the quick panel (`PanelClosing`). */
+    var panelOnlyAynCloses
+        get() = prefs.getBoolean(KEY_PANEL_ONLY_AYN_CLOSES, true)
+        set(value) = prefs.edit().putBoolean(KEY_PANEL_ONLY_AYN_CLOSES, value).apply()
+
+    /** The lid sandbox's switches; all off by default. */
+    var lidChoices: LidChoices
+        get() = LidChoices(
+            enabled = prefs.getBoolean(KEY_LID_ENABLED, true),
+            powerSaving = prefs.getBoolean(KEY_LID_POWER_SAVING, false),
+            closeBackground = prefs.getBoolean(KEY_LID_CLOSE_BACKGROUND, false),
+            pauseMedia = prefs.getBoolean(KEY_LID_PAUSE_MEDIA, false),
+            wifiOff = prefs.getBoolean(KEY_LID_WIFI_OFF, false),
+            bluetoothOff = prefs.getBoolean(KEY_LID_BLUETOOTH_OFF, false),
+            airplane = prefs.getBoolean(KEY_LID_AIRPLANE, false),
+            muteButtons = prefs.getBoolean(KEY_LID_MUTE_BUTTONS, false),
+            muteController = prefs.getBoolean(KEY_LID_MUTE_CONTROLLER, false),
+            muteTouch = prefs.getBoolean(KEY_LID_MUTE_TOUCH, false),
+            backToSleep = prefs.getBoolean(KEY_LID_BACK_TO_SLEEP, false),
+        )
+        set(value) = prefs.edit()
+            .putBoolean(KEY_LID_ENABLED, value.enabled)
+            .putBoolean(KEY_LID_POWER_SAVING, value.powerSaving)
+            .putBoolean(KEY_LID_CLOSE_BACKGROUND, value.closeBackground)
+            .putBoolean(KEY_LID_PAUSE_MEDIA, value.pauseMedia)
+            .putBoolean(KEY_LID_WIFI_OFF, value.wifiOff)
+            .putBoolean(KEY_LID_BLUETOOTH_OFF, value.bluetoothOff)
+            .putBoolean(KEY_LID_AIRPLANE, value.airplane)
+            .putBoolean(KEY_LID_MUTE_BUTTONS, value.muteButtons)
+            .putBoolean(KEY_LID_MUTE_CONTROLLER, value.muteController)
+            .putBoolean(KEY_LID_MUTE_TOUCH, value.muteTouch)
+            .putBoolean(KEY_LID_BACK_TO_SLEEP, value.backToSleep)
+            .apply()
+
+    /**
+     * What a closed lid changed and must put back. Written with `commit` before anything changes, so it survives a
+     * crash or a reboot; null once the lid opened and everything was put back.
+     */
+    var lidSession: LidSession?
+        get() = LidSession.decode(prefs.getString(KEY_LID_SESSION, null))
+        set(value) {
+            prefs.edit().putString(KEY_LID_SESSION, value?.encode()).commit()
+        }
+
+    /** How the last closing went, as its screen shows it. */
+    var lidLastResult: LidResult?
+        get() = LidResult.decode(prefs.getString(KEY_LID_LAST, null))
+        set(value) = prefs.edit().putString(KEY_LID_LAST, value?.encode()).apply()
+
+    fun lidResultChanges(): Flow<LidResult?> = callbackFlow {
+        val listener = OnSharedPreferenceChangeListener { _, key ->
+            if (key == KEY_LID_LAST || key == null) trySend(lidLastResult)
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        trySend(lidLastResult)
+        awaitClose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
     /** Which app the panel's Close the current app tile closes. */
     var panelCloseAppTarget: PanelCloseTarget
         get() = PanelCloseTarget.byId(prefs.getString(KEY_PANEL_CLOSE_APP, null)) ?: PanelCloseTarget.OPENED_FROM
@@ -293,6 +354,20 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
         private const val KEY_PANEL_LAYOUT = "panel_layout"
         private const val KEY_PANEL_CLOSE_APP = "panel_close_app_target"
         private const val KEY_PANEL_CLEAN_MEMORY = "panel_clean_memory"
+        private const val KEY_PANEL_ONLY_AYN_CLOSES = "panel_only_ayn_closes"
+        private const val KEY_LID_ENABLED = "lid_enabled"
+        private const val KEY_LID_POWER_SAVING = "lid_power_saving"
+        private const val KEY_LID_CLOSE_BACKGROUND = "lid_close_background"
+        private const val KEY_LID_PAUSE_MEDIA = "lid_pause_media"
+        private const val KEY_LID_WIFI_OFF = "lid_wifi_off"
+        private const val KEY_LID_BLUETOOTH_OFF = "lid_bluetooth_off"
+        private const val KEY_LID_AIRPLANE = "lid_airplane"
+        private const val KEY_LID_MUTE_BUTTONS = "lid_mute_buttons"
+        private const val KEY_LID_MUTE_CONTROLLER = "lid_mute_controller"
+        private const val KEY_LID_MUTE_TOUCH = "lid_mute_touch"
+        private const val KEY_LID_BACK_TO_SLEEP = "lid_back_to_sleep"
+        private const val KEY_LID_SESSION = "lid_session"
+        private const val KEY_LID_LAST = "lid_last_result"
         private const val KEY_CUSTOM_PALETTES = "custom_palettes"
         private const val KEY_HOTKEYS = "hotkey_list"
         private const val KEY_AYN_PANEL_RESTORED = "hotkey_ayn_panel_restored"

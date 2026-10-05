@@ -8,6 +8,7 @@ import android.os.IBinder
 import android.os.SystemClock
 import android.view.InputEvent
 import android.view.KeyEvent
+import io.github.thatonecodingperson.thortools.lid.InputGroup
 import io.github.thatonecodingperson.thortools.panel.StatsSampler
 import java.io.File
 
@@ -23,6 +24,8 @@ internal object RootCommands {
         "move" -> move(args.chunked(3).map { AppMove(it[0], it[1].toInt(), it[2].toInt()) })
         "close" -> close(packageName = args[0], displayId = args[1].toInt())
         "cleanup" -> cleanup(keep = BackgroundTasks.decodeKeep(args.getOrNull(0)))
+        "mute" -> InputMute.mute(RawInputHelper.scanNodes(), InputGroup.decode(args.getOrNull(0)))
+        "unmute" -> InputMute.unmuteAll(RawInputHelper.scanNodes())
         "front" -> front(packageName = args[0], displayId = args[1].toInt())
         "key" -> key(
             deviceId = args[0].toInt(),

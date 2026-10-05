@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -54,6 +55,7 @@ import io.github.thatonecodingperson.thortools.display.ThemesScreen
 import io.github.thatonecodingperson.thortools.hotkeys.HotkeysScreen
 import io.github.thatonecodingperson.thortools.hotkeys.toPadSample
 import io.github.thatonecodingperson.thortools.input.PadDirections
+import io.github.thatonecodingperson.thortools.lid.LidScreen
 import io.github.thatonecodingperson.thortools.panel.PanelEditorScreen
 import io.github.thatonecodingperson.thortools.panel.PanelSettingsScreen
 import io.github.thatonecodingperson.thortools.service.ServiceStatus
@@ -73,6 +75,14 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var status: ServiceStatus
+
+    /** A screen to open, asked for by the quick panel's edit button ([EXTRA_OPEN]); only known values are followed. */
+    private val openRequest = mutableStateOf<String?>(null)
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        openRequest.value = intent.getStringExtra(EXTRA_OPEN)
+    }
 
     // The quick panel's Thor Tools tile checks where this came up.
     override fun onResume() {
@@ -106,6 +116,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        if (savedInstanceState == null) openRequest.value = intent.getStringExtra(EXTRA_OPEN)
         setContent {
             val paletteChanges = remember { prefs.paletteChanges() }
             val palette by paletteChanges.collectAsState(initial = prefs.palette())
@@ -113,6 +124,14 @@ class MainActivity : ComponentActivity() {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     val navController = rememberNavController()
                     val back: () -> Unit = { navController.popBackStack() }
+                    val request by openRequest
+                    LaunchedEffect(request) {
+                        if (request == OPEN_PANEL_EDITOR) {
+                            navController.navigate(Routes.QUICK_PANEL)
+                            navController.navigate(Routes.QUICK_PANEL_EDIT)
+                        }
+                        openRequest.value = null
+                    }
                     NavHost(navController = navController, startDestination = Routes.SETTINGS) {
                         composable(Routes.SETTINGS) {
                             SettingsScreen { navController.navigate(it) }
@@ -121,7 +140,6 @@ class MainActivity : ComponentActivity() {
                             ControllerScreen(
                                 onModes = { navController.navigate(Routes.CONTROLLER_MODES) },
                                 onHotkeys = { navController.navigate(Routes.HOTKEYS) },
-                                onQuickPanel = { navController.navigate(Routes.QUICK_PANEL) },
                                 onBack = back,
                             )
                         }
@@ -141,7 +159,10 @@ class MainActivity : ComponentActivity() {
                             ProfilesScreen(onAppOverrides = { navController.navigate(Routes.OVERRIDE_LIST) }, onBack = back)
                         }
                         composable(Routes.CHARGING) {
-                            ChargingScreen(onBack = back)
+                            ChargingScreen(onLid = { navController.navigate(Routes.LID) }, onBack = back)
+                        }
+                        composable(Routes.LID) {
+                            LidScreen(onBack = back)
                         }
                         composable(Routes.DISPLAY) {
                             DisplayScreen(onThemes = { navController.navigate(Routes.THEMES) }, onBack = back)
@@ -179,6 +200,14 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    companion object {
+        /** Intent extra: a screen to open on start. */
+        const val EXTRA_OPEN = "thortools.open"
+
+        /** [EXTRA_OPEN] value: the quick panel editor. */
+        const val OPEN_PANEL_EDITOR = "panel_editor"
     }
 }
 
@@ -220,14 +249,19 @@ fun SettingsScreen(viewModel: MainViewModel = hiltViewModel(), navigate: (route:
                 description = R.string.controllerAndButtonsSummary,
             ) { navigate(Routes.CONTROLLER) }
             TriggerPreference(
+                icon = R.drawable.ic_sliders,
+                title = R.string.quickPanel,
+                description = R.string.quickPanelDescription,
+            ) { navigate(Routes.QUICK_PANEL) }
+            TriggerPreference(
                 icon = R.drawable.ic_app_settings,
                 title = R.string.appProfiles,
                 description = R.string.appProfilesSummary,
             ) { navigate(Routes.PROFILES) }
             TriggerPreference(
-                icon = R.drawable.ic_electrical_services,
-                title = R.string.charging,
-                description = R.string.chargingSummary,
+                icon = R.drawable.ic_battery,
+                title = R.string.powerManagement,
+                description = R.string.powerManagementSummary,
             ) { navigate(Routes.CHARGING) }
             TriggerPreference(
                 icon = R.drawable.ic_palette,

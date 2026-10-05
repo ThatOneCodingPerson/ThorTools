@@ -27,20 +27,19 @@ class SuggestionProfileTest {
 
     @Test
     fun `the Thor Profile is its fixed list`() {
-        val list = setOf(
-            Hotkey(PadButton.HOME, PadButton.R3, PressKind.TAP, ThorAction.SWAP_SCREENS),
-            Hotkey(PadButton.BACK, null, PressKind.DOUBLE, ThorAction.RECENTS),
-            Hotkey(PadButton.HOME, null, PressKind.TRIPLE, ThorAction.CLEAR_BACKGROUND),
+        val list = listOf(
+            HotkeyList.aynPanel,
+            Hotkey(PadButton.AYN, null, PressKind.HOLD, ThorAction.AYN_DRAWER),
             Hotkey(PadButton.HOME, null, PressKind.DOUBLE, ThorAction.HOME_BOTH),
-            Hotkey(PadButton.BACK, PadButton.LSTICK_UP, PressKind.TAP, ThorAction.BRIGHTER),
-            Hotkey(PadButton.BACK, PadButton.LSTICK_DOWN, PressKind.TAP, ThorAction.DIMMER),
-            Hotkey(PadButton.HOME, PadButton.RSTICK_UP, PressKind.TAP, ThorAction.CONTROLLER_TO_TOP),
-            Hotkey(PadButton.HOME, PadButton.RSTICK_DOWN, PressKind.TAP, ThorAction.CONTROLLER_TO_BOTTOM),
-            Hotkey(PadButton.HOME, PadButton.X, PressKind.TAP, ThorAction.SCREENSHOT),
-            Hotkey(PadButton.HOME, PadButton.START, PressKind.TAP, ThorAction.TOGGLE_CONTROLLER_LOCK),
-            Hotkey(PadButton.BACK, PadButton.L3, PressKind.TAP, ThorAction.CYCLE_PERFORMANCE),
+            Hotkey(PadButton.HOME, PadButton.RSTICK_DOWN, PressKind.TAP, ThorAction.CONTROLLER_TO_BOTTOM, lock = true),
+            Hotkey(PadButton.HOME, PadButton.RSTICK_UP, PressKind.TAP, ThorAction.CONTROLLER_TO_TOP, lock = true),
+            Hotkey(PadButton.HOME, PadButton.R3, PressKind.DOUBLE, ThorAction.SWAP_SCREENS),
+            Hotkey(PadButton.HOME, PadButton.R3, PressKind.TAP, ThorAction.RECENTS),
+            Hotkey(PadButton.HOME, PadButton.R3, PressKind.TRIPLE, ThorAction.TOGGLE_REFRESH_RATE),
+            Hotkey(PadButton.HOME, null, PressKind.TRIPLE, ThorAction.CLEAR_BACKGROUND),
+            Hotkey(PadButton.AYN, null, PressKind.DOUBLE, ThorAction.TOGGLE_LAYOUT),
         )
-        assertEquals(list + HotkeyList.aynPanel, SuggestionProfile.THOR.hotkeys.toSet())
+        assertEquals(list, SuggestionProfile.THOR.hotkeys)
     }
 
     @Test

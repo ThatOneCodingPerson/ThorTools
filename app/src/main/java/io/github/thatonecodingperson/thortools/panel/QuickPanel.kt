@@ -28,7 +28,9 @@ import io.github.thatonecodingperson.thortools.actions.ActionCall
 import io.github.thatonecodingperson.thortools.actions.CloseTarget
 import io.github.thatonecodingperson.thortools.actions.ThorAction
 import io.github.thatonecodingperson.thortools.data.SharedPrefsRepo
+import io.github.thatonecodingperson.thortools.hotkeys.AppLaunch
 import io.github.thatonecodingperson.thortools.hotkeys.CloseAppArg
+import io.github.thatonecodingperson.thortools.hotkeys.LaunchScreen
 import io.github.thatonecodingperson.thortools.input.Screen
 import io.github.thatonecodingperson.thortools.input.ScreenFocus
 import io.github.thatonecodingperson.thortools.main.MainActivity
@@ -82,6 +84,16 @@ class QuickPanel(
     private var liftedFocusLock = false
     private var openedAt = 0L
 
+    /** The display the panel shows on. */
+    private var panelDisplay = Display.DEFAULT_DISPLAY
+
+    /**
+     * The controller is on the panel's screen. Android keeps a focused window on each screen and moves the controller
+     * between screens on its own (a touch, an app starting), so the panel can't ask its window: the service reports
+     * where the controller went ([controllerOn]). Main thread.
+     */
+    private var controllerHere = false
+
     /** Counts panel openings, so work queued for one panel never acts on a later one. Main thread. */
     private var panelSession = 0
 
@@ -90,21 +102,29 @@ class QuickPanel(
     var openedFrom: Int = Display.DEFAULT_DISPLAY
         private set
 
-    /** The app in front when the panel opened; another app coming up closes it. */
+    /** The app in front when the panel opened; another app coming up closes it (unless only AYN closes the panel). */
     var openedOver: String? = null
         private set
 
     val isOpen: Boolean get() = root != null
 
     /** Open and holding the controller (Panel takes the controller), so the pad's buttons work the panel. */
-    val hasController: Boolean get() = isOpen && tookController
+    val hasController: Boolean get() = isOpen && tookController && controllerHere
+
+    /** Whether the panel closes for [reason] now (see [PanelClosing]). */
+    fun closesFor(reason: CloseReason): Boolean = PanelClosing.closes(reason, prefs.panelOnlyAynCloses)
+
+    /** Where the controller is now, as far as the service knows (a touch, a controller move, Android's focused display). */
+    fun controllerOn(displayId: Int) {
+        if (isOpen && tookController) controllerHere = displayId == panelDisplay
+    }
 
     /** The panel's Back, as a Back press inside it would do: back in the panel, or close it. */
     fun back() {
         owner?.let(::onBack)
     }
 
-    fun toggle(foregroundPackage: String?) = if (isOpen) close() else open(foregroundPackage)
+    fun toggle(foregroundPackage: String?) = if (isOpen) close(CloseReason.AYN) else open(foregroundPackage)
 
     /** After a hotkey changed something the panel shows, while it is open. */
     fun refreshSoon() {
@@ -126,12 +146,21 @@ class QuickPanel(
         model.start()
     }
 
-    /** [returnFocus] false when something else is about to decide where the controller goes (Home, screen off). */
-    fun close(returnFocus: Boolean = true) {
+    /**
+     * Closes the panel when [reason] may close it (see [closesFor]). [returnFocus] false when something else is about to
+     * decide where the controller goes (Home, screen off). When the controller had already left the panel, it stays
+     * where it is.
+     */
+    fun close(reason: CloseReason, returnFocus: Boolean = true) {
+        if (!closesFor(reason)) return
         val closed = removeWindow() ?: return
         if (!closed.tookController) return
         if (!returnFocus) {
             if (closed.relock) setFocusLock(true)
+            return
+        }
+        if (!closed.hadController) {
+            if (closed.relock) relockWhenOnTop()
             return
         }
         // "Here" for the controller is where it goes back to, even after a touch on the panel moved it to the panel's screen.
@@ -139,8 +168,11 @@ class QuickPanel(
         mainHandler.postDelayed({ handBack(closed) }, RETURN_FOCUS_DELAY_MS)
     }
 
-    /** What the panel had done when it closed: taken the controller, and lifted AYN's lock to do so. */
-    private data class Closed(val tookController: Boolean, val relock: Boolean)
+    /**
+     * What the panel had done when it closed: taken the controller, and lifted AYN's lock to do so; [hadController]:
+     * the controller was still on it.
+     */
+    private data class Closed(val tookController: Boolean, val relock: Boolean, val hadController: Boolean)
 
     /** Removes the panel's window; null when it wasn't open. */
     private fun removeWindow(): Closed? {
@@ -152,9 +184,10 @@ class QuickPanel(
         owner?.destroy()
         owner = null
         openedOver = null
-        val closed = Closed(tookController, tookController && liftedFocusLock)
+        val closed = Closed(tookController, tookController && liftedFocusLock, controllerHere)
         tookController = false
         liftedFocusLock = false
+        controllerHere = false
         return closed
     }
 
@@ -182,11 +215,14 @@ class QuickPanel(
         val panelOwner = OverlayOwner()
         val panelRoot = PanelRoot(context, onBack = { onBack(panelOwner) }, onPage = { pageSteps.tryEmit(it) }, onMotion = onMotion)
         panelRoot.setOnTouchListener { _, event ->
-            if (event.actionMasked == MotionEvent.ACTION_OUTSIDE && SystemClock.uptimeMillis() - openedAt > OUTSIDE_TOUCH_GRACE_MS) close()
+            if (event.actionMasked == MotionEvent.ACTION_OUTSIDE && SystemClock.uptimeMillis() - openedAt > OUTSIDE_TOUCH_GRACE_MS) {
+                close(CloseReason.TOUCH_OUTSIDE)
+            }
             false
         }
         panelOwner.attach(panelRoot)
         val layout = prefs.panelLayout
+        model.load(layout)
         val callbacks = PanelCallbacks(
             onTile = ::onTile,
             onRefreshRate = {
@@ -196,7 +232,12 @@ class QuickPanel(
             onVolume = model::setVolume,
             onTopBrightness = model::setTopBrightness,
             onBottomBrightness = model::setBottomBrightness,
-            onClose = { close() },
+            onClose = { close(CloseReason.CLOSE_BUTTON) },
+            onEdit = { openThorTools(MainActivity.OPEN_PANEL_EDITOR) },
+            onMedia = model::media,
+            onAllowMedia = model::allowMedia,
+            onApp = ::onApp,
+            onNoteDrawn = model::drawNote,
         )
         panelRoot.addView(
             ComposeView(context).apply {
@@ -239,6 +280,8 @@ class QuickPanel(
         root = panelRoot
         windowManager = manager
         owner = panelOwner
+        panelDisplay = display.displayId
+        controllerHere = false
         val session = ++panelSession
         if (takes) {
             takeController(display.displayId, session)
@@ -265,7 +308,7 @@ class QuickPanel(
                     liftedFocusLock = true
                     setFocusLock(false)
                 }
-                focusMover.moveTo(displayId)
+                focusMover.moveTo(displayId) { moved -> if (moved && session == panelSession) controllerHere = true }
             }
         }
     }
@@ -279,13 +322,23 @@ class QuickPanel(
     }
 
     private fun onBack(panelOwner: OverlayOwner) {
-        if (panelOwner.onBackPressedDispatcher.hasEnabledCallbacks()) panelOwner.onBackPressedDispatcher.onBackPressed() else close()
+        if (panelOwner.onBackPressedDispatcher.hasEnabledCallbacks()) {
+            panelOwner.onBackPressedDispatcher.onBackPressed()
+        } else {
+            close(CloseReason.BACK)
+        }
     }
 
     private fun onTile(id: String) {
         if (id == PanelTiles.THOR_TOOLS) return openThorTools()
         val action = PanelTiles.action(id)
         val delay = PanelTiles.leaveDelayMs(id)
+        // The panel stays open (only AYN closes it): the action runs now, and "here" is where the panel was opened from.
+        if (delay != null && action != null && !closesFor(CloseReason.TILE)) {
+            runAction(stayingOpen(action))
+            model.refreshSoon()
+            return
+        }
         if (delay == null) {
             // The panel shows the new state itself, so no message on top of it.
             action?.let { runAction(ActionCall(it, alsoCleanMemory = it == ThorAction.CLEAR_BACKGROUND && prefs.panelCleanMemory)) }
@@ -298,7 +351,7 @@ class QuickPanel(
             ThorAction.CLOSE_APP -> ActionCall(action, closeAppArg(), feedback = true)
             else -> ActionCall(action)
         }
-        close()
+        close(CloseReason.TILE)
         mainHandler.postDelayed({
             if (call != null) {
                 runAction(call)
@@ -309,33 +362,63 @@ class QuickPanel(
     }
 
     /**
-     * The Thor Tools tile. The app starts while the panel still shows, and the panel then closes without handing the
-     * controller back: that hand-back taps the screen the controller came from, which could bring the game back over
-     * Thor Tools. The controller follows Thor Tools to the top screen; [checkLaunch] makes sure it came up.
+     * An App shortcuts icon: the app opens on the widget's screen; "the screen you were using" is where the panel was
+     * opened from. Like a tile that acts on the screens, it closes the panel first unless only AYN closes it.
      */
-    private fun openThorTools() {
-        startThorTools()
-        val closed = removeWindow() ?: return
-        mainHandler.postDelayed({ checkLaunch(attempt = 1, closed = closed) }, LAUNCH_CHECK_MS)
+    private fun onApp(packageName: String, screen: LaunchScreen) {
+        val target = when (screen) {
+            LaunchScreen.HERE -> if (openedFrom == Display.DEFAULT_DISPLAY) LaunchScreen.TOP else LaunchScreen.BOTTOM
+            else -> screen
+        }
+        val call = ActionCall(ThorAction.LAUNCH_APP, AppLaunch(packageName, target).encode())
+        if (!closesFor(CloseReason.TILE)) return runAction(call)
+        close(CloseReason.TILE)
+        mainHandler.postDelayed({ runAction(call) }, PanelTiles.LEAVE_MS)
     }
 
-    private fun startThorTools() =
-        startOn(Intent(service, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT), Display.DEFAULT_DISPLAY)
+    /** A tile's action while the panel stays open: Home and Close the current app act where the panel was opened from. */
+    private fun stayingOpen(action: ThorAction): ActionCall {
+        val openedFromTop = openedFrom == Display.DEFAULT_DISPLAY
+        return when (action) {
+            ThorAction.HOME -> ActionCall(if (openedFromTop) ThorAction.HOME_TOP else ThorAction.HOME_BOTTOM)
+            ThorAction.CLOSE_APP -> ActionCall(action, closeAppArg(), feedback = true)
+            else -> ActionCall(action)
+        }
+    }
 
-    private fun checkLaunch(attempt: Int, closed: Closed) {
+    /**
+     * The Thor Tools tile, and the edit button ([open] = [MainActivity.OPEN_PANEL_EDITOR]). The app starts while the
+     * panel still shows, and the panel then closes without handing the controller back: that hand-back taps the screen
+     * the controller came from, which could bring the game back over Thor Tools. The controller follows Thor Tools to the
+     * top screen; [checkLaunch] makes sure it came up.
+     */
+    private fun openThorTools(open: String? = null) {
+        if (!closesFor(CloseReason.OPEN_THOR_TOOLS)) return
+        startThorTools(open)
+        val closed = removeWindow() ?: return
+        mainHandler.postDelayed({ checkLaunch(attempt = 1, closed = closed, open = open) }, LAUNCH_CHECK_MS)
+    }
+
+    private fun startThorTools(open: String?) {
+        val intent = Intent(service, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+        open?.let { intent.putExtra(MainActivity.EXTRA_OPEN, it) }
+        startOn(intent, Display.DEFAULT_DISPLAY)
+    }
+
+    private fun checkLaunch(attempt: Int, closed: Closed, open: String?) {
         // A panel opened since then has the controller now; the tile's follow-ups would undo that.
         if (isOpen) return
         val shownOn = thorToolsShownOn()
-        val again = { mainHandler.postDelayed({ checkLaunch(attempt + 1, closed) }, LAUNCH_CHECK_MS) }
+        val again = { mainHandler.postDelayed({ checkLaunch(attempt + 1, closed, open) }, LAUNCH_CHECK_MS) }
         when (LaunchCheck.next(attempt, shownOn, Display.DEFAULT_DISPLAY)) {
             LaunchCheck.Next.DONE -> if (closed.relock) relockWhenOnTop()
             LaunchCheck.Next.MOVE -> {
                 val args = listOf(service.packageName, shownOn.toString(), Display.DEFAULT_DISPLAY.toString())
-                if (!helper.send("move", args) { _, _ -> }) startThorTools()
+                if (!helper.send("move", args) { _, _ -> }) startThorTools(open)
                 again()
             }
             LaunchCheck.Next.START_AGAIN -> {
-                startThorTools()
+                startThorTools(open)
                 again()
             }
             LaunchCheck.Next.GIVE_UP -> if (closed.tookController) handBack(closed)
