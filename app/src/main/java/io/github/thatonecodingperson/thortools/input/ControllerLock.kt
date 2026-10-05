@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.view.Display
+import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import io.github.thatonecodingperson.thortools.panel.FocusMover
 import io.github.thatonecodingperson.thortools.tools.ShellExecutor
@@ -26,7 +27,8 @@ class ControllerLock(
     private val paused: () -> Boolean,
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val sendBack = Runnable { returnToBottom() }
+    private val sendBack = Runnable { returnToBottom(firstLook = true) }
+    private val sendBackLater = Runnable { returnToBottom(firstLook = false) }
 
     @Volatile
     var lockedTo: Screen? = null
@@ -43,7 +45,7 @@ class ControllerLock(
     fun set(target: Screen?, onDone: (Screen?) -> Unit = {}) {
         val previous = lockedTo
         lockedTo = target
-        mainHandler.removeCallbacks(sendBack)
+        cancelReturn()
         scope.launch {
             // AYN's lock must be off before the controller can move to the bottom screen.
             if (previous == Screen.TOP && target != Screen.TOP) executor.executeAsRoot("settings put system $KEY_FOCUS_LOCK 0")
@@ -78,18 +80,27 @@ class ControllerLock(
 
     /** A new finger on [screen]: a pending return waits for that finger too. */
     fun onTouch(screen: Screen) {
-        if (screen == Screen.TOP) mainHandler.removeCallbacks(sendBack)
+        if (screen == Screen.TOP) cancelReturn()
     }
 
     /** The last finger left [screen]. */
     fun onLift(screen: Screen) {
-        if (!LockPolicy.returnsAfterLift(lockedTo, screen, keyboardOnTop(), paused())) return
-        mainHandler.removeCallbacks(sendBack)
+        if (!LockPolicy.returnsAfterLift(lockedTo, screen, paused())) return
+        cancelReturn()
         mainHandler.postDelayed(sendBack, RETURN_DELAY_MS)
     }
 
-    private fun returnToBottom() {
+    private fun cancelReturn() {
+        mainHandler.removeCallbacks(sendBack)
+        mainHandler.removeCallbacks(sendBackLater)
+    }
+
+    private fun returnToBottom(firstLook: Boolean) {
         if (lockedTo != Screen.BOTTOM || paused()) return
+        if (LockPolicy.waitsForTyping(keyboardShown(), editableFocused(), firstLook)) {
+            mainHandler.postDelayed(sendBackLater, TYPING_CHECK_MS)
+            return
+        }
         scope.launch {
             // While AYN has the bottom screen switched off there is nothing to return to.
             if (systemInt(KEY_SCREEN_MODE) == 1) return@launch
@@ -98,8 +109,14 @@ class ControllerLock(
         }
     }
 
-    private fun keyboardOnTop(): Boolean = runCatching {
-        service.windowsOnAllDisplays.get(Display.DEFAULT_DISPLAY)?.any { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD } == true
+    /** A keyboard window on either screen (AYN can show it on the other screen than the app's). */
+    private fun keyboardShown(): Boolean = runCatching {
+        val windows = service.windowsOnAllDisplays
+        (0 until windows.size()).any { index -> windows.valueAt(index).any { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD } }
+    }.getOrDefault(false)
+
+    private fun editableFocused(): Boolean = runCatching {
+        service.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.isEditable == true
     }.getOrDefault(false)
 
     private fun setAynLock(on: Boolean) {
@@ -115,5 +132,8 @@ class ControllerLock(
 
         // Android applies the touch's own focus change a moment after the lift; going back sooner gets undone.
         const val RETURN_DELAY_MS = 300L
+
+        // While typing, the return looks again this often and goes once the keyboard is closed.
+        const val TYPING_CHECK_MS = 500L
     }
 }

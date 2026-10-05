@@ -21,6 +21,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.SportsEsports
@@ -30,7 +31,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -38,11 +38,11 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -260,11 +260,10 @@ private fun ColumnScope.Summary(state: HotkeysUiModel, draft: HotkeyDraft, viewM
         )
     }
     if (draft.apps.isNotEmpty()) {
-        Text(
-            text = stringResource(R.string.hotkeyOnlyIn, appNames(draft.apps, state)),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        TextButton(onClick = { viewModel.openPicker(AppPickerMode.HOTKEY_APPS) }) { Text(stringResource(R.string.hotkeyChangeApps)) }
+        LinkRow(
+            title = stringResource(R.string.hotkeyChangeApps),
+            info = stringResource(R.string.hotkeyOnlyIn, appNames(draft.apps, state)),
+        ) { viewModel.openPicker(AppPickerMode.HOTKEY_APPS) }
     }
 
     Text(stringResource(R.string.hotkeySwitches), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
@@ -317,6 +316,33 @@ private fun SwitchRow(title: String, info: String, checked: Boolean, onChange: (
     }
 }
 
+/** Something that opens or starts, in the same row style as the switches. */
+@Composable
+private fun LinkRow(title: String, info: String? = null, icon: ImageVector? = null, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            if (icon != null) {
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(12.dp))
+            }
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.bodyLarge)
+                if (info != null) Text(info, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(
+                Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
 @Composable
 private fun Recording(state: HotkeysUiModel, viewModel: HotkeysViewModel) {
     when {
@@ -325,11 +351,11 @@ private fun Recording(state: HotkeysUiModel, viewModel: HotkeysViewModel) {
             actionLabel = stringResource(R.string.cancel),
             onAction = viewModel::stopRecording,
         )
-        state.serviceRunning -> OutlinedButton(onClick = viewModel::startRecording, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Rounded.SportsEsports, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.hotkeyRecord))
-        }
+        state.serviceRunning -> LinkRow(
+            title = stringResource(R.string.hotkeyRecord),
+            icon = Icons.Rounded.SportsEsports,
+            onClick = viewModel::startRecording,
+        )
         else -> NoteCard(stringResource(R.string.hotkeyRecordNeedsService))
     }
 }

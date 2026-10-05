@@ -36,6 +36,9 @@ import io.github.thatonecodingperson.thortools.coexist.Overlap
 import io.github.thatonecodingperson.thortools.data.AppOverrideDao
 import io.github.thatonecodingperson.thortools.data.AppOverrideEntity
 import io.github.thatonecodingperson.thortools.data.SharedPrefsRepo
+import io.github.thatonecodingperson.thortools.debug.ActionChecker
+import io.github.thatonecodingperson.thortools.debug.DebugSession
+import io.github.thatonecodingperson.thortools.debug.HotkeyEvent
 import io.github.thatonecodingperson.thortools.diagnostics.KeyLogEntry
 import io.github.thatonecodingperson.thortools.diagnostics.ServiceKeyLog
 import io.github.thatonecodingperson.thortools.hotkeys.Hotkey
@@ -53,10 +56,13 @@ import io.github.thatonecodingperson.thortools.input.Screen
 import io.github.thatonecodingperson.thortools.input.ScreenApps
 import io.github.thatonecodingperson.thortools.input.ScreenFocus
 import io.github.thatonecodingperson.thortools.input.WindowSnapshot
+import io.github.thatonecodingperson.thortools.leds.LedController
+import io.github.thatonecodingperson.thortools.leds.LedLook
 import io.github.thatonecodingperson.thortools.lid.LidController
 import io.github.thatonecodingperson.thortools.lid.LidText
 import io.github.thatonecodingperson.thortools.main.MainActivity
 import io.github.thatonecodingperson.thortools.models.AppRefreshRate
+import io.github.thatonecodingperson.thortools.models.AppVibration
 import io.github.thatonecodingperson.thortools.models.BottomScreenRule
 import io.github.thatonecodingperson.thortools.models.ControllerStyle
 import io.github.thatonecodingperson.thortools.models.ControllerStyle.Unknown
@@ -74,6 +80,7 @@ import io.github.thatonecodingperson.thortools.panel.RecentApps
 import io.github.thatonecodingperson.thortools.panel.WidgetType
 import io.github.thatonecodingperson.thortools.tools.AynHooks
 import io.github.thatonecodingperson.thortools.tools.BatteryLevelReceiver
+import io.github.thatonecodingperson.thortools.tools.SettingsRepo
 import io.github.thatonecodingperson.thortools.tools.ShellExecutor
 import io.github.thatonecodingperson.thortools.tools.VideoOutputReceiver
 import kotlinx.coroutines.CoroutineScope
@@ -106,6 +113,9 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
     @Inject
     lateinit var status: ServiceStatus
 
+    @Inject
+    lateinit var debugSession: DebugSession
+
     private var batteryLevelReceiver: BatteryLevelReceiver = BatteryLevelReceiver()
     private var videoOutputReceiver: VideoOutputReceiver = VideoOutputReceiver()
 
@@ -129,6 +139,9 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
 
     // Thor Tools' own categories; OdinTools doesn't touch them, so they apply either way. Null: not changed now.
     private var savedRefreshRate: RefreshRate.Saved? = null
+
+    /** Vibration on and its strength before a profile changed them; null while no profile has. */
+    private var savedVibration: Pair<Boolean, Int>? = null
     private var savedScreenMode: Int? = null
 
     @Volatile
@@ -195,6 +208,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
     private lateinit var stayAwake: StayAwake
     private lateinit var controllerLock: ControllerLock
     private lateinit var lidController: LidController
+    private lateinit var ledController: LedController
     private val actionHost = object : ActionHost {
         override val foregroundPackage: String? get() = lastAppPackage
 
@@ -263,6 +277,10 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
             rawInput.command(name, *args, onResult = onResult)
     }
     private val rawInputListener = object : RawInputClient.Listener {
+        override fun onConnected() {
+            if (::ledController.isInitialized) ledController.onHelperConnected()
+        }
+
         override fun onTouch(screen: Screen) {
             screenFocus.lastScreen = screen
             // A finger on a screen gives that screen the controller, an open panel's or not.
@@ -364,6 +382,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         val override = overrides.find { it.packageName == packageName }
         val odinCategories = perAppControlsEnabled
         val appOnTop = override?.bottomScreen != null && actionHost.appsOnScreens()[Display.DEFAULT_DISPLAY] == packageName
+        if (::ledController.isInitialized) ledController.setForApp(override?.leds?.let(LedLook::decode))
         overrideExecutor.execute {
             if (override != null) {
                 if (odinCategories) applyOverride(override) else resetOverrides()
@@ -451,6 +470,11 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         mainHandler.post {
             watchJoystick()
             useWaitingHotkeys()
+        }
+        debugSession.activeProbe()?.let { probe ->
+            if (!down && !step.consume && step.effects.isEmpty()) debugSession.report(HotkeyEvent.Unmatched(button, event.eventTime))
+            // While the check only watches, the Thor's own buttons stay with it, so a stray press can't leave its screen.
+            if (!probe.runActions && !step.consume && !button.gamepad) return true to "swallowed (hotkey check)"
         }
         return step.consume to describe(step, if (step.consume) "swallowed" else "passed")
     }
@@ -591,6 +615,17 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
     }
 
     private fun carryOut(effect: HotkeyRecognizer.Effect) {
+        // The debug toolkit's hotkey check: every decision is reported; unless it asks for the actions too, nothing runs.
+        debugSession.activeProbe()?.let { probe ->
+            val now = SystemClock.uptimeMillis()
+            debugSession.report(
+                when (effect) {
+                    is HotkeyRecognizer.Effect.Run -> HotkeyEvent.Matched(effect.hotkey, probe.runActions, now)
+                    is HotkeyRecognizer.Effect.GiveBack -> HotkeyEvent.GivenBack(effect.button, effect.presses, now)
+                },
+            )
+            if (!probe.runActions) return
+        }
         when (effect) {
             is HotkeyRecognizer.Effect.Run -> with(effect.hotkey) {
                 if (MotionWatch.endsWatch(action)) joystickCatcher.finishPress()
@@ -713,11 +748,30 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         } else {
             restoreScreenMode()
         }
+        val vibration = AppVibration.byId(override.vibration)
+        if (vibration != null) {
+            if (savedVibration == null) {
+                savedVibration = executor.getBooleanSystemSetting(SettingsRepo.KEY_VIBRATE_ON, true) to
+                    executor.getIntValue(SettingsRepo.KEY_VIBRATION_STRENGTH, 0)
+            }
+            executor.setBooleanSystemSetting(SettingsRepo.KEY_VIBRATE_ON, vibration.strengthMv != null)
+            vibration.strengthMv?.let { executor.setIntValue(SettingsRepo.KEY_VIBRATION_STRENGTH, it) }
+        } else {
+            restoreVibration()
+        }
     }
 
     private fun resetScreenRules() {
         restoreRefreshRate()
         restoreScreenMode()
+        restoreVibration()
+    }
+
+    private fun restoreVibration() {
+        val (on, strength) = savedVibration ?: return
+        executor.setBooleanSystemSetting(SettingsRepo.KEY_VIBRATE_ON, on)
+        if (strength in AppVibration.RANGE_MV) executor.setIntValue(SettingsRepo.KEY_VIBRATION_STRENGTH, strength)
+        savedVibration = null
     }
 
     private fun restoreRefreshRate() {
@@ -830,6 +884,18 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         controllerLock = ControllerLock(this, executor, focusMover, screenFocus, scope, paused = { quickPanel.isOpen })
         controllerLock.start()
         actionRunner = ActionRunner(this, executor, prefs, scope, actionHost)
+        debugSession.runner = ActionChecker(
+            service = this,
+            executor = executor,
+            scope = scope,
+            host = actionHost,
+            runner = actionRunner,
+            session = debugSession,
+            panelOpen = { quickPanel.isOpen },
+            closePanel = { quickPanel.close(CloseReason.CLOSE_BUTTON) },
+            stayAwakeOn = { stayAwake.isOn },
+            helperConnected = { rawInput.connected },
+        )
         quickPanel = QuickPanel(
             service = this,
             executor = executor,
@@ -886,6 +952,14 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         // Swap screens, brightness, Home per screen and the controller lock need the helper whenever the service runs.
         rawInput.start()
         lidController.start()
+        ledController = LedController(
+            context = this,
+            executor = executor,
+            prefs = prefs,
+            helper = { name, args, onResult -> rawInput.command(name, *args.toTypedArray(), onResult = onResult) },
+        )
+        ledController.start()
+        scope.launch { prefs.ledLookChanges().collect { look -> ledController.setChosen(look) } }
         val packageFilter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
             addAction(Intent.ACTION_PACKAGE_FULLY_REMOVED)
@@ -911,6 +985,9 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
     override fun onDestroy() {
         super.onDestroy()
         status.detach(this)
+        debugSession.runner?.stop()
+        debugSession.runner = null
+        debugSession.stopProbe()
         if (!status.connected) KeepAliveNotification.hide(this)
         overrideExecutor.shutdown()
         // Android can destroy a service that never got as far as onServiceConnected.
@@ -922,6 +999,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
             getSystemService(InputManager::class.java).unregisterInputDeviceListener(inputDeviceListener)
             rawInput.stop()
             lidController.stop()
+            if (::ledController.isInitialized) ledController.stop()
             unregisterReceiver(screenReceiver)
             unregisterReceiver(odinToolsPackageReceiver)
         }

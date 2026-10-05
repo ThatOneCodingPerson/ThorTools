@@ -30,6 +30,9 @@ class RawInputClient(private val context: Context, private val executor: ShellEx
 
         /** The lid closed or opened. */
         fun onLid(closed: Boolean)
+
+        /** The helper connected (again); work that needs it can start. */
+        fun onConnected() {}
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -165,6 +168,7 @@ class RawInputClient(private val context: Context, private val executor: ShellEx
         state = "connected"
         sendLine("hello")
         sendLine(if (screenOn) "screen on" else "screen off")
+        mainHandler.post { listener.onConnected() }
         try {
             client.inputStream.bufferedReader().forEachLine { line ->
                 when (val message = HelperMessage.parse(line)) {

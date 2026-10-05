@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -35,11 +37,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import io.github.thatonecodingperson.thortools.R
+import io.github.thatonecodingperson.thortools.ui.composables.CardRow
 import io.github.thatonecodingperson.thortools.ui.composables.SubTopAppBar
+import io.github.thatonecodingperson.thortools.ui.composables.SwitchCard
 import kotlinx.coroutines.launch
 
 @Composable
-fun DiagnosticsScreen(viewModel: DiagnosticsViewModel = hiltViewModel(), onBack: () -> Unit) {
+fun DiagnosticsScreen(viewModel: DiagnosticsViewModel = hiltViewModel(), onDebug: () -> Unit, onBack: () -> Unit) {
     val uiState by viewModel.uiState.collectAsState()
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
@@ -74,6 +78,18 @@ fun DiagnosticsScreen(viewModel: DiagnosticsViewModel = hiltViewModel(), onBack:
                 OutlinedButton(onClick = viewModel::refresh, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.refresh))
                 }
+                SwitchCard(
+                    icon = Icons.Rounded.BugReport,
+                    title = R.string.debugMode,
+                    info = R.string.debugModeInfo,
+                    checked = uiState.debugMode,
+                    rows = if (uiState.debugMode) {
+                        { CardRow(title = stringResource(R.string.debugOpen), onClick = onDebug) }
+                    } else {
+                        null
+                    },
+                    onChange = viewModel::setDebugMode,
+                )
                 uiState.savedAs?.let { savedAs ->
                     Text(
                         text = if (savedAs.isEmpty()) stringResource(R.string.saveFailed) else stringResource(R.string.savedAs, savedAs),

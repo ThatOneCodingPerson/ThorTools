@@ -36,6 +36,7 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Handshake
+import androidx.compose.material.icons.rounded.Handyman
 import androidx.compose.material.icons.rounded.HealthAndSafety
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.Laptop
@@ -66,6 +67,7 @@ import io.github.thatonecodingperson.thortools.BuildConfig
 import io.github.thatonecodingperson.thortools.R
 import io.github.thatonecodingperson.thortools.coexist.LeftoverBuildBanner
 import io.github.thatonecodingperson.thortools.coexist.OdinToolsDetector
+import io.github.thatonecodingperson.thortools.leds.modeName
 import io.github.thatonecodingperson.thortools.ui.composables.PServerNotAvailableDialog
 import io.github.thatonecodingperson.thortools.ui.composables.UnsupportedDeviceDialog
 
@@ -93,12 +95,12 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel(), navigate: (route: Str
 
     val sections = sections(uiState)
     Column(
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier
             .fillMaxSize()
             .windowInsetsPadding(WindowInsets.systemBars)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(horizontal = 20.dp, vertical = 8.dp),
     ) {
         Header(uiState, onFix = { navigate(Routes.PERMISSIONS) })
         if (uiState.odinTools.leftoverThorTools) {
@@ -115,7 +117,7 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel(), navigate: (route: Str
                 maxWidth >= TWO_COLUMNS -> 2
                 else -> 1
             }
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 sections.chunked(columns).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.height(IntrinsicSize.Min)) {
                         row.forEach { section ->
@@ -159,11 +161,8 @@ private fun sections(state: MainUiModel): List<Section> {
         } else {
             pluralStringResource(R.plurals.homeLidActions, summary.lidActions, summary.lidActions)
         },
-        listOfNotNull(
-            stringResource(if (summary.chargeAlert) R.string.homeChargeAlertOn else R.string.homeChargeAlertOff),
-            summary.chargeLimit?.let { stringResource(R.string.homeChargeLimit, it.first, it.last) },
-        ).joinToString(" · "),
-    )
+        stringResource(if (summary.chargeAlert) R.string.homeChargeAlertOn else R.string.homeChargeAlertOff),
+    ) + listOfNotNull(summary.chargeLimit?.let { stringResource(R.string.homeChargeLimit, it.first, it.last) })
     val theme = summary.theme
     val display = listOf(
         stringResource(
@@ -176,6 +175,10 @@ private fun sections(state: MainUiModel): List<Section> {
         ),
     )
     val setup = listOf(stringResource(if (state.accessNeedsAttention) R.string.homeSetupCheck else R.string.homeSetupOk))
+    val extras = listOfNotNull(
+        stringResource(R.string.homeLeds, stringResource(modeName(summary.ledMode))),
+        summary.keyboard?.let { stringResource(R.string.homeKeyboard, stringResource(it.textRes)) },
+    )
     return listOf(
         Section(Icons.Rounded.SportsEsports, stringResource(R.string.controllerAndButtons), controller, Routes.CONTROLLER),
         Section(Icons.Rounded.Dashboard, stringResource(R.string.quickPanel), panel, Routes.QUICK_PANEL),
@@ -189,6 +192,7 @@ private fun sections(state: MainUiModel): List<Section> {
             Routes.SETUP,
             attention = stringResource(R.string.tagCheck).takeIf { state.accessNeedsAttention },
         ),
+        Section(Icons.Rounded.Handyman, stringResource(R.string.extraTools), extras, Routes.EXTRAS),
     )
 }
 
@@ -270,20 +274,20 @@ private fun SectionCard(section: Section, modifier: Modifier, onClick: () -> Uni
         border = BorderStroke(if (focused) 2.dp else 1.dp, if (focused) colors.primary else colors.outlineVariant),
         modifier = modifier,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)) {
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(36.dp)
                     .background(colors.primaryContainer, CircleShape),
             ) {
-                Icon(section.icon, contentDescription = null, tint = colors.onPrimaryContainer, modifier = Modifier.size(24.dp))
+                Icon(section.icon, contentDescription = null, tint = colors.onPrimaryContainer, modifier = Modifier.size(20.dp))
             }
             Column(
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                verticalArrangement = Arrangement.spacedBy(1.dp),
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 14.dp),
+                    .padding(horizontal = 12.dp),
             ) {
                 Text(section.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2)
                 section.lines.filter { it.isNotEmpty() }.forEach { line ->

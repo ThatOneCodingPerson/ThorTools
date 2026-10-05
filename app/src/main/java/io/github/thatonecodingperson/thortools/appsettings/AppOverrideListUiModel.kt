@@ -1,7 +1,9 @@
 package io.github.thatonecodingperson.thortools.appsettings
 
 import android.graphics.drawable.Drawable
+import io.github.thatonecodingperson.thortools.leds.LedPreset
 import io.github.thatonecodingperson.thortools.models.AppRefreshRate
+import io.github.thatonecodingperson.thortools.models.AppVibration
 import io.github.thatonecodingperson.thortools.models.BottomScreenRule
 import io.github.thatonecodingperson.thortools.models.ControllerStyle
 import io.github.thatonecodingperson.thortools.models.FanMode
@@ -37,4 +39,6 @@ data class AppUiModel(
     val perfMode: PerfMode? = null,
     val refreshRate: AppRefreshRate? = null,
     val bottomScreen: BottomScreenRule? = null,
+    val vibration: AppVibration? = null,
+    val leds: LedPreset? = null,
 )

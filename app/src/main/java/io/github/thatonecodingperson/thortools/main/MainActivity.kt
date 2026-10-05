@@ -30,14 +30,17 @@ import io.github.thatonecodingperson.thortools.coexist.OdinFeaturesScreen
 import io.github.thatonecodingperson.thortools.controller.ControllerModesScreen
 import io.github.thatonecodingperson.thortools.controller.ControllerScreen
 import io.github.thatonecodingperson.thortools.data.SharedPrefsRepo
+import io.github.thatonecodingperson.thortools.debug.DebugScreen
 import io.github.thatonecodingperson.thortools.diagnostics.DiagnosticsScreen
 import io.github.thatonecodingperson.thortools.diagnostics.SetupScreen
 import io.github.thatonecodingperson.thortools.display.DisplayScreen
 import io.github.thatonecodingperson.thortools.display.ThemeEditorScreen
 import io.github.thatonecodingperson.thortools.display.ThemesScreen
+import io.github.thatonecodingperson.thortools.extras.ExtraToolsScreen
 import io.github.thatonecodingperson.thortools.hotkeys.HotkeysScreen
 import io.github.thatonecodingperson.thortools.hotkeys.toPadSample
 import io.github.thatonecodingperson.thortools.input.PadDirections
+import io.github.thatonecodingperson.thortools.leds.LedScreen
 import io.github.thatonecodingperson.thortools.lid.LidScreen
 import io.github.thatonecodingperson.thortools.panel.PanelEditorScreen
 import io.github.thatonecodingperson.thortools.panel.PanelSettingsScreen
@@ -46,6 +49,7 @@ import io.github.thatonecodingperson.thortools.setup.FirstRun
 import io.github.thatonecodingperson.thortools.setup.PermissionsScreen
 import io.github.thatonecodingperson.thortools.setup.SetupWizardScreen
 import io.github.thatonecodingperson.thortools.ui.theme.ThorToolsTheme
+import io.github.thatonecodingperson.thortools.wii.WiiBuilderScreen
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -118,6 +122,10 @@ class MainActivity : ComponentActivity() {
                             navController.navigate(Routes.QUICK_PANEL)
                             navController.navigate(Routes.QUICK_PANEL_EDIT)
                         }
+                        // The action check brings its screen back after a check that left it.
+                        if (request == OPEN_DEBUG && navController.currentDestination?.route != Routes.DEBUG) {
+                            navController.navigate(Routes.DEBUG) { launchSingleTop = true }
+                        }
                         openRequest.value = null
                     }
                     NavHost(navController = navController, startDestination = Routes.SETTINGS) {
@@ -189,7 +197,23 @@ class MainActivity : ComponentActivity() {
                             CoexistenceScreen(onBack = back)
                         }
                         composable(Routes.DIAGNOSTICS) {
-                            DiagnosticsScreen(onBack = back)
+                            DiagnosticsScreen(onDebug = { navController.navigate(Routes.DEBUG) }, onBack = back)
+                        }
+                        composable(Routes.DEBUG) {
+                            DebugScreen(onBack = back)
+                        }
+                        composable(Routes.EXTRAS) {
+                            ExtraToolsScreen(
+                                onLeds = { navController.navigate(Routes.LEDS) },
+                                onWii = { navController.navigate(Routes.WII) },
+                                onBack = back,
+                            )
+                        }
+                        composable(Routes.WII) {
+                            WiiBuilderScreen(onBack = back)
+                        }
+                        composable(Routes.LEDS) {
+                            LedScreen(onProfiles = { navController.navigate(Routes.OVERRIDE_LIST) }, onBack = back)
                         }
                     }
                 }
@@ -203,5 +227,8 @@ class MainActivity : ComponentActivity() {
 
         /** [EXTRA_OPEN] value: the quick panel editor. */
         const val OPEN_PANEL_EDITOR = "panel_editor"
+
+        /** [EXTRA_OPEN] value: the debug toolkit. */
+        const val OPEN_DEBUG = "debug"
     }
 }

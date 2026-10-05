@@ -1,15 +1,13 @@
 package io.github.thatonecodingperson.thortools.coexist
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AppSettingsAlt
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.Cast
+import androidx.compose.material.icons.rounded.Contrast
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Vibration
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -27,8 +25,11 @@ import io.github.thatonecodingperson.thortools.charging.ChargingViewModel
 import io.github.thatonecodingperson.thortools.display.DisplayViewModel
 import io.github.thatonecodingperson.thortools.hotkeys.NoteCard
 import io.github.thatonecodingperson.thortools.ui.composables.CardColumns
+import io.github.thatonecodingperson.thortools.ui.composables.CardRow
 import io.github.thatonecodingperson.thortools.ui.composables.CardSection
+import io.github.thatonecodingperson.thortools.ui.composables.CardSwitchRow
 import io.github.thatonecodingperson.thortools.ui.composables.ChargeLimitPreferenceDialog
+import io.github.thatonecodingperson.thortools.ui.composables.LinkCard
 import io.github.thatonecodingperson.thortools.ui.composables.OverlapConfirmDialog
 import io.github.thatonecodingperson.thortools.ui.composables.SaturationPreferenceDialog
 import io.github.thatonecodingperson.thortools.ui.composables.SubTopAppBar
@@ -88,19 +89,26 @@ fun OdinFeaturesScreen(
                         title = R.string.overlapPerAppControls,
                         info = R.string.odinFeaturesOverridesInfo,
                         checked = profilesState.appOverridesEnabled,
+                        rows = { CardRow(title = stringResource(R.string.odinFeaturesEditApps), onClick = onAppOverrides) },
                         onChange = profiles::appOverridesEnabled,
                     )
-                    FilledTonalButton(onClick = onAppOverrides) { Text(stringResource(R.string.odinFeaturesEditApps)) }
                     SwitchCard(
                         icon = Icons.Rounded.Cast,
                         title = R.string.overlapExternalDisplay,
                         info = R.string.videoOutputOverrideDescription,
                         checked = profilesState.videoOutputOverrideEnabled,
+                        rows = {
+                            CardRow(
+                                title = stringResource(R.string.odinFeaturesChooseStyle),
+                                value = listOf(
+                                    stringResource(profilesState.videoOutputControllerStyle.textRes),
+                                    stringResource(profilesState.videoOutputL2R2Style.textRes),
+                                ).joinToString(" · "),
+                                onClick = profiles::videoOutputOverrideClicked,
+                            )
+                        },
                         onChange = profiles::updateVideoOutputOverridePreference,
                     )
-                    FilledTonalButton(onClick = profiles::videoOutputOverrideClicked) {
-                        Text(stringResource(R.string.odinFeaturesChooseStyle))
-                    }
                 }
                 CardSection(R.string.charging) {
                     SwitchCard(
@@ -108,36 +116,39 @@ fun OdinFeaturesScreen(
                         title = R.string.overlapChargeAutomation,
                         info = R.string.chargeLimitDescription,
                         checked = chargingState.chargeLimitEnabled,
+                        rows = {
+                            CardRow(
+                                title = stringResource(R.string.chargeLimitLevels),
+                                value = stringResource(
+                                    R.string.chargeLimitLevelsValue,
+                                    chargingState.currentChargeLimit.start,
+                                    chargingState.currentChargeLimit.endInclusive,
+                                ),
+                                onClick = charging::chargeLimitClicked,
+                            )
+                        },
                         onChange = charging::updateChargeLimitPreference,
                     )
-                    FilledTonalButton(onClick = charging::chargeLimitClicked) {
-                        Text(
-                            stringResource(
-                                R.string.odinFeaturesLevels,
-                                chargingState.currentChargeLimit.start,
-                                chargingState.currentChargeLimit.endInclusive,
-                            ),
-                        )
-                    }
                     NoteCard(stringResource(R.string.chargeLimitNote))
                 }
             },
             right = {
-                CardSection(R.string.saturation) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilledTonalButton(onClick = display::saturationClicked) { Text(stringResource(R.string.odinFeaturesSetSaturation)) }
-                    }
-                    Text(
-                        stringResource(R.string.saturationDescription),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    SwitchCard(
-                        icon = Icons.Rounded.History,
-                        title = R.string.keepAfterRestart,
-                        info = R.string.saturationAtBootInfo,
-                        checked = displayState.saturationAtBoot,
-                        onChange = display::setSaturationAtBoot,
+                CardSection(R.string.display) {
+                    LinkCard(
+                        icon = Icons.Rounded.Contrast,
+                        title = stringResource(R.string.saturation),
+                        info = stringResource(R.string.saturationDescription),
+                        value = stringResource(R.string.saturationValue, displayState.currentSaturation),
+                        rows = {
+                            CardSwitchRow(
+                                title = stringResource(R.string.keepAfterRestart),
+                                info = stringResource(R.string.saturationAtBootInfo),
+                                icon = Icons.Rounded.History,
+                                checked = displayState.saturationAtBoot,
+                                onChange = display::setSaturationAtBoot,
+                            )
+                        },
+                        onClick = display::saturationClicked,
                     )
                 }
                 CardSection(R.string.haptics) {
@@ -146,15 +157,22 @@ fun OdinFeaturesScreen(
                         title = R.string.vibrationStrength,
                         info = R.string.vibrationStrengthDescription,
                         checked = displayState.vibrationEnabled,
+                        rows = {
+                            CardRow(
+                                title = stringResource(R.string.vibrationStrengthRow),
+                                value = displayState.currentVibration.takeIf { it > 0 }?.let { stringResource(R.string.vibrationMv, it) },
+                                enabled = displayState.vibrationEnabled,
+                                onClick = display::vibrationClicked,
+                            )
+                            CardSwitchRow(
+                                title = stringResource(R.string.keepAfterRestart),
+                                info = stringResource(R.string.vibrationAtBootInfo),
+                                icon = Icons.Rounded.History,
+                                checked = displayState.vibrationAtBoot,
+                                onChange = display::setVibrationAtBoot,
+                            )
+                        },
                         onChange = display::updateVibrationPreference,
-                    )
-                    FilledTonalButton(onClick = display::vibrationClicked) { Text(stringResource(R.string.odinFeaturesSetStrength)) }
-                    SwitchCard(
-                        icon = Icons.Rounded.History,
-                        title = R.string.keepAfterRestart,
-                        info = R.string.vibrationAtBootInfo,
-                        checked = displayState.vibrationAtBoot,
-                        onChange = display::setVibrationAtBoot,
                     )
                 }
                 Text(

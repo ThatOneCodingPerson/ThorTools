@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.ElectricalServices
 import androidx.compose.material.icons.rounded.ExpandLess
@@ -25,7 +24,6 @@ import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Laptop
 import androidx.compose.material.icons.rounded.RestartAlt
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -41,7 +39,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -53,12 +50,16 @@ import androidx.lifecycle.repeatOnLifecycle
 import io.github.thatonecodingperson.thortools.R
 import io.github.thatonecodingperson.thortools.hotkeys.NoteCard
 import io.github.thatonecodingperson.thortools.ui.composables.CardColumns
+import io.github.thatonecodingperson.thortools.ui.composables.CardRow
+import io.github.thatonecodingperson.thortools.ui.composables.CardRowBox
 import io.github.thatonecodingperson.thortools.ui.composables.CardSection
 import io.github.thatonecodingperson.thortools.ui.composables.ChargeLimitPreferenceDialog
+import io.github.thatonecodingperson.thortools.ui.composables.LinkCard
 import io.github.thatonecodingperson.thortools.ui.composables.OverlapConfirmDialog
 import io.github.thatonecodingperson.thortools.ui.composables.SettingsCard
 import io.github.thatonecodingperson.thortools.ui.composables.SubTopAppBar
 import io.github.thatonecodingperson.thortools.ui.composables.SwitchCard
+import io.github.thatonecodingperson.thortools.ui.composables.cardChipColors
 
 /**
  * Power management: the charging stability alert and what it is for, the charge limit automation, what the charger is
@@ -94,11 +95,11 @@ fun ChargingScreen(viewModel: ChargingViewModel = hiltViewModel(), onLid: () -> 
                         title = R.string.chargeAlert,
                         info = R.string.chargeAlertDescription,
                         checked = state.chargeAlertEnabled,
+                        rows = { SensitivityRow(state.chargeAlertSensitivity, state.chargeAlertEnabled, viewModel::saveSensitivity) },
                     ) { enabled ->
                         viewModel.updateChargeAlert(enabled)
                         if (enabled) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                     }
-                    SensitivityCard(state.chargeAlertSensitivity, state.chargeAlertEnabled, viewModel::saveSensitivity)
                     AboutStabilityCard()
                 }
                 CardSection(R.string.chargeLimit) {
@@ -107,27 +108,41 @@ fun ChargingScreen(viewModel: ChargingViewModel = hiltViewModel(), onLid: () -> 
                         title = R.string.overlapChargeAutomation,
                         info = R.string.chargeLimitDescription,
                         checked = state.chargeLimitEnabled,
+                        rows = {
+                            CardRow(
+                                title = stringResource(R.string.chargeLimitLevels),
+                                value = stringResource(
+                                    R.string.chargeLimitLevelsValue,
+                                    state.currentChargeLimit.start,
+                                    state.currentChargeLimit.endInclusive,
+                                ),
+                                onClick = viewModel::chargeLimitClicked,
+                            )
+                        },
                         onChange = viewModel::updateChargeLimitPreference,
                     )
-                    FilledTonalButton(onClick = viewModel::chargeLimitClicked) {
-                        Text(
-                            stringResource(
-                                R.string.odinFeaturesLevels,
-                                state.currentChargeLimit.start,
-                                state.currentChargeLimit.endInclusive,
-                            ),
-                        )
-                    }
                     val top = state.currentChargeLimit.endInclusive
                     if (ChargeStatus.limitUnreachable(state.now?.aynLimit == true, top)) {
                         NoteCard(stringResource(R.string.chargeLimitUnreachable, top), warning = true)
                     }
                     if (state.odinToolsInstalled) NoteCard(stringResource(R.string.powerOdinToolsNote))
                     NoteCard(stringResource(R.string.chargeLimitNote))
-                    RestartCard(state.restartSuggested, restart)
+                    // A restart after a charge setting changed is what owners report brings charging back.
+                    LinkCard(
+                        icon = Icons.Rounded.RestartAlt,
+                        title = stringResource(R.string.powerRestartTitle),
+                        info = stringResource(if (state.restartSuggested) R.string.powerRestartChanged else R.string.powerRestartInfo),
+                        highlighted = state.restartSuggested,
+                        onClick = restart,
+                    )
                 }
                 CardSection(R.string.lidHeader) {
-                    LinkCard(Icons.Rounded.Laptop, R.string.lidTitle, R.string.lidRowSummary, onLid)
+                    LinkCard(
+                        icon = Icons.Rounded.Laptop,
+                        title = stringResource(R.string.lidTitle),
+                        info = stringResource(R.string.lidRowSummary),
+                        onClick = onLid,
+                    )
                 }
             },
             right = {
@@ -139,12 +154,12 @@ fun ChargingScreen(viewModel: ChargingViewModel = hiltViewModel(), onLid: () -> 
     }
 }
 
-/** How many switches within 10 minutes bring the alert. */
+/** How many switches within 10 minutes bring the alert, as a row of the alert's card. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SensitivityCard(selected: Sensitivity, enabled: Boolean, onSelect: (Sensitivity) -> Unit) {
-    SettingsCard {
-        Text(stringResource(R.string.sensitivity), style = MaterialTheme.typography.titleMedium)
+private fun SensitivityRow(selected: Sensitivity, enabled: Boolean, onSelect: (Sensitivity) -> Unit) {
+    CardRowBox {
+        Text(stringResource(R.string.sensitivity), style = MaterialTheme.typography.bodyLarge)
         Text(
             stringResource(R.string.powerSensitivityInfo),
             style = MaterialTheme.typography.bodySmall,
@@ -157,6 +172,7 @@ private fun SensitivityCard(selected: Sensitivity, enabled: Boolean, onSelect: (
                     enabled = enabled,
                     onClick = { onSelect(option) },
                     label = { Text(stringResource(option.label, option.changesToAlert)) },
+                    colors = cardChipColors(),
                 )
             }
         }
@@ -202,30 +218,6 @@ private fun AboutStabilityCard() {
                     Text(stringResource(text), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 10.dp))
                 }
             }
-        }
-    }
-}
-
-/** A restart after a charge setting changed is what owners report brings charging back. */
-@Composable
-private fun RestartCard(suggested: Boolean, onRestart: () -> Unit) {
-    SettingsCard(highlighted = suggested) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                Icons.Rounded.RestartAlt,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(28.dp),
-            )
-            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                Text(stringResource(R.string.powerRestartTitle), style = MaterialTheme.typography.titleMedium)
-                Text(
-                    stringResource(if (suggested) R.string.powerRestartChanged else R.string.powerRestartInfo),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            FilledTonalButton(onClick = onRestart) { Text(stringResource(R.string.chargeAlertRestart)) }
         }
     }
 }
@@ -307,28 +299,6 @@ private fun NowRow(@StringRes label: Int, value: String, strong: Boolean = false
             fontWeight = if (strong) FontWeight.SemiBold else FontWeight.Normal,
             color = if (strong) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
         )
-    }
-}
-
-/** A card that opens another screen. */
-@Composable
-private fun LinkCard(icon: ImageVector, @StringRes title: Int, @StringRes summary: Int, onClick: () -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
-        color = colors.surfaceContainer,
-        border = BorderStroke(1.dp, colors.outline),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
-            Icon(icon, contentDescription = null, tint = colors.primary, modifier = Modifier.size(28.dp))
-            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                Text(stringResource(title), style = MaterialTheme.typography.titleMedium)
-                Text(stringResource(summary), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-            }
-            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null, tint = colors.onSurfaceVariant)
-        }
     }
 }
 

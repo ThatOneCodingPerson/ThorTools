@@ -6,7 +6,9 @@ import android.content.pm.PackageManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.thatonecodingperson.thortools.R
 import io.github.thatonecodingperson.thortools.data.AppOverrideEntity
+import io.github.thatonecodingperson.thortools.leds.LedPreset
 import io.github.thatonecodingperson.thortools.models.AppRefreshRate
+import io.github.thatonecodingperson.thortools.models.AppVibration
 import io.github.thatonecodingperson.thortools.models.BottomScreenRule
 import io.github.thatonecodingperson.thortools.models.ControllerStyle
 import io.github.thatonecodingperson.thortools.models.FanMode
@@ -43,18 +45,22 @@ class AppOverrideMapper @Inject constructor(@ApplicationContext private val cont
         val fanMode = FanMode.getById(app.fanMode)
         val refreshRate = AppRefreshRate.byId(app.refreshRate)
         val bottomScreen = BottomScreenRule.byId(app.bottomScreen)
+        val vibration = AppVibration.byId(app.vibration)
+        val leds = LedPreset.of(app.leds)
 
         return AppUiModel(
             packageName = app.packageName,
             appName = context.packageManager.getApplicationLabel(appInfo).toString(),
             appIcon = context.packageManager.getApplicationIcon(appInfo),
-            subtitle = getSubtitle(controllerStyle, l2R2Style, perfMode, fanMode, refreshRate, bottomScreen),
+            subtitle = getSubtitle(controllerStyle, l2R2Style, perfMode, fanMode, refreshRate, bottomScreen, vibration, leds),
             controllerStyle = controllerStyle,
             l2r2Style = l2R2Style,
             perfMode = perfMode,
             fanMode = fanMode,
             refreshRate = refreshRate,
             bottomScreen = bottomScreen,
+            vibration = vibration,
+            leds = leds,
         )
     }
 
@@ -76,6 +82,8 @@ class AppOverrideMapper @Inject constructor(@ApplicationContext private val cont
         fanMode: FanMode,
         refreshRate: AppRefreshRate?,
         bottomScreen: BottomScreenRule?,
+        vibration: AppVibration?,
+        leds: LedPreset?,
     ): String? = buildString {
         if (controllerStyle != ControllerStyle.Unknown) {
             append(context.getString(R.string.controllerStyle))
@@ -111,6 +119,18 @@ class AppOverrideMapper @Inject constructor(@ApplicationContext private val cont
             append(context.getString(R.string.profileBottomScreen))
             append(": ")
             append(context.getString(bottomScreen.textRes))
+            append(" | ")
+        }
+        if (vibration != null) {
+            append(context.getString(R.string.profileVibration))
+            append(": ")
+            append(context.getString(vibration.textRes))
+            append(" | ")
+        }
+        if (leds != null) {
+            append(context.getString(R.string.profileLeds))
+            append(": ")
+            append(context.getString(leds.textRes))
             append(" | ")
         }
     }.trimEnd(' ', '|').ifEmpty { null }

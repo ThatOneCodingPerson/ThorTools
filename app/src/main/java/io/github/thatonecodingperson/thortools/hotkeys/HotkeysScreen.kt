@@ -3,6 +3,7 @@ package io.github.thatonecodingperson.thortools.hotkeys
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,11 +27,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.FormatClear
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.Lightbulb
 import androidx.compose.material.icons.rounded.Lock
@@ -53,7 +54,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -62,7 +62,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -72,6 +71,7 @@ import io.github.thatonecodingperson.thortools.R
 import io.github.thatonecodingperson.thortools.actions.ActionCategory
 import io.github.thatonecodingperson.thortools.actions.ThorAction
 import io.github.thatonecodingperson.thortools.actions.icon
+import io.github.thatonecodingperson.thortools.ui.composables.CreditNote
 import io.github.thatonecodingperson.thortools.ui.composables.DialogButton
 import io.github.thatonecodingperson.thortools.ui.composables.SubTopAppBar
 import io.github.thatonecodingperson.thortools.ui.composables.SwitchPreference
@@ -383,21 +383,13 @@ private fun LazyListScope.suggestions(state: HotkeysUiModel, viewModel: HotkeysV
     }
 }
 
-/** Where the Wayfinder-Like profile's idea came from, with a link a controller can reach (a button, not inline text). */
+/** Where the Wayfinder-Like profile's idea came from. */
 @Composable
-private fun Credit() {
-    val links = LocalUriHandler.current
-    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-            Text(stringResource(R.string.suggestionCredit), style = MaterialTheme.typography.bodyMedium)
-            TextButton(onClick = { runCatching { links.openUri(SuggestionProfile.WAYFINDER_URL) } }) {
-                Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(stringResource(R.string.suggestionCreditLink))
-            }
-        }
-    }
-}
+private fun Credit() = CreditNote(
+    stringResource(R.string.suggestionCredit),
+    stringResource(R.string.suggestionCreditLink),
+    SuggestionProfile.WAYFINDER_URL,
+)
 
 private fun LazyListScope.actions(category: ActionCategory, state: HotkeysUiModel, viewModel: HotkeysViewModel) {
     item { ListHeading(stringResource(R.string.hotkeysActionsInfo)) }
@@ -493,22 +485,31 @@ private fun SwitchMarks(hotkey: Hotkey) {
     }
 }
 
-/** Every hotkey's text switch at once; each hotkey also has its own in the editor. */
+/** Every hotkey's text switch at once, as two option rows; each hotkey also has its own in the editor. */
 @Composable
 private fun TextForAll(hotkeys: List<Hotkey>, onSet: (Boolean) -> Unit) {
     val on = hotkeys.count { it.showText }
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Icon(Icons.Rounded.TextFields, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    val count = stringResource(R.string.hotkeysTextAllInfo, on, hotkeys.size)
+    OptionRow(Icons.Rounded.TextFields, stringResource(R.string.hotkeysTextShowAll), count, enabled = on < hotkeys.size) { onSet(true) }
+    OptionRow(Icons.Rounded.FormatClear, stringResource(R.string.hotkeysTextHideAll), count, enabled = on > 0) { onSet(false) }
+}
+
+/** An option that does something at once, in the look of the other option rows. */
+@Composable
+private fun OptionRow(icon: ImageVector, title: String, description: String, enabled: Boolean, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = colors.onSurfaceVariant)
         Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
-            Text(stringResource(R.string.hotkeysTextAll))
-            Text(
-                text = stringResource(R.string.hotkeysTextAllInfo, on, hotkeys.size),
-                style = MaterialTheme.typography.bodySmall,
-            )
+            Text(title, color = if (enabled) colors.onSurface else colors.onSurface.copy(alpha = 0.38f))
+            Text(text = description, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
         }
-        OutlinedButton(onClick = { onSet(true) }, enabled = on < hotkeys.size) { Text(stringResource(R.string.hotkeysTextAllOn)) }
-        Spacer(Modifier.width(8.dp))
-        OutlinedButton(onClick = { onSet(false) }, enabled = on > 0) { Text(stringResource(R.string.hotkeysTextAllOff)) }
     }
 }
 

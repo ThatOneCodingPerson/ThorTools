@@ -13,4 +13,6 @@ data class AppOverrideEntity(
     val fanMode: String?,
     val refreshRate: String? = null,
     val bottomScreen: String? = null,
+    val vibration: String? = null,
+    val leds: String? = null,
 )

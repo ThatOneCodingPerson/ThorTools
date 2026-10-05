@@ -22,6 +22,15 @@ object LockPolicy {
     }
 
     /** Whether the last finger leaving [liftedOn] should send the controller back to the locked screen. */
-    fun returnsAfterLift(locked: Screen?, liftedOn: Screen, keyboardOnTop: Boolean, paused: Boolean): Boolean =
-        locked == Screen.BOTTOM && liftedOn == Screen.TOP && !keyboardOnTop && !paused
+    fun returnsAfterLift(locked: Screen?, liftedOn: Screen, paused: Boolean): Boolean =
+        locked == Screen.BOTTOM && liftedOn == Screen.TOP && !paused
+
+    /**
+     * Whether a return that came due waits and looks again: the keyboard types into the app that has the controller, so
+     * moving it would take the keyboard's text field away, whichever screen the keyboard shows on. [keyboardShown]: a
+     * keyboard window is up; [editableFocused]: a text field has input focus, which only counts on the first look (the
+     * keyboard may still be on its way), so a field left focused after the keyboard closed doesn't hold the lock off.
+     */
+    fun waitsForTyping(keyboardShown: Boolean, editableFocused: Boolean, firstLook: Boolean): Boolean =
+        keyboardShown || (firstLook && editableFocused)
 }

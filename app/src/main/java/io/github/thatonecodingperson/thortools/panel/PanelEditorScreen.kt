@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.HourglassTop
@@ -35,6 +37,7 @@ import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Screenshot
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Speed
@@ -46,16 +49,13 @@ import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -84,7 +84,9 @@ import io.github.thatonecodingperson.thortools.hotkeys.LaunchScreen
 import io.github.thatonecodingperson.thortools.hotkeys.LaunchableApp
 import io.github.thatonecodingperson.thortools.hotkeys.LaunchableApps
 import io.github.thatonecodingperson.thortools.tools.ShellExecutor
+import io.github.thatonecodingperson.thortools.ui.composables.CardRow
 import io.github.thatonecodingperson.thortools.ui.composables.DialogButton
+import io.github.thatonecodingperson.thortools.ui.composables.LinkCard
 import io.github.thatonecodingperson.thortools.ui.composables.SettingsCard
 import io.github.thatonecodingperson.thortools.ui.composables.SubTopAppBar
 import kotlinx.coroutines.Dispatchers
@@ -542,19 +544,32 @@ fun PanelEditorScreen(viewModel: PanelEditorViewModel = hiltViewModel(), onBack:
                     )
                 }
                 if (WidgetGrid.rows(WidgetGrid.place(page.widgets)) > WidgetGrid.ROWS) Muted(stringResource(R.string.panelEditorTallPage))
-                if (page.widgets.size < WidgetType.entries.size) {
-                    FilledTonalButton(onClick = viewModel::addWidgetClicked) {
-                        Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Text(text = stringResource(R.string.panelEditorAddWidget), modifier = Modifier.padding(start = 8.dp))
-                    }
+                val left = WidgetType.entries.size - page.widgets.size
+                if (left > 0) {
+                    LinkCard(
+                        icon = Icons.Rounded.Add,
+                        title = stringResource(R.string.panelEditorAddWidget),
+                        value = stringResource(R.string.panelEditorWidgetsLeft, left),
+                        onClick = viewModel::addWidgetClicked,
+                    )
                 }
-                if (uiState.layout.pages.size > 1) {
-                    OutlinedButton(onClick = viewModel::deleteClicked) {
-                        Text(text = stringResource(R.string.panelEditorDeletePage), color = MaterialTheme.colorScheme.error)
+                SettingsCard(contentPadding = PaddingValues()) {
+                    val canDelete = uiState.layout.pages.size > 1
+                    if (canDelete) {
+                        CardRow(
+                            title = stringResource(R.string.panelEditorDeletePage),
+                            icon = Icons.Rounded.Delete,
+                            danger = true,
+                            divider = false,
+                            onClick = viewModel::deleteClicked,
+                        )
                     }
-                }
-                TextButton(onClick = viewModel::resetClicked) {
-                    Text(text = stringResource(R.string.panelEditorReset))
+                    CardRow(
+                        title = stringResource(R.string.panelEditorReset),
+                        icon = Icons.Rounded.RestartAlt,
+                        divider = canDelete,
+                        onClick = viewModel::resetClicked,
+                    )
                 }
             }
         }
@@ -573,7 +588,58 @@ private fun WidgetEditor(
     viewModel: PanelEditorViewModel,
 ) {
     val type = widget.type
-    SettingsCard {
+    SettingsCard(contentPadding = PaddingValues()) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+            WidgetSettings(widget, page, state, canMoveUp, canMoveDown, viewModel)
+        }
+        when (type) {
+            WidgetType.TILES -> CardRow(
+                title = stringResource(R.string.panelEditorAddIcons),
+                icon = Icons.Rounded.Add,
+                onClick = viewModel::addTileClicked,
+            )
+            WidgetType.APPS -> CardRow(
+                title = stringResource(R.string.panelEditorAddApp),
+                icon = Icons.Rounded.Add,
+                onClick = viewModel::addAppClicked,
+            )
+            WidgetType.NOTES -> if (state.notes[widget.note]?.strokes?.isNotEmpty() == true) {
+                CardRow(title = stringResource(R.string.panelEditorClearDrawing), danger = true, onClick = {
+                    viewModel.clearDrawing(widget.note)
+                })
+            }
+            WidgetType.MEDIA -> if (!state.mediaAllowed) {
+                CardRow(
+                    title = stringResource(R.string.panelMediaAllow),
+                    info = stringResource(R.string.panelEditorMediaNotAllowed),
+                    onClick = viewModel::allowMedia,
+                )
+            }
+            WidgetType.SCREENSHOTS -> if (!state.screenshotsAllowed) {
+                CardRow(
+                    title = stringResource(R.string.panelMediaAllow),
+                    info = stringResource(R.string.panelEditorShotsNotAllowed),
+                    onClick = viewModel::allowScreenshots,
+                )
+            }
+            else -> Unit
+        }
+    }
+}
+
+/** A widget's own settings: its name, order, size and options. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WidgetSettings(
+    widget: PanelWidget,
+    page: PanelPage,
+    state: PanelEditorUiModel,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    viewModel: PanelEditorViewModel,
+) {
+    val type = widget.type
+    Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(type.icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Column(
@@ -634,16 +700,8 @@ private fun WidgetEditor(
                         .fillMaxWidth()
                         .padding(top = 8.dp),
                 )
-                if (state.notes[widget.note]?.strokes?.isNotEmpty() == true) {
-                    TextButton(onClick = { viewModel.clearDrawing(widget.note) }) { Text(stringResource(R.string.panelEditorClearDrawing)) }
-                }
             }
-            WidgetType.MEDIA -> {
-                Muted(stringResource(if (state.mediaAllowed) R.string.panelEditorMediaAllowed else R.string.panelEditorMediaNotAllowed))
-                if (!state.mediaAllowed) {
-                    FilledTonalButton(onClick = viewModel::allowMedia) { Text(stringResource(R.string.panelMediaAllow)) }
-                }
-            }
+            WidgetType.MEDIA -> if (state.mediaAllowed) Muted(stringResource(R.string.panelEditorMediaAllowed))
             WidgetType.PLAY_TIMER -> {
                 Label(stringResource(R.string.panelEditorRemind))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -669,12 +727,7 @@ private fun WidgetEditor(
             }
             WidgetType.RECENT -> OpensOn(widget, viewModel)
             WidgetType.SCREENSHOTS -> {
-                Muted(
-                    stringResource(if (state.screenshotsAllowed) R.string.panelEditorShotsAllowed else R.string.panelEditorShotsNotAllowed),
-                )
-                if (!state.screenshotsAllowed) {
-                    FilledTonalButton(onClick = viewModel::allowScreenshots) { Text(stringResource(R.string.panelMediaAllow)) }
-                }
+                if (state.screenshotsAllowed) Muted(stringResource(R.string.panelEditorShotsAllowed))
                 OpensOn(widget, viewModel)
             }
             WidgetType.DEVICE, WidgetType.BATTERY, WidgetType.GRAPH, WidgetType.CONTROLLER, WidgetType.CLOCK,
@@ -708,10 +761,6 @@ private fun TilesOptions(page: PanelPage, viewModel: PanelEditorViewModel) {
             onRemove = { viewModel.removeTile(id) },
         )
     }
-    FilledTonalButton(onClick = viewModel::addTileClicked, modifier = Modifier.padding(top = 4.dp)) {
-        Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-        Text(text = stringResource(R.string.panelEditorAddIcons), modifier = Modifier.padding(start = 8.dp))
-    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -734,10 +783,6 @@ private fun AppsOptions(widget: PanelWidget, state: PanelEditorUiModel, viewMode
             onMove = { by -> viewModel.moveApp(name, by) },
             onRemove = { viewModel.removeApp(name) },
         )
-    }
-    FilledTonalButton(onClick = viewModel::addAppClicked, modifier = Modifier.padding(top = 4.dp)) {
-        Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-        Text(text = stringResource(R.string.panelEditorAddApp), modifier = Modifier.padding(start = 8.dp))
     }
     OpensOn(widget, viewModel)
 }

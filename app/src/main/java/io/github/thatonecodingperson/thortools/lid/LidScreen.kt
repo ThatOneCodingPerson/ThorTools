@@ -2,18 +2,15 @@ package io.github.thatonecodingperson.thortools.lid
 
 import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.AirplanemodeActive
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.BluetoothDisabled
@@ -31,7 +28,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -49,6 +45,7 @@ import io.github.thatonecodingperson.thortools.hotkeys.AppPicker
 import io.github.thatonecodingperson.thortools.hotkeys.AppPickerMode
 import io.github.thatonecodingperson.thortools.hotkeys.NoteCard
 import io.github.thatonecodingperson.thortools.ui.composables.CardColumns
+import io.github.thatonecodingperson.thortools.ui.composables.CardRow
 import io.github.thatonecodingperson.thortools.ui.composables.CardSection
 import io.github.thatonecodingperson.thortools.ui.composables.SettingsCard
 import io.github.thatonecodingperson.thortools.ui.composables.SubTopAppBar
@@ -144,12 +141,20 @@ fun LidScreen(viewModel: LidViewModel = hiltViewModel(), onBack: () -> Unit) {
                 NoteCard(stringResource(R.string.lidNeedsHelper), warning = true)
             }
             STAY_ASLEEP.forEach { switch ->
-                LidSwitchCard(switch, choices, change)
-                if (switch.title == R.string.lidMuteButtons &&
-                    choices.muteButtons
-                ) {
-                    KeepButtonsCard(choices, state.keepButtonsNames, viewModel::openPicker)
+                // The apps that keep the AYN and volume buttons on belong to that switch's card.
+                val rows: (@Composable ColumnScope.() -> Unit)? = if (switch.title == R.string.lidMuteButtons && choices.muteButtons) {
+                    {
+                        CardRow(
+                            title = stringResource(R.string.lidKeepButtons),
+                            info = state.keepButtonsNames.joinToString(", ").ifEmpty { stringResource(R.string.lidKeepButtonsNone) },
+                            enabled = choices.enabled,
+                            onClick = viewModel::openPicker,
+                        )
+                    }
+                } else {
+                    null
                 }
+                LidSwitchCard(switch, choices, change, rows = rows)
             }
             Text(
                 text = stringResource(R.string.lidFootnote),
@@ -172,10 +177,15 @@ fun LidScreen(viewModel: LidViewModel = hiltViewModel(), onBack: () -> Unit) {
 }
 
 @Composable
-private fun LidSwitchCard(switch: LidSwitch, choices: LidChoices, change: ((LidChoices) -> LidChoices) -> Unit, master: Boolean = false) =
-    SwitchCard(switch.icon, switch.title, switch.info, switch.isOn(choices), enabled = master || choices.enabled) { value ->
-        change { switch.turn(it, value) }
-    }
+private fun LidSwitchCard(
+    switch: LidSwitch,
+    choices: LidChoices,
+    change: ((LidChoices) -> LidChoices) -> Unit,
+    master: Boolean = false,
+    rows: (@Composable ColumnScope.() -> Unit)? = null,
+) = SwitchCard(switch.icon, switch.title, switch.info, switch.isOn(choices), enabled = master || choices.enabled, rows = rows) { value ->
+    change { switch.turn(it, value) }
+}
 
 /** How long after closing the Save power part runs. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -210,38 +220,6 @@ private fun DelayCard(choices: LidChoices, change: ((LidChoices) -> LidChoices) 
                     },
                 )
             }
-        }
-    }
-}
-
-/** The apps that keep the AYN and volume buttons on; a tap opens the app list. */
-@Composable
-private fun KeepButtonsCard(choices: LidChoices, names: List<String>, onOpen: () -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    Surface(
-        onClick = onOpen,
-        enabled = choices.enabled,
-        shape = RoundedCornerShape(16.dp),
-        color = colors.surfaceContainer,
-        border = BorderStroke(1.dp, colors.outline),
-        modifier = Modifier.fillMaxWidth().padding(start = 24.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
-            Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = colors.primary, modifier = Modifier.size(24.dp))
-            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                Text(stringResource(R.string.lidKeepButtons), style = MaterialTheme.typography.titleSmall)
-                Text(
-                    text = if (names.isEmpty()) stringResource(R.string.lidKeepButtonsNone) else names.joinToString(", "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.onSurfaceVariant,
-                )
-                Text(
-                    stringResource(R.string.lidKeepButtonsInfo),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.onSurfaceVariant,
-                )
-            }
-            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null, tint = colors.onSurfaceVariant)
         }
     }
 }

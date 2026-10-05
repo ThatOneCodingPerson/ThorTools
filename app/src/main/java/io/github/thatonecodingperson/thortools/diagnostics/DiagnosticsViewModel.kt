@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import io.github.thatonecodingperson.thortools.data.SharedPrefsRepo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -72,15 +73,17 @@ data class DiagnosticsUiModel(
     val report: String = "",
     val keys: List<KeyLogEntry> = emptyList(),
     val savedAs: String? = null,
+    val debugMode: Boolean = false,
 )
 
 @HiltViewModel
 class DiagnosticsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val collector: DiagnosticsCollector,
+    private val prefs: SharedPrefsRepo,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(DiagnosticsUiModel())
+    private val _uiState = MutableStateFlow(DiagnosticsUiModel(debugMode = prefs.debugMode))
     val uiState: StateFlow<DiagnosticsUiModel> = _uiState.asStateFlow()
 
     init {
@@ -93,6 +96,11 @@ class DiagnosticsViewModel @Inject constructor(
             val report = withContext(Dispatchers.IO) { collector.collect() }
             _uiState.update { it.copy(loading = false, report = report) }
         }
+    }
+
+    fun setDebugMode(on: Boolean) {
+        prefs.debugMode = on
+        _uiState.update { it.copy(debugMode = on) }
     }
 
     fun onKey(event: KeyEvent) {

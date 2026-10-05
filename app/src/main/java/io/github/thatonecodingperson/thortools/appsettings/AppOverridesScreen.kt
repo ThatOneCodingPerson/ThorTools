@@ -35,7 +35,9 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
 import io.github.thatonecodingperson.thortools.R
 import io.github.thatonecodingperson.thortools.hotkeys.NoteCard
+import io.github.thatonecodingperson.thortools.leds.LedPreset
 import io.github.thatonecodingperson.thortools.models.AppRefreshRate
+import io.github.thatonecodingperson.thortools.models.AppVibration
 import io.github.thatonecodingperson.thortools.models.BottomScreenRule
 import io.github.thatonecodingperson.thortools.models.ControllerStyle
 import io.github.thatonecodingperson.thortools.models.ControllerStyle.Disconnect
@@ -251,6 +253,24 @@ fun AppOverridesScreen(viewModel: AppOverridesViewModel = hiltViewModel(), navig
                     modifier = Modifier.padding(bottom = 4.dp),
                 )
                 ModeInfo(uiState.app?.bottomScreen?.infoRes)
+                OverrideSpinnerRow(
+                    label = R.string.profileVibration,
+                    spinnerItems = listOf(NoChange.KEY to stringResource(id = NoChange.textRes)) +
+                        AppVibration.entries.map { it.id to stringResource(it.textRes) },
+                    initialSelection = uiState.app?.vibration?.id ?: NoChange.KEY,
+                    onSelectionChanged = { viewModel.vibrationSelected(it) },
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+                ModeInfo(R.string.profileVibrationInfo.takeIf { uiState.app?.vibration != null })
+                OverrideSpinnerRow(
+                    label = R.string.profileLeds,
+                    spinnerItems = listOf(NoChange.KEY to stringResource(id = NoChange.textRes)) +
+                        LedPreset.entries.map { it.id to stringResource(it.textRes) },
+                    initialSelection = uiState.app?.leds?.id ?: NoChange.KEY,
+                    onSelectionChanged = { viewModel.ledsSelected(it) },
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+                ModeInfo(R.string.profileLedsInfo.takeIf { uiState.app?.leds != null })
             }
         }
     }

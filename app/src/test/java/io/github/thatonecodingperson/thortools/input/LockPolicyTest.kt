@@ -34,12 +34,22 @@ class LockPolicyTest {
 
     @Test
     fun `only the bottom lock pulls the controller back, and not while typing or paused`() {
-        assertTrue(LockPolicy.returnsAfterLift(Screen.BOTTOM, Screen.TOP, keyboardOnTop = false, paused = false))
-        assertFalse(LockPolicy.returnsAfterLift(Screen.BOTTOM, Screen.TOP, keyboardOnTop = true, paused = false))
-        assertFalse(LockPolicy.returnsAfterLift(Screen.BOTTOM, Screen.TOP, keyboardOnTop = false, paused = true))
-        assertFalse(LockPolicy.returnsAfterLift(Screen.BOTTOM, Screen.BOTTOM, keyboardOnTop = false, paused = false))
-        assertFalse(LockPolicy.returnsAfterLift(Screen.TOP, Screen.TOP, keyboardOnTop = false, paused = false))
-        assertFalse(LockPolicy.returnsAfterLift(null, Screen.TOP, keyboardOnTop = false, paused = false))
+        assertTrue(LockPolicy.returnsAfterLift(Screen.BOTTOM, Screen.TOP, paused = false))
+        assertFalse(LockPolicy.returnsAfterLift(Screen.BOTTOM, Screen.TOP, paused = true))
+        assertFalse(LockPolicy.returnsAfterLift(Screen.BOTTOM, Screen.BOTTOM, paused = false))
+        assertFalse(LockPolicy.returnsAfterLift(Screen.TOP, Screen.TOP, paused = false))
+        assertFalse(LockPolicy.returnsAfterLift(null, Screen.TOP, paused = false))
+    }
+
+    @Test
+    fun `the bottom lock waits while typing, wherever the keyboard shows`() {
+        // A keyboard on either screen holds the return off, every time it looks.
+        assertTrue(LockPolicy.waitsForTyping(keyboardShown = true, editableFocused = false, firstLook = false))
+        // A text field just tapped holds it off on the first look, while the keyboard is still coming.
+        assertTrue(LockPolicy.waitsForTyping(keyboardShown = false, editableFocused = true, firstLook = true))
+        // A field left focused after the keyboard closed doesn't keep the controller away.
+        assertFalse(LockPolicy.waitsForTyping(keyboardShown = false, editableFocused = true, firstLook = false))
+        assertFalse(LockPolicy.waitsForTyping(keyboardShown = false, editableFocused = false, firstLook = true))
     }
 
     @Test

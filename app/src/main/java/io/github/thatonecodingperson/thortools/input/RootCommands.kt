@@ -8,6 +8,10 @@ import android.os.IBinder
 import android.os.SystemClock
 import android.view.InputEvent
 import android.view.KeyEvent
+import io.github.thatonecodingperson.thortools.leds.LedFrame
+import io.github.thatonecodingperson.thortools.leds.LedLook
+import io.github.thatonecodingperson.thortools.leds.LedPlan
+import io.github.thatonecodingperson.thortools.leds.LightWriter
 import io.github.thatonecodingperson.thortools.lid.InputGroup
 import io.github.thatonecodingperson.thortools.panel.PingParser
 import io.github.thatonecodingperson.thortools.panel.StatsSampler
@@ -44,6 +48,18 @@ internal object RootCommands {
         }
         "stats" -> stats.sample().encode()
         "ping" -> ping(args[0])
+        "led" -> LightWriter.once(
+            LedFrame(
+                left = checkNotNull(LedPlan.parseColour(args[0])),
+                right = checkNotNull(LedPlan.parseColour(args[1])),
+                brightness = args[2].toInt(),
+            ),
+        )
+        "ledfx" -> if (args.firstOrNull() == "stop") {
+            LightWriter.stop()
+        } else {
+            LightWriter.start(LedLook.decode(args[0]), battery = args[1].toInt(), charging = args[2] == "1")
+        }
         else -> error("unknown command $name")
     }
 

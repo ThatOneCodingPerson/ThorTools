@@ -9,7 +9,9 @@ import io.github.thatonecodingperson.thortools.coexist.Overlap
 import io.github.thatonecodingperson.thortools.data.AppOverrideDao
 import io.github.thatonecodingperson.thortools.data.AppOverrideEntity
 import io.github.thatonecodingperson.thortools.data.SharedPrefsRepo
+import io.github.thatonecodingperson.thortools.leds.LedPreset
 import io.github.thatonecodingperson.thortools.models.AppRefreshRate
+import io.github.thatonecodingperson.thortools.models.AppVibration
 import io.github.thatonecodingperson.thortools.models.BottomScreenRule
 import io.github.thatonecodingperson.thortools.models.ControllerStyle
 import io.github.thatonecodingperson.thortools.models.FanMode
@@ -45,6 +47,8 @@ class AppOverridesViewModel @Inject constructor(
     private var initialFanMode = NoChange.KEY
     private var initialRefreshRate = NoChange.KEY
     private var initialBottomScreen = NoChange.KEY
+    private var initialVibration = NoChange.KEY
+    private var initialLeds = NoChange.KEY
 
     init {
         viewModelScope.launch {
@@ -61,6 +65,8 @@ class AppOverridesViewModel @Inject constructor(
                 initialFanMode = app.fanMode ?: NoChange.KEY
                 initialRefreshRate = app.refreshRate ?: NoChange.KEY
                 initialBottomScreen = app.bottomScreen ?: NoChange.KEY
+                initialVibration = app.vibration ?: NoChange.KEY
+                initialLeds = LedPreset.of(app.leds)?.id ?: NoChange.KEY
 
                 appOverrideMapper.mapAppOverride(app)
             }
@@ -88,6 +94,8 @@ class AppOverridesViewModel @Inject constructor(
                         fanMode = _uiState.value.app?.fanMode?.id,
                         refreshRate = _uiState.value.app?.refreshRate?.id,
                         bottomScreen = _uiState.value.app?.bottomScreen?.id,
+                        vibration = _uiState.value.app?.vibration?.id,
+                        leds = _uiState.value.app?.leds?.look?.encode(),
                     ),
                 )
             }
@@ -181,6 +189,24 @@ class AppOverridesViewModel @Inject constructor(
         }
     }
 
+    fun ledsSelected(key: String) {
+        _uiState.update {
+            it.copy(
+                app = it.app?.copy(leds = LedPreset.byId(key)),
+                hasUnsavedChanges = hasUnsavedChanges(leds = key),
+            )
+        }
+    }
+
+    fun vibrationSelected(key: String) {
+        _uiState.update {
+            it.copy(
+                app = it.app?.copy(vibration = AppVibration.byId(key)),
+                hasUnsavedChanges = hasUnsavedChanges(vibration = key),
+            )
+        }
+    }
+
     fun bottomScreenSelected(key: String) {
         _uiState.update {
             it.copy(
@@ -197,6 +223,8 @@ class AppOverridesViewModel @Inject constructor(
         fanMode: String? = null,
         refreshRate: String? = null,
         bottomScreen: String? = null,
+        vibration: String? = null,
+        leds: String? = null,
     ): Boolean = listOf(
         (controllerStyle ?: _uiState.value.app?.controllerStyle?.id) != initialControllerStyle,
         (l2R2Style ?: _uiState.value.app?.l2r2Style?.id) != initialL2R2Style,
@@ -204,6 +232,8 @@ class AppOverridesViewModel @Inject constructor(
         (fanMode ?: _uiState.value.app?.fanMode?.id) != initialFanMode,
         (refreshRate ?: _uiState.value.app?.refreshRate?.id ?: NoChange.KEY) != initialRefreshRate,
         (bottomScreen ?: _uiState.value.app?.bottomScreen?.id ?: NoChange.KEY) != initialBottomScreen,
+        (vibration ?: _uiState.value.app?.vibration?.id ?: NoChange.KEY) != initialVibration,
+        (leds ?: _uiState.value.app?.leds?.id ?: NoChange.KEY) != initialLeds,
     ).any { it }
 
     companion object {

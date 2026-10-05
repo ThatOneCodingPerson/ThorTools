@@ -8,6 +8,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.thatonecodingperson.thortools.coexist.OdinToolsDetector
 import io.github.thatonecodingperson.thortools.data.AppOverrideDao
 import io.github.thatonecodingperson.thortools.data.SharedPrefsRepo
+import io.github.thatonecodingperson.thortools.extras.KeyboardPlace
 import io.github.thatonecodingperson.thortools.models.ControllerStyle
 import io.github.thatonecodingperson.thortools.models.L2R2Style
 import io.github.thatonecodingperson.thortools.service.ServiceStatus
@@ -77,6 +78,7 @@ class MainViewModel @Inject constructor(
                     chargeAlert = prefs.chargeAlertEnabled,
                     chargeLimit = if (prefs.chargeLimitEnabled) prefs.minBatteryLevel..prefs.maxBatteryLevel else null,
                     theme = prefs.palette(),
+                    ledMode = prefs.ledLook.mode,
                 ),
             )
         }
@@ -89,7 +91,10 @@ class MainViewModel @Inject constructor(
                     appOverrides.getAll().first().size,
                 )
             }
-            _uiState.update { it.copy(summary = it.summary.copy(controllerStyle = style, l2r2 = l2r2, profiles = profiles)) }
+            val keyboard = withContext(Dispatchers.IO) { KeyboardPlace.read(executor) }
+            _uiState.update {
+                it.copy(summary = it.summary.copy(controllerStyle = style, l2r2 = l2r2, profiles = profiles, keyboard = keyboard))
+            }
         }
     }
 

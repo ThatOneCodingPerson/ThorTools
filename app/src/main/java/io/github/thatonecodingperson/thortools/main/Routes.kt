@@ -22,6 +22,10 @@ object Routes {
     const val COEXISTENCE = "coexistence"
     const val ODIN_FEATURES = "odintools_features"
     const val DIAGNOSTICS = "diagnostics"
+    const val DEBUG = "diagnostics/debug"
+    const val EXTRAS = "extras"
+    const val LEDS = "extras/leds"
+    const val WII = "extras/wii"
 
     fun override(packageName: String) = "override/$packageName"
 

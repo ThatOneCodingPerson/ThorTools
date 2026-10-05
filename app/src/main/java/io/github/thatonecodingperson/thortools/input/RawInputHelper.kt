@@ -2,6 +2,7 @@ package io.github.thatonecodingperson.thortools.input
 
 import android.net.LocalSocket
 import android.net.LocalSocketAddress
+import io.github.thatonecodingperson.thortools.leds.LightWriter
 import java.io.File
 import java.io.FileInputStream
 import java.io.OutputStream
@@ -65,8 +66,14 @@ object RawInputHelper {
             val line = input.readLine()
             when {
                 line == null || line == "bye" -> exitProcess(0)
-                line == "screen on" -> screenOn = true
-                line == "screen off" -> screenOn = false
+                line == "screen on" -> {
+                    screenOn = true
+                    LightWriter.screen(true)
+                }
+                line == "screen off" -> {
+                    screenOn = false
+                    LightWriter.screen(false)
+                }
                 line == "pad on" -> watchPad(true)
                 line == "pad off" -> watchPad(false)
                 line.startsWith("c ") -> (

@@ -10,6 +10,7 @@ import io.github.thatonecodingperson.thortools.coexist.OdinToolsDetector
 import io.github.thatonecodingperson.thortools.coexist.Overlap
 import io.github.thatonecodingperson.thortools.hotkeys.Hotkey
 import io.github.thatonecodingperson.thortools.hotkeys.HotkeyList
+import io.github.thatonecodingperson.thortools.leds.LedLook
 import io.github.thatonecodingperson.thortools.lid.LidChoices
 import io.github.thatonecodingperson.thortools.lid.LidPlan
 import io.github.thatonecodingperson.thortools.lid.LidResult
@@ -205,6 +206,50 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
         get() = prefs.getString(KEY_RECENT_APPS, null)?.lines()?.filter { it.isNotBlank() }.orEmpty()
         set(value) = prefs.edit().putString(KEY_RECENT_APPS, value.joinToString("\n")).apply()
 
+    /** The stick lights as chosen on their screen. */
+    var ledLook: LedLook
+        get() = LedLook.decode(prefs.getString(KEY_LED_LOOK, null))
+        set(value) = prefs.edit().putString(KEY_LED_LOOK, value.encode()).apply()
+
+    fun ledLookChanges(): Flow<LedLook> = callbackFlow {
+        val listener = OnSharedPreferenceChangeListener { _, key ->
+            if (key == KEY_LED_LOOK || key == null) trySend(ledLook)
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        trySend(ledLook)
+        awaitClose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
+    /** A Wii profile builder tab's mapping, as `WiiMapping.encode` stores it; null for the suggestion. */
+    fun wiiMapping(setup: String): String? = prefs.getString(KEY_WII_MAPPING + setup, null)
+
+    fun setWiiMapping(setup: String, text: String?) = prefs.edit().putString(KEY_WII_MAPPING + setup, text).apply()
+
+    /** Which set of suggestions the Wii profile builder's drafts were made with. */
+    var wiiSuggestions: Int
+        get() = prefs.getInt(KEY_WII_SUGGESTIONS, 1)
+        set(value) = prefs.edit().putInt(KEY_WII_SUGGESTIONS, value).apply()
+
+    /** The profile name typed on a Wii profile builder tab; null for the default. */
+    fun wiiName(setup: String): String? = prefs.getString(KEY_WII_NAME + setup, null)
+
+    fun setWiiName(setup: String, name: String?) = prefs.edit().putString(KEY_WII_NAME + setup, name).apply()
+
+    /** AYN's own light settings from before Thor Tools first changed them; null while they are AYN's again. */
+    var ledAynSaved: String?
+        get() = prefs.getString(KEY_LED_AYN_SAVED, null)
+        set(value) = prefs.edit().putString(KEY_LED_AYN_SAVED, value).apply()
+
+    /** Diagnostics shows the debug toolkit. */
+    var debugMode
+        get() = prefs.getBoolean(KEY_DEBUG_MODE, false)
+        set(value) = prefs.edit().putBoolean(KEY_DEBUG_MODE, value).apply()
+
+    /** The debug toolkit writes its results to one file, rewritten on each use. */
+    var debugReportFile
+        get() = prefs.getBoolean(KEY_DEBUG_REPORT_FILE, true)
+        set(value) = prefs.edit().putBoolean(KEY_DEBUG_REPORT_FILE, value).apply()
+
     /** The setup wizard was finished or skipped; it then only opens when asked for. */
     var setupDone
         get() = prefs.getBoolean(KEY_SETUP_DONE, false)
@@ -375,6 +420,13 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
         private const val KEY_PANEL_ONLY_AYN_CLOSES = "panel_only_ayn_closes"
         private const val KEY_SETUP_DONE = "setup_done"
         private const val KEY_RECENT_APPS = "recent_apps"
+        private const val KEY_DEBUG_MODE = "debug_mode"
+        private const val KEY_LED_LOOK = "led_look"
+        private const val KEY_WII_MAPPING = "wii_mapping_"
+        private const val KEY_WII_NAME = "wii_name_"
+        private const val KEY_WII_SUGGESTIONS = "wii_suggestions"
+        private const val KEY_LED_AYN_SAVED = "led_ayn_saved"
+        private const val KEY_DEBUG_REPORT_FILE = "debug_report_file"
         private const val KEY_LID_ENABLED = "lid_enabled"
         private const val KEY_LID_POWER_SAVING = "lid_power_saving"
         private const val KEY_LID_CLOSE_BACKGROUND = "lid_close_background"

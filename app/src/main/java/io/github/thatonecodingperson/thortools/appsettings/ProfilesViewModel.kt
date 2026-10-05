@@ -40,6 +40,8 @@ class ProfilesViewModel @Inject constructor(private val prefs: SharedPrefsRepo, 
                 appOverridesEnabled = prefs.appOverridesEnabled,
                 overrideDelayEnabled = prefs.overrideDelay,
                 videoOutputOverrideEnabled = prefs.videoOutputOverrideEnabled,
+                videoOutputControllerStyle = ControllerStyle.getById(prefs.videoOutputControllerStyle),
+                videoOutputL2R2Style = L2R2Style.getById(prefs.videoOutputL2R2Style),
             )
         }
     }

@@ -1,8 +1,8 @@
 package io.github.thatonecodingperson.thortools.panel
 
 import android.content.Context
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -12,13 +12,11 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CleaningServices
+import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.SportsEsports
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -41,6 +39,7 @@ import io.github.thatonecodingperson.thortools.data.SharedPrefsRepo
 import io.github.thatonecodingperson.thortools.hotkeys.NoteCard
 import io.github.thatonecodingperson.thortools.service.ServiceStatus
 import io.github.thatonecodingperson.thortools.ui.composables.CardColumns
+import io.github.thatonecodingperson.thortools.ui.composables.CardRow
 import io.github.thatonecodingperson.thortools.ui.composables.CardSection
 import io.github.thatonecodingperson.thortools.ui.composables.SettingsCard
 import io.github.thatonecodingperson.thortools.ui.composables.SubTopAppBar
@@ -170,7 +169,7 @@ fun PanelSettingsScreen(viewModel: PanelSettingsViewModel = hiltViewModel(), onE
 @Composable
 private fun YourPanel(uiState: PanelSettingsUiModel, onEditPanel: () -> Unit, onOpen: () -> Unit) {
     CardSection(R.string.panelYours, R.string.panelYoursIntro) {
-        SettingsCard {
+        SettingsCard(contentPadding = PaddingValues()) {
             uiState.layout?.let { layout ->
                 PanelPreview(
                     layout = layout,
@@ -178,22 +177,21 @@ private fun YourPanel(uiState: PanelSettingsUiModel, onEditPanel: () -> Unit, on
                     state = samplePanelState(),
                     widthDp = uiState.previewWidthDp,
                     heightDp = uiState.previewHeightDp,
-                    modifier = Modifier.fillMaxWidth().heightIn(max = PREVIEW_MAX_HEIGHT),
-                )
-                Text(
-                    text = stringResource(R.string.panelPageCount, layout.pages.size),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(max = PREVIEW_MAX_HEIGHT).padding(12.dp),
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                FilledTonalButton(onClick = onEditPanel) {
-                    Icon(Icons.Rounded.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text(stringResource(R.string.editPanel), modifier = Modifier.padding(start = 8.dp))
-                }
-                OutlinedButton(onClick = onOpen) { Text(stringResource(R.string.openQuickPanelNow)) }
-            }
+            CardRow(
+                title = stringResource(R.string.editPanel),
+                value = uiState.layout?.let { stringResource(R.string.panelPageCount, it.pages.size) },
+                icon = Icons.Rounded.Edit,
+                onClick = onEditPanel,
+            )
+            CardRow(
+                title = stringResource(R.string.openQuickPanelNow),
+                icon = Icons.Rounded.Dashboard,
+                enabled = uiState.serviceRunning,
+                onClick = onOpen,
+            )
         }
         if (!uiState.serviceRunning) NoteCard(stringResource(R.string.serviceOffDescription), warning = true)
     }

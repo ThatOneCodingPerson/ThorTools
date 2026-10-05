@@ -12,36 +12,44 @@ its AYN button and its lid. It also runs on the Odin 2.
 
 <table>
   <tr>
-    <td width="50%"><img src="screenshots/quick-panel.png" alt="The quick panel on the bottom screen"></td>
-    <td width="50%"><img src="screenshots/panel-editor.png" alt="The panel editor with a live preview"></td>
+    <td valign="top" width="50%"><img src="screenshots/quick-panel.png" alt="The quick panel on the bottom screen"></td>
+    <td valign="top" width="50%"><img src="screenshots/panel-editor.png" alt="The panel editor with a live preview"></td>
   </tr>
   <tr>
     <td align="center">The quick panel, opened with the AYN button</td>
     <td align="center">Edit panel: widgets in the sizes you like</td>
   </tr>
   <tr>
-    <td><img src="screenshots/hotkeys.png" alt="The hotkey list"></td>
-    <td><img src="screenshots/controller-modes.png" alt="Controller style and L2/R2"></td>
+    <td valign="top"><img src="screenshots/hotkeys.png" alt="The hotkey list"></td>
+    <td valign="top"><img src="screenshots/controller-modes.png" alt="Controller style and L2/R2"></td>
   </tr>
   <tr>
     <td align="center">Hotkeys: taps, holds and combos</td>
     <td align="center">Controller style and L2/R2</td>
   </tr>
   <tr>
-    <td><img src="screenshots/lid.png" alt="When the lid closes"></td>
-    <td><img src="screenshots/odintools-features.png" alt="OdinTools features"></td>
+    <td valign="top"><img src="screenshots/lid.png" alt="When the lid closes"></td>
+    <td valign="top"><img src="screenshots/odintools-features.png" alt="OdinTools features"></td>
   </tr>
   <tr>
     <td align="center">What happens when the lid closes</td>
     <td align="center">Every OdinTools setting, built in</td>
   </tr>
   <tr>
-    <td><img src="screenshots/setup.png" alt="The guided setup"></td>
-    <td></td>
+    <td valign="top"><img src="screenshots/wii-profiles.png" alt="The Wii profile builder for Dolphin"></td>
+    <td valign="top"><img src="screenshots/stick-lights.png" alt="Stick lights"></td>
   </tr>
   <tr>
+    <td align="center">Wii Remote, Nunchuk and Classic Controller profiles for Dolphin</td>
+    <td align="center">Colours and effects for the stick lights</td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="screenshots/extra-tools.png" alt="Extra tools"></td>
+    <td valign="top"><img src="screenshots/setup.png" alt="The guided setup"></td>
+  </tr>
+  <tr>
+    <td align="center">Extra tools: stick lights, Wii profiles and where the keyboard appears</td>
     <td align="center">A guided setup on first start</td>
-    <td></td>
   </tr>
 </table>
 
@@ -110,8 +118,21 @@ each other. Without OdinTools you won't see any of this: Thor Tools has every Od
   AYN's 80 % limit and charging separation are on
 
 ### App profiles
-- Per app: controller style, L2/R2 mode, performance and fan (from OdinTools), plus refresh rate and the bottom screen
-  off while the app is on the top screen; everything goes back when you leave the app
+- Per app: controller style, L2/R2 mode, performance and fan (from OdinTools), plus refresh rate, the bottom screen
+  off while the app is on the top screen, vibration strength (off to strongest) and the stick lights; everything goes
+  back when you leave the app
+
+### Extra tools
+- **Stick lights**: the rings around the sticks in a colour (both sticks or each its own, nine colours or your own),
+  Breathe, Pulse, Rainbow or the battery level, off, or AYN's own look; brightness and speed, a green breathe while
+  charging, and a different look per app. A colour, off and the battery level stay after a restart
+- **Wii profiles for Dolphin**: turn the Thor's buttons into a Wii Remote + Nunchuk, a sideways Wii Remote, a pointing
+  Wii Remote or a Classic Controller, with the pointer and shake on the sticks and triggers and Dolphin's sideways and
+  upright shortcuts. Every Wii button is explained in plain words and drawn with the Thor button under it, starting
+  from a ready-made layout. Profiles work in both of AYN's controller styles and both L2/R2 modes and rumble through
+  the Thor. Save goes straight into Dolphin's profile folder (through AYN's system service, or through Dolphin's own
+  folder access, given once), with a copy in Downloads and the folder path as a fallback
+- **Where the keyboard appears**: always on the bottom screen, on the top screen, or on the screen you type on
 
 ### From OdinTools (all in the OdinTools features menu)
 - Controller and L2/R2 style for external displays
@@ -126,7 +147,8 @@ each other. Without OdinTools you won't see any of this: Thor Tools has every Od
 - A guided setup on first start (access, hotkeys, the quick panel, a theme), and again any time from Setup &
   diagnostics
 - Permissions & access: every permission Thor Tools relies on, with its real state and a one-tap fix
-- Diagnostics: device facts, a button tester, and a report you can copy or save to Downloads
+- Diagnostics: device facts, a button tester, and a report you can copy or save to Downloads; a debug mode adds a
+  toolkit that checks every action and recognises your hotkeys
 - Stays running: a quiet notification, a battery-optimisation exemption and a check after boot
 
 ### Planned
@@ -165,3 +187,6 @@ updates must be signed with the same key.
 
 Based on [OdinTools](https://github.com/langerhans/OdinTools) © 2024 Maximilian Keller (langerhans), MIT licensed.
 Thor Tools changes and additions are also MIT. See [LICENSE](LICENSE).
+
+The Wii profile builder's suggested layouts follow RetroPup's
+[AYN Thor Ultimate Wii Setup Guide (2026)](https://www.youtube.com/watch?v=my5XRGNShqA). Thanks, RetroPup!

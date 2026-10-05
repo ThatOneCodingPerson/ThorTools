@@ -61,6 +61,7 @@ class DisplayViewModel @Inject constructor(
                 vibrationAtBoot = prefs.isEnabled(Overlap.VIBRATION_AT_BOOT),
                 themeId = prefs.themeId,
                 themes = ThorThemes.builtIn + prefs.customPalettes,
+                currentSaturation = prefs.saturationOverride,
             )
         }
         // Read through PServer when Android hides the key: never on the main thread.
@@ -69,8 +70,8 @@ class DisplayViewModel @Inject constructor(
 
     private fun readVibration() {
         viewModelScope.launch {
-            val enabled = withContext(Dispatchers.IO) { settings.vibrationEnabled }
-            _uiState.update { it.copy(vibrationEnabled = enabled) }
+            val (enabled, strength) = withContext(Dispatchers.IO) { settings.vibrationEnabled to settings.vibrationStrength }
+            _uiState.update { it.copy(vibrationEnabled = enabled, currentVibration = strength) }
         }
     }
 
@@ -96,7 +97,7 @@ class DisplayViewModel @Inject constructor(
     fun saveSaturation(newValue: Float) {
         prefs.saturationOverride = newValue
         viewModelScope.launch(Dispatchers.IO) { settings.setSfSaturation(newValue) }
-        _uiState.update { it.copy(showSaturationDialog = false) }
+        _uiState.update { it.copy(showSaturationDialog = false, currentSaturation = newValue) }
     }
 
     fun updateVibrationPreference(newValue: Boolean) {

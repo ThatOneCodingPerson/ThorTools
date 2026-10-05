@@ -5,6 +5,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.thatonecodingperson.thortools.coexist.OdinToolsState
+import io.github.thatonecodingperson.thortools.extras.KeyboardPlace
+import io.github.thatonecodingperson.thortools.leds.LedMode
 import io.github.thatonecodingperson.thortools.tools.DeviceType
 import io.github.thatonecodingperson.thortools.tools.DeviceType.THOR
 import io.github.thatonecodingperson.thortools.ui.theme.ThorPalette
@@ -36,6 +38,9 @@ data class HomeSummary(
     val chargeLimit: IntRange? = null,
     /** The theme's name, or null for Android's own colours. */
     val theme: ThorPalette? = null,
+    val ledMode: LedMode = LedMode.AYN,
+    /** Where the keyboard appears; null until read. */
+    val keyboard: KeyboardPlace? = null,
 )
 
 /** [supporting]: a line under the title, e.g. what a mode does. */
