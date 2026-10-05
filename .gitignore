@@ -9,3 +9,8 @@
 .cxx
 local.properties
 /.kotlin/sessions/
+/dist/
+/app/release/
+*.jks
+*.keystore
+signing.properties

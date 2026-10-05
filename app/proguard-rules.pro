@@ -19,3 +19,7 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+# The root input helper is started by class name through app_process.
+-keep class io.github.thatonecodingperson.thortools.input.RawInputHelper {
+    public static void main(java.lang.String[]);
+}

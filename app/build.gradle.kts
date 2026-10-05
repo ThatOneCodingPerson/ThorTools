@@ -1,8 +1,8 @@
 import org.jlleitschuh.gradle.ktlint.reporter.ReporterType
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.com.android.application)
-    alias(libs.plugins.org.jetbrains.kotlin.android)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.com.google.dagger.hilt.android)
     alias(libs.plugins.com.google.devtools.ksp)
@@ -10,35 +10,50 @@ plugins {
     alias(libs.plugins.ktlint)
 }
 
+// Release signing lives outside the repo; build-apk.cmd creates it on first run.
+val signingProps = File(System.getProperty("user.home"), ".thortools/signing.properties")
+    .takeIf { it.isFile }
+    ?.let { file -> Properties().apply { file.inputStream().use(::load) } }
+
 android {
-    namespace = "de.langerhans.odintools"
-    compileSdk = 34
+    namespace = "io.github.thatonecodingperson.thortools"
+    compileSdk = 37
 
     defaultConfig {
-        applicationId = "de.langerhans.odintools"
+        applicationId = "io.github.thatonecodingperson.thortools"
         minSdk = 33
-        targetSdk = 34
-        versionCode = 11
-        versionName = "1.3.1"
+        targetSdk = 36
+        versionCode = 26
+        versionName = "0.16.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    buildTypes {
-        release {
-            initWith(buildTypes.getByName("debug"))
-            isDebuggable = false
-            isMinifyEnabled = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            applicationVariants.all {
-                val variant = this
-                outputs
-                    .map { it as com.android.build.gradle.internal.api.BaseVariantOutputImpl }
-                    .forEach {
-                        it.outputFileName = "OdinTools-${variant.versionName}.apk"
-                    }
+    signingConfigs {
+        if (signingProps != null) {
+            create("release") {
+                storeFile = file(signingProps.getProperty("storeFile"))
+                storePassword = signingProps.getProperty("storePassword")
+                keyAlias = signingProps.getProperty("keyAlias")
+                keyPassword = signingProps.getProperty("keyPassword")
             }
         }
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+        }
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+        }
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures {
         compose = true
@@ -49,17 +64,14 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
-    hilt {
-        enableAggregatingTask = true
-    }
+}
+
+hilt {
+    enableAggregatingTask = true
 }
 
 room {
     schemaDirectory("$projectDir/schemas")
-}
-
-kotlin {
-    jvmToolchain(11)
 }
 
 ktlint {
@@ -70,21 +82,14 @@ ktlint {
 }
 
 dependencies {
-    // Compose BOM specifics
     val composeBom = platform(libs.androidx.compose.bom)
     implementation(composeBom)
     androidTestImplementation(composeBom)
     debugImplementation(composeBom)
 
-    // Normal imports
     implementation(libs.bundles.app)
     debugImplementation(libs.bundles.appDebug)
-    annotationProcessor(libs.bundles.appAnnotationProcessor)
     ksp(libs.bundles.appKsp)
     testImplementation(libs.bundles.appUnitTest)
     androidTestImplementation(libs.bundles.appAndroidTest)
-
-    // Hilt dependencies
-    implementation(libs.com.google.dagger.hilt.android)
-    ksp(libs.com.google.dagger.hilt.android.compiler)
 }

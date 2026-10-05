@@ -13,6 +13,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "OdinTools"
+rootProject.name = "ThorTools"
 include(":app")
  

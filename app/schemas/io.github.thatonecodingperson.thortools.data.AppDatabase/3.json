@@ -1,0 +1,111 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 3,
+    "identityHash": "617304ff4b877fa330991ab5536fc929",
+    "entities": [
+      {
+        "tableName": "appoverride",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`packageName` TEXT NOT NULL, `controllerStyle` TEXT, `l2R2Style` TEXT, `perfMode` TEXT, `fanMode` TEXT, PRIMARY KEY(`packageName`))",
+        "fields": [
+          {
+            "fieldPath": "packageName",
+            "columnName": "packageName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "controllerStyle",
+            "columnName": "controllerStyle",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "l2R2Style",
+            "columnName": "l2R2Style",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "perfMode",
+            "columnName": "perfMode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "fanMode",
+            "columnName": "fanMode",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "packageName"
+          ]
+        }
+      },
+      {
+        "tableName": "hotkey",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `trigger` TEXT NOT NULL, `gesture` TEXT NOT NULL, `partner` TEXT NOT NULL, `action` TEXT NOT NULL, `actionArg` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trigger",
+            "columnName": "trigger",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gesture",
+            "columnName": "gesture",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "partner",
+            "columnName": "partner",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "action",
+            "columnName": "action",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "actionArg",
+            "columnName": "actionArg",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_hotkey_trigger_gesture_partner",
+            "unique": true,
+            "columnNames": [
+              "trigger",
+              "gesture",
+              "partner"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_hotkey_trigger_gesture_partner` ON `${TABLE_NAME}` (`trigger`, `gesture`, `partner`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '617304ff4b877fa330991ab5536fc929')"
+    ]
+  }
+}
