@@ -6,6 +6,45 @@ its AYN button and its lid. It also runs on the Odin 2.
 
 > Early development. Features marked *(planned)* aren't in the app yet.
 
+<p align="center"><img src="screenshots/main-menu.png" alt="Thor Tools' main menu on the Thor's top screen" width="100%"></p>
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="screenshots/quick-panel.png" alt="The quick panel on the bottom screen"></td>
+    <td width="50%"><img src="screenshots/panel-editor.png" alt="The panel editor with a live preview"></td>
+  </tr>
+  <tr>
+    <td align="center">The quick panel, opened with the AYN button</td>
+    <td align="center">Edit panel: widgets in the sizes you like</td>
+  </tr>
+  <tr>
+    <td><img src="screenshots/hotkeys.png" alt="The hotkey list"></td>
+    <td><img src="screenshots/controller-modes.png" alt="Controller style and L2/R2"></td>
+  </tr>
+  <tr>
+    <td align="center">Hotkeys: taps, holds and combos</td>
+    <td align="center">Controller style and L2/R2</td>
+  </tr>
+  <tr>
+    <td><img src="screenshots/lid.png" alt="When the lid closes"></td>
+    <td><img src="screenshots/odintools-features.png" alt="OdinTools features"></td>
+  </tr>
+  <tr>
+    <td align="center">What happens when the lid closes</td>
+    <td align="center">Every OdinTools setting, built in</td>
+  </tr>
+  <tr>
+    <td><img src="screenshots/setup.png" alt="The guided setup"></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td align="center">A guided setup on first start</td>
+    <td></td>
+  </tr>
+</table>
+
 ## Works alongside OdinTools
 
 Thor Tools has its own package name, so both apps can be installed at the same time. Some features change the same
