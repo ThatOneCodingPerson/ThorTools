@@ -104,11 +104,12 @@ each other. Without OdinTools you won't see any of this: Thor Tools has every Od
 
 ### Power management
 - **When the lid closes**: pick what happens while it's closed: power-saving mode, close background apps, pause media,
-  Wi-Fi, Bluetooth or airplane mode off, the AYN and volume buttons, the controller or the touchscreens turned off,
-  and back to sleep after an accidental wake (plugging in the charger, say). Opening the lid puts everything back and
-  checks that it did. Everything is off until you switch it on, and the power button always works
+  Wi-Fi, Bluetooth or airplane mode off, and back to sleep after an accidental wake (plugging in the charger, say)
+  once the lid is still closed after a wait you set. Buttons, the controller and the touchscreens are never turned
+  off. Opening the lid puts everything back and checks that it did. Everything is off until you switch it on, and the
+  power button always works. For more, it points to [SleepManager](https://github.com/Baggio94/SleepManager)
   - Save power right away or after 1, 5 or 15 minutes, and not while music or a video plays
-  - Keep the AYN and volume buttons working for chosen apps, such as a music player
+  - Back to sleep after 5 to 60 seconds or 1 to 15 minutes
 - **Charging stability alert**: a notification when charging keeps switching between rapid, slow and not charging,
   with a restart button. The screen explains the Thor's known charging issue, what owners report helps and what's
   normal

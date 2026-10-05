@@ -108,7 +108,7 @@
     <string name="powerManagement">Power management</string>
     <string name="lidHeader">Lid</string>
     <string name="lidTitle">When the lid closes</string>
-    <string name="lidRowSummary">Save power and keep the Thor asleep while it\'s closed. Everything goes back when it opens.</string>
+    <string name="lidRowSummary">Save power while it\'s closed, and back to sleep after an accidental wake. Everything goes back when it opens.</string>
     <string name="lidMaster">Lid actions</string>
     <string name="lidMasterInfo">Does what\'s switched on below when the lid closes. Opening the lid puts everything back and checks that it did.</string>
     <string name="lidSavePower">Save power</string>
@@ -131,21 +131,24 @@
     <string name="lidDelayMinutes">%1$d min</string>
     <string name="lidNotWhileMedia">Not while media plays</string>
     <string name="lidNotWhileMediaInfo">While music or a video plays, Save power waits and starts once it stops. Pause media then has nothing to pause.</string>
-    <string name="lidKeepButtons">Keep the buttons for these apps</string>
-    <string name="lidKeepButtonsNone">No apps chosen</string>
-    <string name="lidKeepButtonsPickerInfo">Tick the apps that keep the AYN and volume buttons working while the lid is closed: a music player, say. Playing apps are only known when the Now playing widget is allowed.</string>
     <string name="lidStayAsleep">Stay asleep</string>
-    <string name="lidStayAsleepIntro">Keeps what gets pressed in a bag or a case from waking the Thor while it\'s closed.</string>
-    <string name="lidMuteButtons">AYN and volume buttons</string>
-    <string name="lidMuteButtonsInfo">Can\'t wake it, or do anything, while it\'s closed.</string>
-    <string name="lidMuteController">Controller</string>
-    <string name="lidMuteControllerInfo">Its buttons and sticks do nothing while it\'s closed.</string>
-    <string name="lidMuteTouch">Touchscreens</string>
-    <string name="lidMuteTouchInfo">Both screens ignore touches while it\'s closed.</string>
+    <string name="lidStayAsleepIntro">Something in a bag can wake the Thor while it\'s closed: the charger, a button. Thor Tools never turns off buttons, the controller or the touchscreens; it lets the wake run out, then puts the Thor back to sleep.</string>
     <string name="lidBackToSleep">Back to sleep</string>
-    <string name="lidBackToSleepInfo">If anything else wakes it while it\'s closed (plugging in the charger, say), it goes straight back to sleep. Wake it three times within a minute to keep it awake.</string>
-    <string name="lidFootnote">The power button and the lid sensor are never turned off. Opening the lid always wakes the Thor and puts everything above back.</string>
-    <string name="lidNeedsHelper">Turning off buttons, the controller and touch needs the root input helper, which isn\'t running. See Setup &amp; diagnostics.</string>
+    <string name="lidBackToSleepInfo">After a wake with the lid closed, it waits as long as you set here. If the lid is still closed then, the Thor goes back to sleep; opening the lid cancels it. Wake it three times in a row to keep it awake.</string>
+    <string name="lidFootnote">Buttons, the controller and the touchscreens always work, and opening the lid always wakes the Thor and puts everything back. With an external display connected, a closed Thor isn\'t put back to sleep.</string>
+    <string name="lidSleepWait">Goes back to sleep after</string>
+    <string name="lidUnitSeconds">Seconds</string>
+    <string name="lidUnitMinutes">Minutes</string>
+    <string name="lidSeconds">%1$d s</string>
+    <string name="lidMore">Want more?</string>
+    <string name="lidMoreTitle">SleepManager</string>
+    <string name="lidMoreInfo">A separate app by Baggio94 that goes much further with sleep and the lid: Wi-Fi, Bluetooth and sync apps while asleep, docks, the power button with the lid closed, and battery use while asleep.</string>
+    <string name="lidMoreOpen">Open SleepManager</string>
+    <string name="lidMoreInstalledInfo">It\'s installed. Where both apps can do the same thing (Wi-Fi, Bluetooth, back to sleep), switch it on in only one of them.</string>
+    <string name="lidMoreGithub">Its page on GitHub</string>
+    <string name="lidMoreGithubInfo">What it does, and the download under Releases.</string>
+    <string name="lidMoreObtainium">Add it to Obtainium</string>
+    <string name="lidMoreObtainiumInfo">Obtainium installs it and keeps it up to date. If it asks which file, pick SleepManager; the Helper is only for its Wi-Fi and Bluetooth options.</string>
     <string name="lidLastNone">Nothing has happened yet: the lid hasn\'t closed with any of these on.</string>
     <string name="lidLastOk">Last closed %1$s, opened %2$s: everything was put back.</string>
     <string name="lidLastMissing">Last closed %1$s, opened %2$s: %3$s couldn\'t be put back.</string>
@@ -155,7 +158,6 @@
     <string name="lidItemWifi">Wi-Fi</string>
     <string name="lidItemBluetooth">Bluetooth</string>
     <string name="lidItemAirplane">airplane mode</string>
-    <string name="lidItemInputs">buttons and touch</string>
     <string name="chargeAlert">Charging stability alert</string>
     <string name="chargeAlertDescription">Notifies you when charging keeps switching between rapid, slow and not charging while the charger stays plugged in, and offers a restart.</string>
     <string name="chargeAlertChannel">Charging stability</string>
@@ -368,6 +370,10 @@
     <plurals name="homeProfiles">
         <item quantity="one">%1$d app</item>
         <item quantity="other">%1$d apps</item>
+    </plurals>
+    <plurals name="lidSentBack">
+        <item quantity="one">It went back to sleep once after waking while closed.</item>
+        <item quantity="other">It went back to sleep %1$d times after waking while closed.</item>
     </plurals>
     <plurals name="homeLidActions">
         <item quantity="one">%1$d lid action on</item>

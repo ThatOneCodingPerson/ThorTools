@@ -15,7 +15,6 @@ object LidText {
         LidItem.WIFI -> R.string.lidItemWifi
         LidItem.BLUETOOTH -> R.string.lidItemBluetooth
         LidItem.AIRPLANE -> R.string.lidItemAirplane
-        LidItem.INPUTS -> R.string.lidItemInputs
     }
 
     fun items(context: Context, items: List<LidItem>): String = items.joinToString(", ") { context.getString(label(it)) }
@@ -26,11 +25,13 @@ object LidText {
         if (result == null) return context.getString(R.string.lidLastNone)
         val closed = time(result.closedAt, now)
         val opened = time(result.openedAt, now)
-        return if (result.notRestored.isEmpty()) {
+        val text = if (result.notRestored.isEmpty()) {
             context.getString(R.string.lidLastOk, closed, opened)
         } else {
             context.getString(R.string.lidLastMissing, closed, opened, items(context, result.notRestored))
         }
+        if (result.sentBack == 0) return text
+        return text + " " + context.resources.getQuantityString(R.plurals.lidSentBack, result.sentBack, result.sentBack)
     }
 
     private fun time(at: Long, now: Long): String = DateUtils.formatSameDayTime(at, now, DateFormat.SHORT, DateFormat.SHORT).toString()

@@ -14,8 +14,8 @@ import kotlin.system.exitProcess
 /**
  * Runs as root through `app_process` (started by [RawInputClient]): reports which screen was touched last and when
  * the last finger left it, the pad's D-pad directions and stick flicks while the app watches the pad, the lid opening
- * and closing, and runs the commands an app may not (see [RootCommands]). It never grabs or injects anything on its
- * own; it mutes input devices only when the app asks (the lid sandbox), and unmutes them the moment the lid opens.
+ * and closing, and runs the commands an app may not (see [RootCommands]). It never grabs, mutes or injects anything on
+ * its own.
  * Arguments: abstract socket name, the app's uid.
  */
 object RawInputHelper {
@@ -55,10 +55,7 @@ object RawInputHelper {
 
         startReader("top", { nodes -> nodes.firstOrNull { it.name == "fts_ts" } }) { _, stream -> readTouch(stream, Screen.TOP) }
         startReader("bottom", { nodes -> nodes.firstOrNull { it.name == "fts_ts_3" } }) { _, stream -> readTouch(stream, Screen.BOTTOM) }
-        startReader("pad", ThorPad::pick) { node, stream ->
-            InputMute.padAppeared(node)
-            readPad(stream)
-        }
+        startReader("pad", ThorPad::pick) { _, stream -> readPad(stream) }
         startReader("lid", { nodes -> nodes.firstOrNull { it.name == "hall_switch" } }) { _, stream -> readLid(stream) }
 
         // The readers can block in read() for hours, so this loop is the one that notices the app went away.
@@ -204,14 +201,10 @@ object RawInputHelper {
         }
     }
 
-    /** The lid sensor: opening the lid unmutes every muted device right away, before the app hears of it. */
+    /** The lid sensor, as the lid closes (1) and opens (0). */
     private fun readLid(stream: FileInputStream) {
         forEachEvent(stream) { type, code, value ->
-            if (type == EV_SW && code == SW_LID) {
-                val closed = value == 1
-                if (!closed) InputMute.unmuteAll(scanNodes())
-                send(HelperMessage.Lid(closed))
-            }
+            if (type == EV_SW && code == SW_LID) send(HelperMessage.Lid(closed = value == 1))
         }
     }
 

@@ -920,11 +920,9 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
             context = this,
             executor = executor,
             prefs = prefs,
-            helper = { name, args, onResult -> rawInput.command(name, *args.toTypedArray(), onResult = onResult) },
             closeBackground = { actionRunner.run(ActionCall(ThorAction.CLEAR_BACKGROUND)) },
             sleepNow = { performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN) },
             notRestored = { items -> lidNote.show(LidText.notRestored(this, items), Display.DEFAULT_DISPLAY) },
-            frontApp = { lastAppPackage },
         )
         systemPress = SystemPress(
             service = this,

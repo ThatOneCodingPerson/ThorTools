@@ -59,7 +59,6 @@ fun AppPicker(
                                 AppPickerMode.OPEN_APP -> R.string.hotkeyPickApp
                                 AppPickerMode.HOTKEYS_OFF -> R.string.hotkeysOffApps
                                 AppPickerMode.HOTKEY_APPS -> R.string.hotkeyAppsTitle
-                                AppPickerMode.LID_KEEP_BUTTONS -> R.string.lidKeepButtons
                             },
                         ),
                     )
@@ -76,7 +75,6 @@ fun AppPicker(
                     text = stringResource(
                         when (mode) {
                             AppPickerMode.HOTKEYS_OFF -> R.string.hotkeysOffAppsInfo
-                            AppPickerMode.LID_KEEP_BUTTONS -> R.string.lidKeepButtonsPickerInfo
                             else -> R.string.hotkeyAppsInfo
                         },
                     ),

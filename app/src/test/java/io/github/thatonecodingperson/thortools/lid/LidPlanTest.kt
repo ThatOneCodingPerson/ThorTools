@@ -1,8 +1,5 @@
 package io.github.thatonecodingperson.thortools.lid
 
-import io.github.thatonecodingperson.thortools.input.InputNode
-import io.github.thatonecodingperson.thortools.input.MuteTargets
-import io.github.thatonecodingperson.thortools.input.ThorPad
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -15,7 +12,7 @@ class LidPlanTest {
     @Test
     fun `nothing is chosen by default, so nothing happens`() {
         assertFalse(LidChoices().active)
-        assertEquals(LidSession(5, LidReadings(), emptySet()), LidPlan.session(LidChoices(), now, time = 5))
+        assertEquals(LidSession(5, LidReadings()), LidPlan.session(LidChoices(), now, time = 5))
     }
 
     @Test
@@ -39,56 +36,128 @@ class LidPlanTest {
     }
 
     @Test
-    fun `muted groups follow the switches, and the master switch turns them off`() {
-        val choices = LidChoices(muteButtons = true, muteTouch = true)
-        assertEquals(setOf(InputGroup.BUTTONS, InputGroup.TOUCH), LidPlan.session(choices, now, time = 1).muted)
-        assertEquals(emptySet<InputGroup>(), LidPlan.session(choices.copy(enabled = false), now, time = 1).muted)
-        assertFalse(choices.copy(enabled = false).active)
+    fun `back to sleep alone is something to do, and the master switch turns everything off`() {
+        val choices = LidChoices(backToSleep = true)
         assertTrue(choices.active)
+        assertFalse(choices.copy(enabled = false).active)
     }
 
     @Test
     fun `the session survives being stored`() {
-        val session = LidPlan.session(LidChoices(powerSaving = true, wifiOff = true, muteController = true), now, time = 1234)
+        val session = LidPlan.session(LidChoices(powerSaving = true, wifiOff = true), now, time = 1234)
         assertEquals(session, LidSession.decode(session.encode()))
-        val empty = LidSession(9, LidReadings(), emptySet())
+        val empty = LidSession(9, LidReadings())
         assertEquals(empty, LidSession.decode(empty.encode()))
         assertNull(LidSession.decode(null))
         assertNull(LidSession.decode("perf=1"))
     }
 
     @Test
-    fun `opening the lid checks every saved value came back`() {
-        val session = LidPlan.session(LidChoices(powerSaving = true, wifiOff = true, muteTouch = true), now, time = 1)
-        assertEquals(emptyList<LidItem>(), LidPlan.notRestored(session, now, mutedInputs = 0))
-        val wifiStillOff = now.copy(wifi = false)
-        assertEquals(listOf(LidItem.WIFI), LidPlan.notRestored(session, wifiStillOff, mutedInputs = 0))
-        val unread = LidReadings()
-        val everything = listOf(LidItem.PERFORMANCE, LidItem.FAN, LidItem.WIFI, LidItem.INPUTS)
-        assertEquals(everything, LidPlan.notRestored(session, unread, mutedInputs = null))
-        assertEquals(listOf(LidItem.INPUTS), LidPlan.notRestored(session, now, mutedInputs = 2))
-        val nothingMuted = LidPlan.session(LidChoices(wifiOff = true), now, time = 1)
-        assertEquals(emptyList<LidItem>(), LidPlan.notRestored(nothingMuted, now, mutedInputs = null))
+    fun `a stored session that still lists muted inputs reads without them`() {
+        val stored = "closed=7;perf=2;fan=;wifi=1;bt=;air=;muted=buttons,controller;pending=0"
+        assertEquals(LidSession(7, LidReadings(performance = 2, wifi = true)), LidSession.decode(stored))
     }
 
     @Test
-    fun `the last result survives being stored`() {
-        val result = LidResult(closedAt = 10, openedAt = 20, notRestored = listOf(LidItem.WIFI, LidItem.INPUTS))
+    fun `opening the lid checks every saved value came back`() {
+        val session = LidPlan.session(LidChoices(powerSaving = true, wifiOff = true), now, time = 1)
+        assertEquals(emptyList<LidItem>(), LidPlan.notRestored(session, now))
+        assertEquals(listOf(LidItem.WIFI), LidPlan.notRestored(session, now.copy(wifi = false)))
+        assertEquals(listOf(LidItem.PERFORMANCE, LidItem.FAN, LidItem.WIFI), LidPlan.notRestored(session, LidReadings()))
+    }
+
+    @Test
+    fun `the last result survives being stored, older ones too`() {
+        val result = LidResult(closedAt = 10, openedAt = 20, notRestored = listOf(LidItem.WIFI, LidItem.FAN), sentBack = 3)
         assertEquals(result, LidResult.decode(result.encode()))
         val clean = LidResult(closedAt = 10, openedAt = 20, notRestored = emptyList())
         assertEquals(clean, LidResult.decode(clean.encode()))
+        assertEquals(LidResult(10, 20, listOf(LidItem.WIFI)), LidResult.decode("10;20;WIFI,INPUTS"))
         assertNull(LidResult.decode("10;20"))
     }
 
     @Test
-    fun `back to sleep gives way on the third wake within a minute`() {
+    fun `back to sleep only with the lid surely closed, the screen on and no external display`() {
+        assertTrue(LidPlan.backToSleep(lidClosed = true, helperSaysOpen = false, screenOn = true, docked = false))
+        assertFalse(LidPlan.backToSleep(lidClosed = null, helperSaysOpen = false, screenOn = true, docked = false))
+        assertFalse(LidPlan.backToSleep(lidClosed = false, helperSaysOpen = false, screenOn = true, docked = false))
+        assertFalse(LidPlan.backToSleep(lidClosed = true, helperSaysOpen = true, screenOn = true, docked = false))
+        assertFalse(LidPlan.backToSleep(lidClosed = true, helperSaysOpen = false, screenOn = false, docked = false))
+        assertFalse(LidPlan.backToSleep(lidClosed = true, helperSaysOpen = false, screenOn = true, docked = true))
+    }
+
+    @Test
+    fun `docked means a display besides the two screens`() {
+        assertFalse(LidPlan.docked(publicDisplays = 0))
+        assertFalse(LidPlan.docked(publicDisplays = 1))
+        assertTrue(LidPlan.docked(publicDisplays = 2))
+    }
+
+    @Test
+    fun `the third wake in a row stays awake`() {
         val guard = WakeGuard()
         assertTrue(guard.onWake(0))
-        assertTrue(guard.onWake(10_000))
-        assertFalse(guard.onWake(20_000))
-        assertTrue(guard.onWake(30_000))
-        assertTrue(guard.onWake(200_000))
-        assertTrue(guard.onWake(300_000))
+        guard.sentBack(10_000)
+        assertTrue(guard.onWake(20_000))
+        guard.sentBack(30_000)
+        assertFalse(guard.onWake(40_000))
+        // Let through once; the next one waits again.
+        assertTrue(guard.onWake(500_000))
+    }
+
+    @Test
+    fun `a wake more than a minute after going back to sleep starts over`() {
+        val guard = WakeGuard()
+        assertTrue(guard.onWake(0))
+        guard.sentBack(10_000)
+        assertTrue(guard.onWake(20_000))
+        guard.sentBack(30_000)
+        assertTrue(guard.onWake(30_000 + WakeGuard.WINDOW_MS + 1))
+        guard.sentBack(200_000)
+        assertTrue(guard.onWake(210_000))
+        guard.sentBack(220_000)
+        assertFalse(guard.onWake(230_000))
+    }
+
+    @Test
+    fun `the way out also works with a wait of minutes`() {
+        val guard = WakeGuard()
+        val wait = 5 * LidPlan.MINUTE_MS
+        assertTrue(guard.onWake(0))
+        guard.sentBack(wait)
+        assertTrue(guard.onWake(wait + 5_000))
+        guard.sentBack(2 * wait + 5_000)
+        assertFalse(guard.onWake(2 * wait + 10_000))
+    }
+
+    @Test
+    fun `a reset forgets the wakes in a row`() {
+        val guard = WakeGuard()
+        guard.onWake(0)
+        guard.sentBack(1_000)
+        guard.onWake(2_000)
+        guard.sentBack(3_000)
+        guard.reset()
+        assertTrue(guard.onWake(4_000))
+    }
+
+    @Test
+    fun `the wait is shown in steps of its unit's slider`() {
+        assertEquals(listOf(5, 5, 10, 10, 60, 60), listOf(0, 7, 8, 10, 60, 99).map(WaitUnit.SECONDS::clamp))
+        assertEquals(listOf(1, 3, 15), listOf(0, 3, 20).map(WaitUnit.MINUTES::clamp))
+        assertEquals(10_000L, LidPlan.sleepWaitMs(LidChoices()))
+        assertEquals(3 * LidPlan.MINUTE_MS, LidPlan.sleepWaitMs(LidChoices(sleepWait = 3, sleepUnit = WaitUnit.MINUTES)))
+    }
+
+    @Test
+    fun `switching the unit keeps the wait as near as it can`() {
+        val tenSeconds = LidChoices(sleepWait = 10)
+        assertEquals(LidChoices(sleepWait = 1, sleepUnit = WaitUnit.MINUTES), LidPlan.withUnit(tenSeconds, WaitUnit.MINUTES))
+        val threeMinutes = LidChoices(sleepWait = 3, sleepUnit = WaitUnit.MINUTES)
+        assertEquals(LidChoices(sleepWait = 60), LidPlan.withUnit(threeMinutes, WaitUnit.SECONDS))
+        assertEquals(tenSeconds, LidPlan.withUnit(tenSeconds, WaitUnit.SECONDS))
+        assertEquals(WaitUnit.MINUTES, WaitUnit.byId(WaitUnit.MINUTES.id))
+        assertNull(WaitUnit.byId("x"))
     }
 
     @Test
@@ -105,46 +174,10 @@ class LidPlanTest {
     }
 
     @Test
-    fun `muting never touches the power key or the lid sensor`() {
-        val abs = ThorPad.parseAbs("30627")
-        val nodes = listOf(
-            InputNode("/dev/input/event0", "gpio-keys", 0, 0),
-            InputNode("/dev/input/event1", "pmic_pwrkey", 0, 0),
-            InputNode("/dev/input/event2", "pmic_resin", 0, 0),
-            InputNode("/dev/input/event3", "hall_switch", 0, 0),
-            InputNode("/dev/input/event5", "fts_ts_3", 0, 0),
-            InputNode("/dev/input/event6", "fts_ts", 0, 0),
-            InputNode("/dev/input/event9", "Xbox Wireless Controller", 0x2020, 0x0112, abs),
-        )
-        val all = MuteTargets.pick(nodes, InputGroup.entries.toSet()).map { it.name }
-        assertEquals(listOf("gpio-keys", "pmic_resin", "fts_ts_3", "fts_ts", "Xbox Wireless Controller"), all)
-        assertTrue(all.none { it in MuteTargets.NEVER })
-        assertEquals(listOf("Xbox Wireless Controller"), MuteTargets.pick(nodes, setOf(InputGroup.CONTROLLER)).map { it.name })
-        assertEquals("/sys/class/input/event9/device/inhibited", MuteTargets.inhibitedFile(nodes.last()))
-    }
-
-    @Test
-    fun `input groups travel as one argument`() {
-        val groups = setOf(InputGroup.TOUCH, InputGroup.BUTTONS)
-        assertEquals(groups, InputGroup.decode(InputGroup.encode(groups)))
-        assertEquals("-", InputGroup.encode(emptySet()))
-        assertEquals(emptySet<InputGroup>(), InputGroup.decode("-"))
-    }
-
-    @Test
     fun `the main menu counts the lid actions that are on`() {
         assertEquals(0, LidChoices().switchedOn)
-        assertEquals(3, LidChoices(wifiOff = true, muteTouch = true, backToSleep = true).switchedOn)
+        assertEquals(2, LidChoices(wifiOff = true, backToSleep = true).switchedOn)
         assertEquals(0, LidChoices(enabled = false, wifiOff = true).switchedOn)
-    }
-
-    @Test
-    fun `chosen apps keep the buttons on, the other mutes stay`() {
-        val choices = LidChoices(muteButtons = true, muteTouch = true, keepButtonsFor = setOf("music"))
-        assertEquals(setOf(InputGroup.TOUCH), LidPlan.mutes(choices, setOf("game", "music")))
-        assertEquals(setOf(InputGroup.BUTTONS, InputGroup.TOUCH), LidPlan.mutes(choices, setOf("game")))
-        assertEquals(setOf(InputGroup.BUTTONS, InputGroup.TOUCH), LidPlan.mutes(choices, emptySet()))
-        assertEquals(emptySet<InputGroup>(), LidPlan.mutes(choices.copy(enabled = false), setOf("game")))
     }
 
     @Test
@@ -154,25 +187,24 @@ class LidPlanTest {
         assertTrue(LidPlan.savingLater(wifi.copy(delayMinutes = 5), musicActive = false))
         assertTrue(LidPlan.savingLater(wifi.copy(notWhileMedia = true), musicActive = true))
         assertFalse(LidPlan.savingLater(wifi.copy(notWhileMedia = true), musicActive = false))
-        // Nothing to save, nothing to wait for: only the mutes, at once.
-        assertFalse(LidPlan.savingLater(LidChoices(muteTouch = true, delayMinutes = 5), musicActive = false))
+        // Nothing to save, nothing to wait for.
+        assertFalse(LidPlan.savingLater(LidChoices(backToSleep = true, delayMinutes = 5), musicActive = false))
         assertFalse(LidPlan.savingLater(wifi.copy(enabled = false, delayMinutes = 5), musicActive = false))
     }
 
     @Test
     fun `a waiting session changes nothing until its save power part runs`() {
-        val choices = LidChoices(wifiOff = true, muteTouch = true, delayMinutes = 5)
+        val choices = LidChoices(wifiOff = true, delayMinutes = 5)
         val waiting = LidPlan.session(choices, now, time = 1_000, pending = true)
-        assertEquals(LidSession(1_000, LidReadings(), setOf(InputGroup.TOUCH), pending = true), waiting)
-        assertEquals(emptyList<LidItem>(), LidPlan.notRestored(waiting, now.copy(wifi = false), mutedInputs = 0))
+        assertEquals(LidSession(1_000, LidReadings(), pending = true), waiting)
+        assertEquals(emptyList<LidItem>(), LidPlan.notRestored(waiting, now.copy(wifi = false)))
         assertEquals(1_000 + 5 * LidPlan.MINUTE_MS, LidPlan.savingDueAt(waiting, choices))
-        val done = LidPlan.savingDone(waiting, choices, now)
-        assertEquals(LidSession(1_000, LidReadings(wifi = true), setOf(InputGroup.TOUCH)), done)
+        assertEquals(LidSession(1_000, LidReadings(wifi = true)), LidPlan.savingDone(waiting, choices, now))
     }
 
     @Test
     fun `a waiting session survives being stored, and older ones read as done`() {
-        val waiting = LidSession(7, LidReadings(), setOf(InputGroup.BUTTONS), pending = true)
+        val waiting = LidSession(7, LidReadings(), pending = true)
         assertEquals(waiting, LidSession.decode(waiting.encode()))
         assertFalse(LidSession.decode("closed=7;perf=;fan=;wifi=1;bt=;air=;muted=-")!!.pending)
     }
