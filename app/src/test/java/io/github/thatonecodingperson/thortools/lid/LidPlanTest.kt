@@ -7,73 +7,82 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LidPlanTest {
-    private val now = LidReadings(performance = 2, fan = 4, wifi = true, bluetooth = true, airplane = false)
+    private val bothOn = Radios(wifi = true, bluetooth = true)
 
     @Test
-    fun `nothing is chosen by default, so nothing happens`() {
-        assertFalse(LidChoices().active)
-        assertEquals(LidSession(5, LidReadings()), LidPlan.session(LidChoices(), now, time = 5))
+    fun `the lid is read from the kernel's switch mask`() {
+        assertEquals(true, LidPlan.lidClosed("0001"))
+        assertEquals(false, LidPlan.lidClosed("0000"))
+        assertEquals(true, LidPlan.lidClosed("0003\n"))
+        assertEquals(false, LidPlan.lidClosed("0002"))
+        assertEquals(true, LidPlan.lidClosed("could not get something\n0001"))
+        assertNull(LidPlan.lidClosed(""))
+        assertNull(LidPlan.lidClosed("add"))
+        assertNull(LidPlan.lidClosed("getevent: No such file"))
+        assertNull(LidPlan.lidClosed(null))
     }
 
     @Test
-    fun `power saving saves the modes in place and sets the lowest ones`() {
-        val choices = LidChoices(powerSaving = true)
-        assertEquals(LidReadings(performance = 0, fan = 1), LidPlan.closedTargets(choices))
-        assertEquals(LidReadings(performance = 2, fan = 4), LidPlan.session(choices, now, time = 1).restore)
+    fun `the lid command finds the sensor by name and asks the kernel`() {
+        assertTrue("hall_switch" in LidPlan.LID_STATE)
+        assertTrue("getevent -S" in LidPlan.LID_STATE)
+        assertFalse("dumpsys" in LidPlan.LID_STATE)
     }
 
     @Test
-    fun `a value already as wanted, or unread, is left alone and not restored`() {
-        val choices = LidChoices(powerSaving = true, wifiOff = true, bluetoothOff = true)
-        val readings = LidReadings(performance = 0, fan = null, wifi = false, bluetooth = true)
-        assertEquals(LidReadings(bluetooth = true), LidPlan.session(choices, readings, time = 1).restore)
+    fun `closing turns off only the chosen radios that are on`() {
+        assertEquals(emptySet<LidItem>(), LidPlan.toTurnOff(LidChoices(), bothOn))
+        assertEquals(setOf(LidItem.WIFI, LidItem.BLUETOOTH), LidPlan.toTurnOff(LidChoices(wifiOff = true, bluetoothOff = true), bothOn))
+        assertEquals(setOf(LidItem.BLUETOOTH), LidPlan.toTurnOff(LidChoices(bluetoothOff = true), bothOn))
+        val wifiAlreadyOff = Radios(wifi = false, bluetooth = true)
+        assertEquals(setOf(LidItem.BLUETOOTH), LidPlan.toTurnOff(LidChoices(wifiOff = true, bluetoothOff = true), wifiAlreadyOff))
+        val unread = Radios(wifi = null, bluetooth = null)
+        assertEquals(emptySet<LidItem>(), LidPlan.toTurnOff(LidChoices(wifiOff = true, bluetoothOff = true), unread))
     }
 
     @Test
-    fun `radios and airplane mode are saved to be put back`() {
-        val choices = LidChoices(wifiOff = true, bluetoothOff = true, airplane = true)
-        assertEquals(LidReadings(wifi = true, bluetooth = true, airplane = false), LidPlan.session(choices, now, time = 1).restore)
-    }
-
-    @Test
-    fun `back to sleep alone is something to do, and the master switch turns everything off`() {
-        val choices = LidChoices(backToSleep = true)
-        assertTrue(choices.active)
-        assertFalse(choices.copy(enabled = false).active)
+    fun `opening checks that what was turned off is back on`() {
+        val session = LidSession(1, setOf(LidItem.WIFI, LidItem.BLUETOOTH))
+        assertEquals(emptyList<LidItem>(), LidPlan.notBack(session, bothOn))
+        assertEquals(listOf(LidItem.BLUETOOTH), LidPlan.notBack(session, Radios(wifi = true, bluetooth = false)))
+        assertEquals(listOf(LidItem.WIFI, LidItem.BLUETOOTH), LidPlan.notBack(session, Radios(wifi = null, bluetooth = null)))
+        // Only what the closing turned off has to come back.
+        assertEquals(emptyList<LidItem>(), LidPlan.notBack(LidSession(1, setOf(LidItem.WIFI)), Radios(wifi = true, bluetooth = false)))
     }
 
     @Test
     fun `the session survives being stored`() {
-        val session = LidPlan.session(LidChoices(powerSaving = true, wifiOff = true), now, time = 1234)
+        val session = LidSession(1234, setOf(LidItem.WIFI))
         assertEquals(session, LidSession.decode(session.encode()))
-        val empty = LidSession(9, LidReadings())
-        assertEquals(empty, LidSession.decode(empty.encode()))
+        val nothing = LidSession(9, emptySet())
+        assertEquals(nothing, LidSession.decode(nothing.encode()))
         assertNull(LidSession.decode(null))
-        assertNull(LidSession.decode("perf=1"))
+        assertNull(LidSession.decode("wifi=1"))
     }
 
     @Test
-    fun `a stored session that still lists muted inputs reads without them`() {
-        val stored = "closed=7;perf=2;fan=;wifi=1;bt=;air=;muted=buttons,controller;pending=0"
-        assertEquals(LidSession(7, LidReadings(performance = 2, wifi = true)), LidSession.decode(stored))
-    }
-
-    @Test
-    fun `opening the lid checks every saved value came back`() {
-        val session = LidPlan.session(LidChoices(powerSaving = true, wifiOff = true), now, time = 1)
-        assertEquals(emptyList<LidItem>(), LidPlan.notRestored(session, now))
-        assertEquals(listOf(LidItem.WIFI), LidPlan.notRestored(session, now.copy(wifi = false)))
-        assertEquals(listOf(LidItem.PERFORMANCE, LidItem.FAN, LidItem.WIFI), LidPlan.notRestored(session, LidReadings()))
+    fun `an older stored session reads as what it turned off`() {
+        val older = "closed=7;perf=2;fan=4;wifi=1;bt=;air=0;muted=controller;pending=0"
+        assertEquals(LidSession(7, setOf(LidItem.WIFI)), LidSession.decode(older))
+        assertEquals(OldLidChanges(performance = 2, fan = 4, airplane = false), OldLidChanges.decode(older))
+        assertNull(OldLidChanges.decode("closed=7;perf=;fan=;wifi=1;bt=1;air=;pending=1"))
+        assertNull(OldLidChanges.decode(LidSession(7, setOf(LidItem.WIFI)).encode()))
+        assertNull(OldLidChanges.decode(null))
     }
 
     @Test
     fun `the last result survives being stored, older ones too`() {
-        val result = LidResult(closedAt = 10, openedAt = 20, notRestored = listOf(LidItem.WIFI, LidItem.FAN), sentBack = 3)
+        val result = LidResult(closedAt = 10, openedAt = 20, notBack = listOf(LidItem.WIFI), sentBack = 3)
         assertEquals(result, LidResult.decode(result.encode()))
-        val clean = LidResult(closedAt = 10, openedAt = 20, notRestored = emptyList())
+        val clean = LidResult(closedAt = 10, openedAt = 20, notBack = emptyList())
         assertEquals(clean, LidResult.decode(clean.encode()))
-        assertEquals(LidResult(10, 20, listOf(LidItem.WIFI)), LidResult.decode("10;20;WIFI,INPUTS"))
+        assertEquals(LidResult(10, 20, listOf(LidItem.BLUETOOTH)), LidResult.decode("10;20;FAN,BLUETOOTH,INPUTS"))
         assertNull(LidResult.decode("10;20"))
+    }
+
+    @Test
+    fun `Wi-Fi and Bluetooth count as on also while kept on in airplane mode`() {
+        assertEquals(listOf(false, true, true, false, null), listOf(0, 1, 2, 3, null).map(LidPlan::radioOn))
     }
 
     @Test
@@ -122,7 +131,7 @@ class LidPlanTest {
     @Test
     fun `the way out also works with a wait of minutes`() {
         val guard = WakeGuard()
-        val wait = 5 * LidPlan.MINUTE_MS
+        val wait = 5 * 60_000L
         assertTrue(guard.onWake(0))
         guard.sentBack(wait)
         assertTrue(guard.onWake(wait + 5_000))
@@ -146,7 +155,7 @@ class LidPlanTest {
         assertEquals(listOf(5, 5, 10, 10, 60, 60), listOf(0, 7, 8, 10, 60, 99).map(WaitUnit.SECONDS::clamp))
         assertEquals(listOf(1, 3, 15), listOf(0, 3, 20).map(WaitUnit.MINUTES::clamp))
         assertEquals(10_000L, LidPlan.sleepWaitMs(LidChoices()))
-        assertEquals(3 * LidPlan.MINUTE_MS, LidPlan.sleepWaitMs(LidChoices(sleepWait = 3, sleepUnit = WaitUnit.MINUTES)))
+        assertEquals(3 * 60_000L, LidPlan.sleepWaitMs(LidChoices(sleepWait = 3, sleepUnit = WaitUnit.MINUTES)))
     }
 
     @Test
@@ -161,51 +170,9 @@ class LidPlanTest {
     }
 
     @Test
-    fun `Wi-Fi and Bluetooth count as on also while kept on in airplane mode`() {
-        assertEquals(listOf(false, true, true, false, null), listOf(0, 1, 2, 3, null).map(LidPlan::radioOn))
-    }
-
-    @Test
-    fun `the lid state is read from Android's window dump`() {
-        assertEquals(true, LidPlan.lidClosed("mLidState=LID_ABSENT\n  mLidState=LID_CLOSED"))
-        assertEquals(false, LidPlan.lidClosed("mDockMode=X mLidState=LID_ABSENT\nmDockMode=X mLidState=LID_OPEN"))
-        assertNull(LidPlan.lidClosed("mLidState=LID_ABSENT"))
-        assertNull(LidPlan.lidClosed(null))
-    }
-
-    @Test
-    fun `the main menu counts the lid actions that are on`() {
+    fun `the main menu counts the lid switches that are on`() {
         assertEquals(0, LidChoices().switchedOn)
         assertEquals(2, LidChoices(wifiOff = true, backToSleep = true).switchedOn)
-        assertEquals(0, LidChoices(enabled = false, wifiOff = true).switchedOn)
-    }
-
-    @Test
-    fun `save power runs later after a delay, or while media plays when asked`() {
-        val wifi = LidChoices(wifiOff = true)
-        assertFalse(LidPlan.savingLater(wifi, musicActive = true))
-        assertTrue(LidPlan.savingLater(wifi.copy(delayMinutes = 5), musicActive = false))
-        assertTrue(LidPlan.savingLater(wifi.copy(notWhileMedia = true), musicActive = true))
-        assertFalse(LidPlan.savingLater(wifi.copy(notWhileMedia = true), musicActive = false))
-        // Nothing to save, nothing to wait for.
-        assertFalse(LidPlan.savingLater(LidChoices(backToSleep = true, delayMinutes = 5), musicActive = false))
-        assertFalse(LidPlan.savingLater(wifi.copy(enabled = false, delayMinutes = 5), musicActive = false))
-    }
-
-    @Test
-    fun `a waiting session changes nothing until its save power part runs`() {
-        val choices = LidChoices(wifiOff = true, delayMinutes = 5)
-        val waiting = LidPlan.session(choices, now, time = 1_000, pending = true)
-        assertEquals(LidSession(1_000, LidReadings(), pending = true), waiting)
-        assertEquals(emptyList<LidItem>(), LidPlan.notRestored(waiting, now.copy(wifi = false)))
-        assertEquals(1_000 + 5 * LidPlan.MINUTE_MS, LidPlan.savingDueAt(waiting, choices))
-        assertEquals(LidSession(1_000, LidReadings(wifi = true)), LidPlan.savingDone(waiting, choices, now))
-    }
-
-    @Test
-    fun `a waiting session survives being stored, and older ones read as done`() {
-        val waiting = LidSession(7, LidReadings(), pending = true)
-        assertEquals(waiting, LidSession.decode(waiting.encode()))
-        assertFalse(LidSession.decode("closed=7;perf=;fan=;wifi=1;bt=;air=;muted=-")!!.pending)
+        assertEquals(3, LidChoices(wifiOff = true, bluetoothOff = true, backToSleep = true).switchedOn)
     }
 }

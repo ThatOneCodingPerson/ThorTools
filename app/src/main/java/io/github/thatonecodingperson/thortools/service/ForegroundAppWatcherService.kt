@@ -29,7 +29,6 @@ import io.github.thatonecodingperson.thortools.actions.CloseTarget
 import io.github.thatonecodingperson.thortools.actions.DisplayHome
 import io.github.thatonecodingperson.thortools.actions.FeedbackCue
 import io.github.thatonecodingperson.thortools.actions.StayAwake
-import io.github.thatonecodingperson.thortools.actions.ThorAction
 import io.github.thatonecodingperson.thortools.charging.ChargeMonitor
 import io.github.thatonecodingperson.thortools.coexist.OdinToolsDetector
 import io.github.thatonecodingperson.thortools.coexist.Overlap
@@ -920,9 +919,8 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
             context = this,
             executor = executor,
             prefs = prefs,
-            closeBackground = { actionRunner.run(ActionCall(ThorAction.CLEAR_BACKGROUND)) },
             sleepNow = { performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN) },
-            notRestored = { items -> lidNote.show(LidText.notRestored(this, items), Display.DEFAULT_DISPLAY) },
+            notBack = { items -> lidNote.show(LidText.notBack(this, items), Display.DEFAULT_DISPLAY) },
         )
         systemPress = SystemPress(
             service = this,

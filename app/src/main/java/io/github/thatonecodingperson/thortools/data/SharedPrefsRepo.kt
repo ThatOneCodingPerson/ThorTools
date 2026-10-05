@@ -12,9 +12,9 @@ import io.github.thatonecodingperson.thortools.hotkeys.Hotkey
 import io.github.thatonecodingperson.thortools.hotkeys.HotkeyList
 import io.github.thatonecodingperson.thortools.leds.LedLook
 import io.github.thatonecodingperson.thortools.lid.LidChoices
-import io.github.thatonecodingperson.thortools.lid.LidPlan
 import io.github.thatonecodingperson.thortools.lid.LidResult
 import io.github.thatonecodingperson.thortools.lid.LidSession
+import io.github.thatonecodingperson.thortools.lid.OldLidChanges
 import io.github.thatonecodingperson.thortools.lid.WaitUnit
 import io.github.thatonecodingperson.thortools.models.ControllerStyle
 import io.github.thatonecodingperson.thortools.models.L2R2Style
@@ -256,52 +256,52 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
         get() = prefs.getBoolean(KEY_SETUP_DONE, false)
         set(value) = prefs.edit().putBoolean(KEY_SETUP_DONE, value).apply()
 
-    /** The lid sandbox's switches; all off by default. */
+    /** What happens when the lid closes; all off by default. */
     var lidChoices: LidChoices
         get() {
             val unit = WaitUnit.byId(prefs.getString(KEY_LID_SLEEP_UNIT, null)) ?: WaitUnit.SECONDS
             return LidChoices(
-                enabled = prefs.getBoolean(KEY_LID_ENABLED, true),
-                powerSaving = prefs.getBoolean(KEY_LID_POWER_SAVING, false),
-                closeBackground = prefs.getBoolean(KEY_LID_CLOSE_BACKGROUND, false),
-                pauseMedia = prefs.getBoolean(KEY_LID_PAUSE_MEDIA, false),
                 wifiOff = prefs.getBoolean(KEY_LID_WIFI_OFF, false),
                 bluetoothOff = prefs.getBoolean(KEY_LID_BLUETOOTH_OFF, false),
-                airplane = prefs.getBoolean(KEY_LID_AIRPLANE, false),
                 backToSleep = prefs.getBoolean(KEY_LID_BACK_TO_SLEEP, false),
                 sleepWait = unit.clamp(prefs.getInt(KEY_LID_SLEEP_WAIT, unit.default)),
                 sleepUnit = unit,
-                delayMinutes = prefs.getInt(KEY_LID_DELAY, 0).takeIf { it in LidPlan.DELAYS } ?: 0,
-                notWhileMedia = prefs.getBoolean(KEY_LID_NOT_WHILE_MEDIA, false),
             )
         }
         set(value) = prefs.edit()
-            .putBoolean(KEY_LID_ENABLED, value.enabled)
-            .putBoolean(KEY_LID_POWER_SAVING, value.powerSaving)
-            .putBoolean(KEY_LID_CLOSE_BACKGROUND, value.closeBackground)
-            .putBoolean(KEY_LID_PAUSE_MEDIA, value.pauseMedia)
             .putBoolean(KEY_LID_WIFI_OFF, value.wifiOff)
             .putBoolean(KEY_LID_BLUETOOTH_OFF, value.bluetoothOff)
-            .putBoolean(KEY_LID_AIRPLANE, value.airplane)
             .putBoolean(KEY_LID_BACK_TO_SLEEP, value.backToSleep)
             .putInt(KEY_LID_SLEEP_WAIT, value.sleepWait)
             .putString(KEY_LID_SLEEP_UNIT, value.sleepUnit.id)
-            .putInt(KEY_LID_DELAY, value.delayMinutes)
-            .putBoolean(KEY_LID_NOT_WHILE_MEDIA, value.notWhileMedia)
             .apply()
 
-    /** Input devices left muted through the kernel were looked for and unmuted; the keys of gone switches are dropped then. */
+    /**
+     * Drops the keys of lid switches that are gone. Their master switch, when it was off, turned everything off, so then
+     * the three that are left go off too. Nothing happens once the keys are gone.
+     */
+    fun forgetOldLidSwitches() {
+        if (OLD_LID_KEYS.none(prefs::contains)) return
+        val edit = prefs.edit()
+        if (!prefs.getBoolean(KEY_LID_ENABLED, true)) {
+            edit.putBoolean(KEY_LID_WIFI_OFF, false).putBoolean(KEY_LID_BLUETOOTH_OFF, false).putBoolean(KEY_LID_BACK_TO_SLEEP, false)
+        }
+        OLD_LID_KEYS.forEach(edit::remove)
+        edit.commit()
+    }
+
+    /** Input devices left muted through the kernel were looked for and unmuted. */
     var lidMutesCleared: Boolean
         get() = prefs.getBoolean(KEY_LID_MUTES_CLEARED, false)
-        set(value) {
-            val edit = prefs.edit().putBoolean(KEY_LID_MUTES_CLEARED, value)
-            OLD_LID_KEYS.forEach(edit::remove)
-            edit.apply()
-        }
+        set(value) = prefs.edit().putBoolean(KEY_LID_MUTES_CLEARED, value).apply()
+
+    /** Performance, fan and airplane mode a stored session still has to put back; null when it has none. */
+    val oldLidChanges: OldLidChanges?
+        get() = OldLidChanges.decode(prefs.getString(KEY_LID_SESSION, null))
 
     /**
-     * What a closed lid changed and must put back. Written with `commit` before anything changes, so it survives a
-     * crash or a reboot; null once the lid opened and everything was put back.
+     * What a closed lid turned off and must turn back on. Written with `commit` before anything changes, so it survives a
+     * crash or a reboot; null once the lid opened and it was turned back on.
      */
     var lidSession: LidSession?
         get() = LidSession.decode(prefs.getString(KEY_LID_SESSION, null))
@@ -436,20 +436,17 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
         private const val KEY_WII_SUGGESTIONS = "wii_suggestions"
         private const val KEY_LED_AYN_SAVED = "led_ayn_saved"
         private const val KEY_DEBUG_REPORT_FILE = "debug_report_file"
-        private const val KEY_LID_ENABLED = "lid_enabled"
-        private const val KEY_LID_POWER_SAVING = "lid_power_saving"
-        private const val KEY_LID_CLOSE_BACKGROUND = "lid_close_background"
-        private const val KEY_LID_PAUSE_MEDIA = "lid_pause_media"
         private const val KEY_LID_WIFI_OFF = "lid_wifi_off"
         private const val KEY_LID_BLUETOOTH_OFF = "lid_bluetooth_off"
-        private const val KEY_LID_AIRPLANE = "lid_airplane"
         private const val KEY_LID_BACK_TO_SLEEP = "lid_back_to_sleep"
         private const val KEY_LID_SLEEP_WAIT = "lid_sleep_wait"
         private const val KEY_LID_SLEEP_UNIT = "lid_sleep_unit"
-        private const val KEY_LID_DELAY = "lid_delay_minutes"
-        private const val KEY_LID_NOT_WHILE_MEDIA = "lid_not_while_media"
         private const val KEY_LID_MUTES_CLEARED = "lid_mutes_cleared"
-        private val OLD_LID_KEYS = listOf("lid_mute_buttons", "lid_mute_controller", "lid_mute_touch", "lid_keep_buttons_for")
+        private const val KEY_LID_ENABLED = "lid_enabled"
+        private val OLD_LID_KEYS = listOf(
+            KEY_LID_ENABLED, "lid_power_saving", "lid_close_background", "lid_pause_media", "lid_airplane", "lid_delay_minutes",
+            "lid_not_while_media", "lid_mute_buttons", "lid_mute_controller", "lid_mute_touch", "lid_keep_buttons_for",
+        )
         private const val KEY_LID_SESSION = "lid_session"
         private const val KEY_LID_LAST = "lid_last_result"
         private const val KEY_CUSTOM_PALETTES = "custom_palettes"

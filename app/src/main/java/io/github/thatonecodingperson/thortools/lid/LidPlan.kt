@@ -19,141 +19,107 @@ enum class WaitUnit(val id: String, val ms: Long, val range: IntRange, val step:
     }
 }
 
-/** What happens when the lid closes: every part is its own switch, all off by default; [enabled] turns them all off. */
+/** What happens when the lid closes; everything is off by default. */
 data class LidChoices(
-    val enabled: Boolean = true,
-    val powerSaving: Boolean = false,
-    val closeBackground: Boolean = false,
-    val pauseMedia: Boolean = false,
     val wifiOff: Boolean = false,
     val bluetoothOff: Boolean = false,
-    val airplane: Boolean = false,
     val backToSleep: Boolean = false,
     /** How long a wake with the lid closed lasts before it goes back to sleep, in [sleepUnit]s. */
     val sleepWait: Int = WaitUnit.SECONDS.default,
     val sleepUnit: WaitUnit = WaitUnit.SECONDS,
-    /** Minutes after closing before the Save power part runs, one of [LidPlan.DELAYS]. */
-    val delayMinutes: Int = 0,
-    /** While media plays, the Save power part waits until it stops. */
-    val notWhileMedia: Boolean = false,
 ) {
-    /** Any of the Save power part is on. */
-    val savesPower: Boolean
-        get() = powerSaving || closeBackground || pauseMedia || wifiOff || bluetoothOff || airplane
-
-    /** How many actions happen when the lid closes (none while [enabled] is off). */
+    /** How many of the three are on, for the main menu. */
     val switchedOn: Int
-        get() = if (!enabled) {
-            0
-        } else {
-            listOf(powerSaving, closeBackground, pauseMedia, wifiOff, bluetoothOff, airplane, backToSleep).count { it }
-        }
-
-    /** Anything at all happens when the lid closes. */
-    val active: Boolean
-        get() = enabled && (savesPower || backToSleep)
+        get() = listOf(wifiOff, bluetoothOff, backToSleep).count { it }
 }
 
-/** The values the lid actions change, as read at one moment; null: not read (or not to be changed). */
-data class LidReadings(
-    val performance: Int? = null,
-    val fan: Int? = null,
-    val wifi: Boolean? = null,
-    val bluetooth: Boolean? = null,
-    val airplane: Boolean? = null,
-)
+/** A radio the lid turns off while it is closed. */
+enum class LidItem { WIFI, BLUETOOTH }
 
-/** One thing a closed lid changes, for saying what couldn't be put back. */
-enum class LidItem { PERFORMANCE, FAN, WIFI, BLUETOOTH, AIRPLANE }
+/** Whether Wi-Fi and Bluetooth are on, as read at one moment; null: couldn't be read. */
+data class Radios(val wifi: Boolean?, val bluetooth: Boolean?)
 
 /**
- * What a closed lid changed: [restore] holds the values to put back when it opens (null where nothing changed);
- * [pending] while the Save power part hasn't run yet (a delay, or media playing). Saved before anything changes, so a
- * crash or a reboot can't lose it.
+ * One closing of the lid: when, and which radios it turned off (to turn back on when it opens). Saved before anything
+ * is turned off, so a crash or a reboot can't lose it.
  */
-data class LidSession(val closedAt: Long, val restore: LidReadings, val pending: Boolean = false) {
-    fun encode(): String = listOf(
-        "closed=$closedAt",
-        "perf=${restore.performance ?: ""}",
-        "fan=${restore.fan ?: ""}",
-        "wifi=${restore.wifi.flag()}",
-        "bt=${restore.bluetooth.flag()}",
-        "air=${restore.airplane.flag()}",
-        "pending=${if (pending) 1 else 0}",
-    ).joinToString(";")
+data class LidSession(val closedAt: Long, val turnedOff: Set<LidItem>) {
+    fun encode(): String = "closed=$closedAt;wifi=${flag(LidItem.WIFI)};bt=${flag(LidItem.BLUETOOTH)}"
+
+    private fun flag(item: LidItem): String = if (item in turnedOff) "1" else "0"
 
     companion object {
         fun decode(text: String?): LidSession? {
-            val fields = text?.split(';')?.mapNotNull { part -> part.split('=', limit = 2).takeIf { it.size == 2 } }
-                ?.associate { (key, value) -> key to value } ?: return null
+            val fields = fields(text) ?: return null
             val closedAt = fields["closed"]?.toLongOrNull() ?: return null
             return LidSession(
-                closedAt = closedAt,
-                restore = LidReadings(
-                    performance = fields["perf"]?.toIntOrNull(),
-                    fan = fields["fan"]?.toIntOrNull(),
-                    wifi = fields["wifi"].bool(),
-                    bluetooth = fields["bt"].bool(),
-                    airplane = fields["air"].bool(),
-                ),
-                pending = fields["pending"] == "1",
+                closedAt,
+                setOfNotNull(LidItem.WIFI.takeIf { fields["wifi"] == "1" }, LidItem.BLUETOOTH.takeIf { fields["bt"] == "1" }),
             )
         }
 
-        private fun Boolean?.flag(): String = when (this) {
-            true -> "1"
-            false -> "0"
-            null -> ""
-        }
+        internal fun fields(text: String?): Map<String, String>? = text
+            ?.split(';')
+            ?.mapNotNull { part -> part.split('=', limit = 2).takeIf { it.size == 2 } }
+            ?.associate { (key, value) -> key to value }
+    }
+}
 
-        private fun String?.bool(): Boolean? = when (this) {
-            "1" -> true
-            "0" -> false
-            else -> null
+/** Performance, fan and airplane mode as a closing saved them to put back, where a stored session still has them. */
+data class OldLidChanges(val performance: Int?, val fan: Int?, val airplane: Boolean?) {
+    val any: Boolean
+        get() = performance != null || fan != null || airplane != null
+
+    companion object {
+        fun decode(text: String?): OldLidChanges? {
+            val fields = LidSession.fields(text) ?: return null
+            return OldLidChanges(
+                performance = fields["perf"]?.toIntOrNull(),
+                fan = fields["fan"]?.toIntOrNull(),
+                airplane = when (fields["air"]) {
+                    "1" -> true
+                    "0" -> false
+                    else -> null
+                },
+            ).takeIf { it.any }
         }
     }
 }
 
-/** The lid sandbox's rules. Pure. */
+/** The lid's rules. Pure. */
 object LidPlan {
-    /** Power-saving mode: AYN's lowest performance mode and the quiet fan. (The refresh rate means nothing with both screens off.) */
-    const val SAVING_PERFORMANCE = 0
-    const val SAVING_FAN = 1
-
-    /** The choices for how long after closing the Save power part runs, in minutes. */
-    val DELAYS = listOf(0, 1, 5, 15)
-    const val MINUTE_MS = 60_000L
-
-    /** The values the lid sets while closed; null where a choice leaves a value alone. */
-    fun closedTargets(choices: LidChoices): LidReadings = LidReadings(
-        performance = SAVING_PERFORMANCE.takeIf { choices.powerSaving },
-        fan = SAVING_FAN.takeIf { choices.powerSaving },
-        wifi = false.takeIf { choices.wifiOff },
-        bluetooth = false.takeIf { choices.bluetoothOff },
-        airplane = true.takeIf { choices.airplane },
-    )
+    /**
+     * Root shell: the lid sensor's switch states (`getevent -S`), its node found by name because the numbers change.
+     * The kernel's word, unlike `dumpsys window`, whose saved last-ANR copy can hold a lid state from long ago.
+     */
+    const val LID_STATE =
+        "for d in /sys/class/input/event*; do [ \"\$(cat \$d/device/name)\" = hall_switch ] && getevent -S /dev/input/\${d##*/}; done"
 
     /**
-     * The session for closing the lid with [choices] while [now] is in place: for every value the lid will change, the
-     * value to put back. A value that is already as wanted, or that couldn't be read, is left alone. A [pending] session
-     * changes nothing yet: its Save power part comes later ([savingDone]).
+     * Whether the lid is closed, from `getevent -S <hall_switch node>`: the kernel's switch states as a hex mask, bit 0
+     * (`SW_LID`) set while closed. Null when the output holds no mask (the sensor or the shell wasn't there).
      */
-    fun session(choices: LidChoices, now: LidReadings, time: Long, pending: Boolean = false): LidSession =
-        LidSession(closedAt = time, restore = if (pending) LidReadings() else restoreFor(choices, now), pending = pending)
+    fun lidClosed(switchStates: String?): Boolean? {
+        val mask = switchStates?.lineSequence()?.map { it.trim() }?.lastOrNull { MASK.matches(it) } ?: return null
+        return mask.toLong(16) and 1L != 0L
+    }
 
-    /** [session] once its Save power part runs while [now] is in place. */
-    fun savingDone(session: LidSession, choices: LidChoices, now: LidReadings): LidSession =
-        session.copy(restore = restoreFor(choices, now), pending = false)
+    private val MASK = Regex("[0-9a-fA-F]{4,16}")
 
-    /** The Save power part waits while media plays, when asked to. */
-    fun savingWaits(choices: LidChoices, musicActive: Boolean): Boolean = choices.notWhileMedia && musicActive
+    /** The radios closing the lid turns off: chosen, and on right now. One that couldn't be read is left alone. */
+    fun toTurnOff(choices: LidChoices, now: Radios): Set<LidItem> = setOfNotNull(
+        LidItem.WIFI.takeIf { choices.wifiOff && now.wifi == true },
+        LidItem.BLUETOOTH.takeIf { choices.bluetoothOff && now.bluetooth == true },
+    )
 
-    /** The Save power part runs later instead of at closing: after a delay, or once media stops. */
-    fun savingLater(choices: LidChoices, musicActive: Boolean): Boolean =
-        choices.enabled && choices.savesPower && (choices.delayMinutes > 0 || savingWaits(choices, musicActive))
+    /** The radios [session] turned off that aren't back on [now] (one that couldn't be read counts as not back). */
+    fun notBack(session: LidSession, now: Radios): List<LidItem> = listOfNotNull(
+        LidItem.WIFI.takeIf { it in session.turnedOff && now.wifi != true },
+        LidItem.BLUETOOTH.takeIf { it in session.turnedOff && now.bluetooth != true },
+    )
 
-    /** When a later Save power part is first due (wall clock); while media plays it is checked again every minute. */
-    fun savingDueAt(session: LidSession, choices: LidChoices): Long = session.closedAt + choices.delayMinutes * MINUTE_MS
+    /** Android's own on/off for Wi-Fi and Bluetooth (`wifi_on`, `bluetooth_on`): 1 is on, 2 is on in airplane mode. */
+    fun radioOn(setting: Int?): Boolean? = setting?.let { it == 1 || it == 2 }
 
     /** How long a wake with the lid closed lasts before Back to sleep acts. */
     fun sleepWaitMs(choices: LidChoices): Long = choices.sleepUnit.clamp(choices.sleepWait) * choices.sleepUnit.ms
@@ -167,55 +133,19 @@ object LidPlan {
 
     /**
      * Whether a wake with the lid closed goes back to sleep once its wait is over: only while the screen is still on,
-     * Android says the lid is closed ([lidClosed] null counts as open), the helper hasn't seen it open, and the Thor
-     * isn't [docked] (in use on an external display with its lid closed).
+     * the lid sensor says closed ([lidClosed] null counts as open), the helper hasn't seen it open, and the Thor isn't
+     * [docked] (in use on an external display with its lid closed).
      */
     fun backToSleep(lidClosed: Boolean?, helperSaysOpen: Boolean, screenOn: Boolean, docked: Boolean): Boolean =
         screenOn && lidClosed == true && !helperSaysOpen && !docked
 
     /** An external display is connected: the Thor's bottom screen is one of the [publicDisplays] besides the top one. */
     fun docked(publicDisplays: Int): Boolean = publicDisplays > 1
-
-    private fun restoreFor(choices: LidChoices, now: LidReadings): LidReadings {
-        val target = closedTargets(choices)
-        return LidReadings(
-            performance = back(target.performance, now.performance),
-            fan = back(target.fan, now.fan),
-            wifi = back(target.wifi, now.wifi),
-            bluetooth = back(target.bluetooth, now.bluetooth),
-            airplane = back(target.airplane, now.airplane),
-        )
-    }
-
-    /** What isn't back yet after opening the lid: every saved value [now] differs from (unknown counts as not back). */
-    fun notRestored(session: LidSession, now: LidReadings): List<LidItem> {
-        val wanted = session.restore
-        return listOfNotNull(
-            LidItem.PERFORMANCE.takeIf { wanted.performance != null && now.performance != wanted.performance },
-            LidItem.FAN.takeIf { wanted.fan != null && now.fan != wanted.fan },
-            LidItem.WIFI.takeIf { wanted.wifi != null && now.wifi != wanted.wifi },
-            LidItem.BLUETOOTH.takeIf { wanted.bluetooth != null && now.bluetooth != wanted.bluetooth },
-            LidItem.AIRPLANE.takeIf { wanted.airplane != null && now.airplane != wanted.airplane },
-        )
-    }
-
-    /** Android's own on/off for Wi-Fi and Bluetooth (`wifi_on`, `bluetooth_on`): 1 is on, 2 is on in airplane mode. */
-    fun radioOn(setting: Int?): Boolean? = setting?.let { it == 1 || it == 2 }
-
-    /** Whether the lid is closed, from root `dumpsys window` (`mLidState=LID_CLOSED|LID_OPEN`); null when it doesn't say. */
-    fun lidClosed(dump: String?): Boolean? = when {
-        dump == null -> null
-        "mLidState=LID_CLOSED" in dump -> true
-        "mLidState=LID_OPEN" in dump -> false
-        else -> null
-    }
-
-    private fun <T> back(target: T?, current: T?): T? = if (target != null && current != null && target != current) current else null
 }
 
-/** How the last closing went: when the lid closed and opened, what couldn't be put back, how often it went back to sleep. */
-data class LidResult(val closedAt: Long, val openedAt: Long, val notRestored: List<LidItem>, val sentBack: Int = 0) {
-    fun encode(): String = "$closedAt;$openedAt;${notRestored.joinToString(",") { it.name }};$sentBack"
+/** How the last closing went: when the lid closed and opened, what didn't come back on, how often it went back to sleep. */
+data class LidResult(val closedAt: Long, val openedAt: Long, val notBack: List<LidItem>, val sentBack: Int = 0) {
+    fun encode(): String = "$closedAt;$openedAt;${notBack.joinToString(",") { it.name }};$sentBack"
 
     companion object {
         fun decode(text: String?): LidResult? {
@@ -223,7 +153,7 @@ data class LidResult(val closedAt: Long, val openedAt: Long, val notRestored: Li
             return LidResult(
                 closedAt = parts[0].toLongOrNull() ?: return null,
                 openedAt = parts[1].toLongOrNull() ?: return null,
-                notRestored = parts[2].split(',').mapNotNull { name -> LidItem.entries.find { it.name == name } },
+                notBack = parts[2].split(',').mapNotNull { name -> LidItem.entries.find { it.name == name } },
                 sentBack = parts.getOrNull(3)?.toIntOrNull() ?: 0,
             )
         }

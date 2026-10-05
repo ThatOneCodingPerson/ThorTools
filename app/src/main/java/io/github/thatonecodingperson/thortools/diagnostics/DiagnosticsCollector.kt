@@ -12,6 +12,7 @@ import io.github.thatonecodingperson.thortools.BuildConfig
 import io.github.thatonecodingperson.thortools.coexist.OdinToolsDetector
 import io.github.thatonecodingperson.thortools.data.SharedPrefsRepo
 import io.github.thatonecodingperson.thortools.hotkeys.HotkeyList
+import io.github.thatonecodingperson.thortools.lid.LidPlan
 import io.github.thatonecodingperson.thortools.service.ServiceStatus
 import io.github.thatonecodingperson.thortools.setup.AccessChecker
 import io.github.thatonecodingperson.thortools.tools.DeviceUtils
@@ -89,6 +90,7 @@ class DiagnosticsCollector @Inject constructor(
         section("Quick panel (stored form)") { appendLine(prefs.panelLayout.encode()) }
         section("Lid") {
             appendLine("choices=${prefs.lidChoices}")
+            appendLine("lid_closed=${LidPlan.lidClosed(executor.executeAsRoot(LidPlan.LID_STATE).getOrNull()) ?: "unknown"}")
             appendLine("open_session=${prefs.lidSession?.encode() ?: "none"}")
             appendLine("last=${prefs.lidLastResult?.encode() ?: "none"}")
         }
