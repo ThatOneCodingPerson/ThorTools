@@ -1,7 +1,15 @@
 package io.github.thatonecodingperson.thortools.lid
 
+import android.app.AlarmManager
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.media.AudioManager
+import android.media.session.MediaSessionManager
+import android.media.session.PlaybackState
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
@@ -11,6 +19,7 @@ import android.view.KeyEvent
 import io.github.thatonecodingperson.thortools.data.SharedPrefsRepo
 import io.github.thatonecodingperson.thortools.models.FanMode
 import io.github.thatonecodingperson.thortools.models.PerfMode
+import io.github.thatonecodingperson.thortools.panel.MediaListener
 import io.github.thatonecodingperson.thortools.tools.ShellExecutor
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
@@ -19,7 +28,8 @@ import java.util.concurrent.atomic.AtomicInteger
  * Carries out the lid sandbox: what its switches ask for when the lid closes, and putting all of it back when the lid
  * opens, checked twice. The root helper reports the lid (`hall_switch`); the screen turning on or off makes this read
  * Android's own lid state too, in case a report was missed. Everything runs on one background thread under a short wake
- * lock, so the work is done before the Thor sleeps. Events come in on the main thread.
+ * lock, so the work is done before the Thor sleeps. Events come in on the main thread. A Save power part that runs later
+ * (a delay, or media playing) is an exact alarm that wakes the Thor; opening the lid first cancels it.
  */
 class LidController(
     private val context: Context,
@@ -29,6 +39,8 @@ class LidController(
     private val closeBackground: () -> Unit,
     private val sleepNow: () -> Unit,
     private val notRestored: (List<LidItem>) -> Unit,
+    /** The app in front, for the apps that keep the buttons on. */
+    private val frontApp: () -> String?,
 ) {
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "lid").apply { isDaemon = true } }
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -36,6 +48,16 @@ class LidController(
         .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ThorTools:lid")
         .apply { setReferenceCounted(false) }
     private val queued = AtomicInteger()
+    private val alarms = context.getSystemService(AlarmManager::class.java)
+    private val savingAlarm = PendingIntent.getBroadcast(
+        context,
+        0,
+        Intent(ACTION_SAVING).setPackage(context.packageName),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+    private val savingReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = work(::savingDue)
+    }
 
     /** The lid as this thread last knew it; null before the first reading. Worker thread only. */
     private var lidClosed: Boolean? = null
@@ -45,9 +67,14 @@ class LidController(
     private val guard = WakeGuard()
 
     /** Reads the lid, and puts back what a closing before a crash or a reboot left changed. */
-    fun start() = work { lidIs(readLid()) }
+    fun start() {
+        context.registerReceiver(savingReceiver, IntentFilter(ACTION_SAVING), Context.RECEIVER_NOT_EXPORTED)
+        work { lidIs(readLid()) }
+    }
 
     fun stop() {
+        alarms.cancel(savingAlarm)
+        runCatching { context.unregisterReceiver(savingReceiver) }
         worker.shutdownNow()
         if (wakeLock.isHeld) wakeLock.release()
     }
@@ -76,13 +103,38 @@ class LidController(
     }
 
     private fun closed() {
-        if (prefs.lidSession != null) return
         val choices = prefs.lidChoices
+        prefs.lidSession?.let { saved ->
+            // The app started again with the lid still closed before the Save power part ran.
+            if (saved.pending) schedule(LidPlan.savingDueAt(saved, choices))
+            return
+        }
         if (!choices.active) return
-        val session = LidPlan.session(choices, read(), System.currentTimeMillis())
+        val muted = LidPlan.mutes(choices, setOfNotNull(frontApp(), playingApp()))
+        val later = LidPlan.savingLater(choices, musicActive())
+        val session = LidPlan.session(choices, if (later) LidReadings() else read(), System.currentTimeMillis(), muted, pending = later)
         // Saved before anything changes, so whatever happens next, opening the lid knows what to put back.
         prefs.lidSession = session
         if (session.muted.isNotEmpty()) helper("mute", listOf(InputGroup.encode(session.muted))) { _, _ -> }
+        if (later) schedule(LidPlan.savingDueAt(session, choices)) else savePower(choices, session)
+    }
+
+    /** The alarm for a later Save power part: it runs now, unless media still plays and it should wait. */
+    private fun savingDue() {
+        val session = prefs.lidSession?.takeIf { it.pending } ?: return
+        if (lidClosed == false) return
+        val choices = prefs.lidChoices
+        if (!choices.enabled) {
+            prefs.lidSession = session.copy(pending = false)
+            return
+        }
+        if (LidPlan.savingWaits(choices, musicActive())) return schedule(System.currentTimeMillis() + LidPlan.MINUTE_MS)
+        val done = LidPlan.savingDone(session, choices, read())
+        prefs.lidSession = done
+        savePower(choices, done)
+    }
+
+    private fun savePower(choices: LidChoices, session: LidSession) {
         if (choices.pauseMedia) pauseMedia()
         if (choices.closeBackground) mainHandler.post(closeBackground)
         val target = LidPlan.closedTargets(choices)
@@ -97,6 +149,7 @@ class LidController(
 
     /** Puts everything back, reads it all again and retries what isn't back once, then records how it went. */
     private fun opened() {
+        alarms.cancel(savingAlarm)
         val session = prefs.lidSession ?: return
         restore(session, LidItem.entries)
         var missing = check(session, WAIT_FIRST_MS)
@@ -155,6 +208,27 @@ class LidController(
         )
     }
 
+    /** Exact, so a delay of a minute is a minute even while the Thor sleeps; inexact if exact alarms aren't allowed. */
+    private fun schedule(at: Long) {
+        if (alarms.canScheduleExactAlarms()) {
+            alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, savingAlarm)
+        } else {
+            alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, savingAlarm)
+        }
+    }
+
+    private fun musicActive(): Boolean = runCatching {
+        context.getSystemService(AudioManager::class.java).isMusicActive
+    }.getOrDefault(false)
+
+    /** The app whose media is playing; only known while Thor Tools may see media sessions (the Now playing widget's access). */
+    private fun playingApp(): String? = runCatching {
+        context.getSystemService(MediaSessionManager::class.java)
+            .getActiveSessions(ComponentName(context, MediaListener::class.java))
+            .firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
+            ?.packageName
+    }.getOrNull()
+
     private fun readLid(): Boolean? = LidPlan.lidClosed(executor.executeAsRoot(LID_STATE).getOrNull())
 
     private fun setPerformance(value: Int) {
@@ -203,6 +277,7 @@ class LidController(
         const val WAKE_LOCK_MS = 15_000L
         const val WAIT_FIRST_MS = 1_500L
         const val WAIT_AGAIN_MS = 3_000L
+        const val ACTION_SAVING = "io.github.thatonecodingperson.thortools.LID_SAVE_POWER"
 
         // dumpsys prints LID_ABSENT for another policy first; only the first line reaches the app.
         const val LID_STATE = "dumpsys window | grep -m1 -o -E 'mLidState=LID_(OPEN|CLOSED)'"

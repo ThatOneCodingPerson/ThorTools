@@ -10,6 +10,8 @@ import android.hardware.display.DisplayManager
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.provider.Settings
 import android.util.DisplayMetrics
 import android.view.Display
@@ -24,8 +26,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ComposeView
+import io.github.thatonecodingperson.thortools.R
 import io.github.thatonecodingperson.thortools.actions.ActionCall
 import io.github.thatonecodingperson.thortools.actions.CloseTarget
+import io.github.thatonecodingperson.thortools.actions.FeedbackCue
 import io.github.thatonecodingperson.thortools.actions.ThorAction
 import io.github.thatonecodingperson.thortools.data.SharedPrefsRepo
 import io.github.thatonecodingperson.thortools.hotkeys.AppLaunch
@@ -59,10 +63,13 @@ class QuickPanel(
     private val thorToolsShownOn: () -> Int?,
     /** Joystick motion reaching the panel; true when the hotkeys took it (a held button's D-pad or stick combos). */
     private val onMotion: (MotionEvent) -> Boolean,
+    /** The app in front and since when, for the play timer. */
+    frontApp: () -> FrontApp? = { null },
     private val runAction: (ActionCall) -> Unit,
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val focusMover = FocusMover(service, executor, scope)
+    private val timerNote = FeedbackCue(service, prefs, hideAfterMs = TIMER_NOTE_MS, windowTitle = "ThorToolsTimerNote")
     private val model = QuickPanelModel(
         context = service,
         executor = executor,
@@ -71,6 +78,10 @@ class QuickPanel(
         stayAwakeOn = stayAwakeOn,
         bottomDisplay = { screenFocus.bottomDisplayId() },
         lockedTo = lockedTo,
+        frontApp = frontApp,
+        recentApps = { prefs.recentApps },
+        controllerDisplay = { screenFocus.displayId() },
+        onTimerDone = ::timerDone,
     )
 
     // L1 / R1 page steps, from the root view to the pager inside Compose.
@@ -238,6 +249,10 @@ class QuickPanel(
             onAllowMedia = model::allowMedia,
             onApp = ::onApp,
             onNoteDrawn = model::drawNote,
+            onTimer = model::timer,
+            onToggle = model::toggle,
+            onScreenshot = ::onScreenshot,
+            onAllowScreenshots = model::allowScreenshots,
         )
         panelRoot.addView(
             ComposeView(context).apply {
@@ -376,6 +391,27 @@ class QuickPanel(
         mainHandler.postDelayed({ runAction(call) }, PanelTiles.LEAVE_MS)
     }
 
+    /** A screenshot opens in the gallery on the widget's screen; like an app, it closes the panel first unless only AYN does. */
+    private fun onScreenshot(shot: Screenshot, screen: LaunchScreen) {
+        val display = when (screen) {
+            LaunchScreen.TOP -> Display.DEFAULT_DISPLAY
+            LaunchScreen.BOTTOM -> screenFocus.bottomDisplayId() ?: Display.DEFAULT_DISPLAY
+            LaunchScreen.HERE -> openedFrom
+        }
+        val intent = Intent(Intent.ACTION_VIEW).setDataAndType(shot.uri, "image/*").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        if (!closesFor(CloseReason.TILE)) return startOn(intent, display)
+        close(CloseReason.TILE)
+        mainHandler.postDelayed({ startOn(intent, display) }, PanelTiles.LEAVE_MS)
+    }
+
+    /** The clock widget's timer reached zero, panel open or not: a note where the controller is, and a short buzz. */
+    private fun timerDone() {
+        timerNote.show(service.getString(R.string.panelTimerDone), screenFocus.displayId())
+        runCatching {
+            service.getSystemService(Vibrator::class.java)?.vibrate(VibrationEffect.createWaveform(TIMER_BUZZ, -1))
+        }
+    }
+
     /** A tile's action while the panel stays open: Home and Close the current app act where the panel was opened from. */
     private fun stayingOpen(action: ThorAction): ActionCall {
         val openedFromTop = openedFrom == Display.DEFAULT_DISPLAY
@@ -484,6 +520,8 @@ class QuickPanel(
     }
 
     private companion object {
+        const val TIMER_NOTE_MS = 6_000L
+        val TIMER_BUZZ = longArrayOf(0, 200, 120, 200)
         const val KEY_FOCUS_LOCK = "screen_focus_lock"
         const val KEY_SCREEN_MODE = "dual_screen_display_mode"
         const val SIDE_SHEET_MIN_WIDTH_DP = 700f

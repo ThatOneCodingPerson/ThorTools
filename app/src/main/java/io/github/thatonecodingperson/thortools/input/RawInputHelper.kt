@@ -38,6 +38,9 @@ object RawInputHelper {
     // Commands talk to system services and can take a moment; the socket loop must keep reading meanwhile.
     private val commands = Executors.newSingleThreadExecutor()
 
+    // A ping can take a second; on its own thread it never holds up a brightness slider.
+    private val slowCommands = Executors.newSingleThreadExecutor()
+
     @JvmStatic
     fun main(args: Array<String>) {
         val socketName = args.getOrNull(0) ?: exitProcess(1)
@@ -66,7 +69,15 @@ object RawInputHelper {
                 line == "screen off" -> screenOn = false
                 line == "pad on" -> watchPad(true)
                 line == "pad off" -> watchPad(false)
-                line.startsWith("c ") -> commands.execute { runCommand(line) }
+                line.startsWith("c ") -> (
+                    if (line.split(' ').getOrNull(2) ==
+                        "ping"
+                    ) {
+                        slowCommands
+                    } else {
+                        commands
+                    }
+                    ).execute { runCommand(line) }
             }
         }
     }

@@ -75,6 +75,7 @@ class MainViewModel @Inject constructor(
                     panelWidgets = layout.pages.sumOf { page -> page.widgets.size },
                     lidActions = prefs.lidChoices.switchedOn,
                     chargeAlert = prefs.chargeAlertEnabled,
+                    chargeLimit = if (prefs.chargeLimitEnabled) prefs.minBatteryLevel..prefs.maxBatteryLevel else null,
                     theme = prefs.palette(),
                 ),
             )

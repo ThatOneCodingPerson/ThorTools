@@ -159,7 +159,10 @@ private fun sections(state: MainUiModel): List<Section> {
         } else {
             pluralStringResource(R.plurals.homeLidActions, summary.lidActions, summary.lidActions)
         },
-        stringResource(if (summary.chargeAlert) R.string.homeChargeAlertOn else R.string.homeChargeAlertOff),
+        listOfNotNull(
+            stringResource(if (summary.chargeAlert) R.string.homeChargeAlertOn else R.string.homeChargeAlertOff),
+            summary.chargeLimit?.let { stringResource(R.string.homeChargeLimit, it.first, it.last) },
+        ).joinToString(" · "),
     )
     val theme = summary.theme
     val display = listOf(

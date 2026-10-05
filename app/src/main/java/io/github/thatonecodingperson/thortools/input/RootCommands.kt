@@ -9,6 +9,7 @@ import android.os.SystemClock
 import android.view.InputEvent
 import android.view.KeyEvent
 import io.github.thatonecodingperson.thortools.lid.InputGroup
+import io.github.thatonecodingperson.thortools.panel.PingParser
 import io.github.thatonecodingperson.thortools.panel.StatsSampler
 import java.io.File
 
@@ -42,12 +43,22 @@ internal object RootCommands {
             "ok"
         }
         "stats" -> stats.sample().encode()
+        "ping" -> ping(args[0])
         else -> error("unknown command $name")
     }
 
     // The same reader the app uses, for the files SELinux keeps from apps.
     private val stats by lazy {
         StatsSampler(read = { runCatching { File(it).readText() }.getOrNull() }, list = { File(it).list()?.toList().orEmpty() })
+    }
+
+    /** One ping, as root (an app has no internet permission); the round trip in ms, or "-" when nothing came back. */
+    private fun ping(host: String): String {
+        require(host.matches(Regex("[A-Za-z0-9.:-]+"))) { "bad host" }
+        val process = ProcessBuilder("/system/bin/ping", "-c", "1", "-W", "1", host).redirectErrorStream(true).start()
+        val output = process.inputStream.bufferedReader().use { it.readText() }
+        process.waitFor()
+        return PingParser.millis(output)?.toString() ?: "-"
     }
 
     /** All tasks are picked first and then moved back to back, so a swap lands within one frame or two. */

@@ -20,10 +20,10 @@ class ChargeAlertNotifier @Inject constructor(@ApplicationContext private val co
 
     fun canPost(): Boolean = context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
-    fun show(changes: Int) {
+    fun show(changes: Int, context: ChargeAlertContext) {
         if (!canPost()) return
         ensureChannel()
-        manager.notify(NOTIFICATION_ID, build(changes))
+        manager.notify(NOTIFICATION_ID, build(changes, context))
     }
 
     fun clear() = manager.cancel(NOTIFICATION_ID)
@@ -35,8 +35,19 @@ class ChargeAlertNotifier @Inject constructor(@ApplicationContext private val co
         manager.createNotificationChannel(channel)
     }
 
-    private fun build(changes: Int): Notification {
-        val text = context.getString(R.string.chargeAlertText, changes)
+    private fun build(changes: Int, alert: ChargeAlertContext): Notification {
+        val notes = ChargeStatus.notes(alert).map { note ->
+            context.getString(
+                when (note) {
+                    AlertNote.AYN_LIMIT -> R.string.chargeAlertNoteAynLimit
+                    AlertNote.SEPARATION -> R.string.chargeAlertNoteSeparation
+                    AlertNote.AUTOMATION -> R.string.chargeAlertNoteAutomation
+                    AlertNote.WEAK_CHARGER -> R.string.chargeAlertNoteWeak
+                },
+            )
+        }
+        val text = (listOf(context.getString(R.string.chargeAlertText, changes)) + notes + context.getString(R.string.chargeAlertAdvice))
+            .joinToString(" ")
         val open = PendingIntent.getActivity(
             context,
             0,

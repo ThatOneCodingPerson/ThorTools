@@ -10,6 +10,7 @@ import android.os.HandlerThread
 import android.os.SystemClock
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.thatonecodingperson.thortools.data.SharedPrefsRepo
+import io.github.thatonecodingperson.thortools.service.ServiceStatus
 import io.github.thatonecodingperson.thortools.tools.SettingsRepo
 import io.github.thatonecodingperson.thortools.tools.ShellExecutor
 import java.io.File
@@ -24,8 +25,12 @@ class ChargeMonitor @Inject constructor(
     private val prefs: SharedPrefsRepo,
     private val executor: ShellExecutor,
     private val notifier: ChargeAlertNotifier,
+    private val status: ServiceStatus,
 ) {
     private val detector = FlapDetector()
+
+    /** What was going on at the last sample, for the alert's text. Monitor thread only. */
+    private var alertContext = ChargeAlertContext()
 
     /** SELinux keeps the app out of the voltage file on the Thor; once a direct read failed, PServer reads it. */
     private var directReadDenied = false
@@ -62,6 +67,7 @@ class ChargeMonitor @Inject constructor(
         thread = null
         handler = null
         notifier.clear()
+        status.chargeSwitches = null
     }
 
     fun setSensitivity(sensitivity: Sensitivity) {
@@ -81,14 +87,24 @@ class ChargeMonitor @Inject constructor(
             chargeLimitOn = plugged && executor.getBooleanSystemSetting(SettingsRepo.KEY_PERCENT_80_LIMIT, false),
             directPowerOn = plugged && executor.getBooleanSystemSetting(SettingsRepo.KEY_CHARGING_SEPARATION, false),
         )
+        if (plugged) {
+            alertContext = ChargeAlertContext(
+                aynLimit = sample.chargeLimitOn,
+                separation = sample.directPowerOn,
+                automation = prefs.chargeLimitEnabled,
+                weakCharger = ChargeStatus.offeredWatts(sample.maxCurrentMicroAmp, sample.maxVoltageMicroVolt)
+                    ?.let { it < ChargeStatus.WEAK_CHARGER_WATTS } == true,
+            )
+        }
         publish(detector.onSample(sample.timeMs, ChargeClassifier.classify(sample), ChargeClassifier.inputBand(sample.inputMicroVolt)))
     }
 
     private fun publish(verdict: FlapVerdict) {
+        status.chargeSwitches = verdict.changesInWindow
         when {
             !verdict.alerting -> if (verdict.alertChanged) notifier.clear()
             System.currentTimeMillis() < prefs.chargeAlertSnoozedUntil -> Unit
-            else -> notifier.show(verdict.changesInWindow)
+            else -> notifier.show(verdict.changesInWindow, alertContext)
         }
     }
 

@@ -69,7 +69,29 @@ data class PanelUiState(
     val apps: Map<String, PanelApp> = emptyMap(),
     /** Every Notes widget's note, by its id. */
     val notes: Map<String, PanelNote> = emptyMap(),
+    val front: FrontApp? = null,
+    /** The apps opened last, newest first. */
+    val recent: List<String> = emptyList(),
+    /** Null while unknown. */
+    val controllerOnTop: Boolean? = null,
+    val timer: PanelTimer = PanelTimer(),
+    val screenshots: List<Screenshot> = emptyList(),
+    val screenshotsAllowed: Boolean = true,
+    val storage: StorageReading? = null,
+    val network: NetworkReading = NetworkReading(),
+    val toggles: Map<QuickToggle, Boolean> = emptyMap(),
 )
+
+/** What the clock widget's buttons ask for. [Set]: a timer of that many minutes, or the stopwatch for null. */
+sealed interface TimerCommand {
+    data object Start : TimerCommand
+
+    data object Pause : TimerCommand
+
+    data object Reset : TimerCommand
+
+    data class Set(val minutes: Int?) : TimerCommand
+}
 
 /** An app on an App shortcuts widget. */
 data class PanelApp(val name: String, val icon: Drawable)
@@ -88,6 +110,10 @@ class QuickPanelModel(
     private val stayAwakeOn: () -> Boolean,
     private val bottomDisplay: () -> Int?,
     private val lockedTo: () -> Screen?,
+    private val frontApp: () -> FrontApp? = { null },
+    private val recentApps: () -> List<String> = { emptyList() },
+    private val controllerDisplay: () -> Int? = { null },
+    private val onTimerDone: () -> Unit = {},
 ) {
     private val audio = context.getSystemService(AudioManager::class.java)
     private val batteryManager = context.getSystemService(BatteryManager::class.java)
@@ -99,6 +125,13 @@ class QuickPanelModel(
     private val notes = PanelNotes(context)
     private val noteSaves = mutableMapOf<String, Job>()
     private val nowPlaying = NowPlayingWatch(context) { media -> _state.update { it.copy(media = media) } }
+    private val sources = WidgetSources(context, executor)
+    private var timerDone: Job? = null
+    private var ticks = 0L
+
+    // Which of the newer widgets the panel shows: only those are kept up to date while it is open.
+    @Volatile
+    private var wanted: Set<WidgetType> = emptySet()
     private var sampling: Job? = null
     private var pendingRefresh: Job? = null
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -138,34 +171,29 @@ class QuickPanelModel(
             val level = battery?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
             val scale = battery?.getIntExtra(BatteryManager.EXTRA_SCALE, 100) ?: 100
             val status = battery?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
-            val values = PanelUiState(
-                battery = if (level < 0 || scale <= 0) -1 else level * 100 / scale,
-                charging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL,
-                controllerStyle = ControllerStyle.getStyle(executor).textRes,
-                l2r2 = L2R2Style.getStyle(executor).textRes,
-                performance = PerfMode.getMode(executor).textRes,
-                fan = FanMode.getMode(executor).textRes,
-                refreshHz = RefreshRate.peak(executor).roundToInt(),
-                bottomScreenOn = systemInt(KEY_SCREEN_MODE) != 1,
-                stayAwake = stayAwakeOn(),
-                aynMouse = systemInt(KEY_AYN_MOUSE) == 1,
-                lockedTo = lockedTo(),
-                volume = musicVolume(),
-            )
+            val volume = musicVolume()
+            val controllerStyle = ControllerStyle.getStyle(executor).textRes
+            val l2r2 = L2R2Style.getStyle(executor).textRes
+            val performance = PerfMode.getMode(executor).textRes
+            val fan = FanMode.getMode(executor).textRes
+            val refreshHz = RefreshRate.peak(executor).roundToInt()
+            val toggles = if (WidgetType.TOGGLES in wanted) sources.toggles() else null
             _state.update {
-                values.copy(
-                    volume = if (volumeWriter.recentlyTouched) it.volume else values.volume,
-                    topBrightness = it.topBrightness,
-                    bottomBrightness = it.bottomBrightness,
-                    stats = it.stats,
-                    powerW = it.powerW,
-                    batteryTemp = it.batteryTemp,
-                    toFullMinutes = it.toFullMinutes,
-                    leftMinutes = it.leftMinutes,
-                    history = it.history,
-                    media = it.media,
-                    apps = it.apps,
-                    notes = it.notes,
+                it.copy(
+                    battery = if (level < 0 || scale <= 0) -1 else level * 100 / scale,
+                    charging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL,
+                    controllerStyle = controllerStyle,
+                    l2r2 = l2r2,
+                    performance = performance,
+                    fan = fan,
+                    refreshHz = refreshHz,
+                    bottomScreenOn = systemInt(KEY_SCREEN_MODE) != 1,
+                    stayAwake = stayAwakeOn(),
+                    aynMouse = systemInt(KEY_AYN_MOUSE) == 1,
+                    lockedTo = lockedTo(),
+                    volume = if (volumeWriter.recentlyTouched) it.volume else volume,
+                    controllerOnTop = controllerDisplay()?.let { display -> display == Display.DEFAULT_DISPLAY },
+                    toggles = toggles ?: it.toggles,
                 )
             }
         }
@@ -193,22 +221,75 @@ class QuickPanelModel(
         }
     }
 
-    /** The apps' names and icons and the notes the [layout]'s widgets show. */
+    /** The apps' names and icons, the notes and the screenshots the [layout]'s widgets show. */
     fun load(layout: PanelLayout) {
         val widgets = layout.pages.flatMap { it.widgets }
-        val packages = widgets.filter { it.type == WidgetType.APPS }.flatMap { it.apps }.distinct()
+        wanted = widgets.map { it.type }.toSet()
+        val recent = if (WidgetType.RECENT in wanted) recentApps() else emptyList()
+        val front = frontApp()
+        val packages = (
+            widgets.filter {
+                it.type == WidgetType.APPS
+            }.flatMap { it.apps } + recent + listOfNotNull(front?.packageName)
+            ).distinct()
         val noteIds = widgets.filter { it.type == WidgetType.NOTES }.map { it.note }.filter { it.isNotEmpty() }.distinct()
-        if (packages.isEmpty() && noteIds.isEmpty()) return
+        _state.update { it.copy(recent = recent, front = front) }
         scope.launch {
-            val packageManager = context.packageManager
-            val apps = packages.mapNotNull { name ->
-                runCatching {
-                    val info = packageManager.getApplicationInfo(name, 0)
-                    name to PanelApp(packageManager.getApplicationLabel(info).toString(), packageManager.getApplicationIcon(info))
-                }.getOrNull()
-            }.toMap()
+            val apps = packages.mapNotNull(::appEntry).toMap()
             val loaded = noteIds.associateWith(notes::load)
-            _state.update { it.copy(apps = apps, notes = loaded) }
+            _state.update { it.copy(apps = it.apps + apps, notes = loaded) }
+            if (WidgetType.SCREENSHOTS in wanted) loadScreenshots()
+            if (WidgetType.STORAGE in wanted) _state.update { it.copy(storage = sources.storage()) }
+        }
+    }
+
+    private fun appEntry(name: String): Pair<String, PanelApp>? = runCatching {
+        val packageManager = context.packageManager
+        val info = packageManager.getApplicationInfo(name, 0)
+        name to PanelApp(packageManager.getApplicationLabel(info).toString(), packageManager.getApplicationIcon(info))
+    }.getOrNull()
+
+    private fun loadScreenshots() {
+        val allowed = sources.screenshotsAllowed
+        _state.update { it.copy(screenshotsAllowed = allowed, screenshots = if (allowed) sources.screenshots() else emptyList()) }
+    }
+
+    /** Root grants the photo permission, then the shelf fills. */
+    fun allowScreenshots() {
+        scope.launch {
+            sources.allowScreenshots()
+            loadScreenshots()
+        }
+    }
+
+    /** A quick toggle tapped: shown switched at once, switched through PServer, then read back. */
+    fun toggle(toggle: QuickToggle) {
+        val on = _state.value.toggles[toggle] != true
+        _state.update { it.copy(toggles = it.toggles + (toggle to on)) }
+        scope.launch {
+            sources.set(toggle, on)
+            delay(TOGGLE_SETTLE_MS)
+            _state.update { it.copy(toggles = it.toggles + sources.toggles()) }
+        }
+    }
+
+    /** The clock's stopwatch and timer keep running while the panel is closed; a timer at zero calls [onTimerDone]. */
+    fun timer(command: TimerCommand) {
+        val now = SystemClock.elapsedRealtime()
+        val current = _state.value.timer
+        val next = when (command) {
+            TimerCommand.Start -> current.start(now)
+            TimerCommand.Pause -> current.pause(now)
+            TimerCommand.Reset -> current.reset()
+            is TimerCommand.Set -> PanelTimer(countdownMs = command.minutes?.let { it * 60_000L })
+        }
+        _state.update { it.copy(timer = next) }
+        timerDone?.cancel()
+        val endsAt = next.endsAt() ?: return
+        timerDone = scope.launch {
+            delay(endsAt - now)
+            _state.update { it.copy(timer = it.timer.pause(SystemClock.elapsedRealtime())) }
+            mainHandler.post(onTimerDone)
         }
     }
 
@@ -274,9 +355,27 @@ class QuickPanelModel(
         } else {
             BatteryEstimate.leftMinutes(batteryManager.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER), current)
         }
+        ticks++
+        val front = frontApp()
+        if (front?.packageName != null && front.packageName !in _state.value.apps) {
+            appEntry(front.packageName)?.let { entry -> _state.update { it.copy(apps = it.apps + entry) } }
+        }
+        val network = if (WidgetType.NETWORK in wanted && ticks % NETWORK_EVERY == 1L) sources.network() else null
+        if (network != null && network.type != NetworkType.NONE) {
+            helper.send("ping", listOf(PING_HOST)) { ok, text ->
+                _state.update { it.copy(network = it.network.copy(pingMs = text.toFloatOrNull().takeIf { ok })) }
+            }
+        }
+        val storage = if (WidgetType.STORAGE in wanted && ticks % STORAGE_EVERY == 0L) sources.storage() else null
+        val toggles = if (WidgetType.TOGGLES in wanted && ticks % TOGGLES_EVERY == 0L) sources.toggles() else null
         _state.update {
             val stats = reading.orElse(it.stats)
             it.copy(
+                front = front,
+                network = network?.copy(pingMs = it.network.pingMs) ?: it.network,
+                storage = storage ?: it.storage,
+                toggles = toggles ?: it.toggles,
+                controllerOnTop = controllerDisplay()?.let { display -> display == Display.DEFAULT_DISPLAY } ?: it.controllerOnTop,
                 stats = stats,
                 powerW = power,
                 batteryTemp = temp,
@@ -379,6 +478,11 @@ class QuickPanelModel(
         const val TOUCH_HOLD_MS = 600L
         const val SAMPLE_MS = 1000L
         const val NOTE_SAVE_DELAY_MS = 500L
+        const val TOGGLE_SETTLE_MS = 1200L
+        const val NETWORK_EVERY = 5L
+        const val STORAGE_EVERY = 10L
+        const val TOGGLES_EVERY = 3L
+        const val PING_HOST = "1.1.1.1"
         const val ALLOW_SETTLE_MS = 500L
 
         // Hidden in AudioManager, but sent to every app.

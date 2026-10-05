@@ -34,7 +34,17 @@ data class LidChoices(
     val muteController: Boolean = false,
     val muteTouch: Boolean = false,
     val backToSleep: Boolean = false,
+    /** Minutes after closing before the Save power part runs, one of [LidPlan.DELAYS]. */
+    val delayMinutes: Int = 0,
+    /** While media plays, the Save power part waits until it stops. */
+    val notWhileMedia: Boolean = false,
+    /** The AYN and volume buttons stay on when one of these apps is in front or playing as the lid closes. */
+    val keepButtonsFor: Set<String> = emptySet(),
 ) {
+    /** Any of the Save power part is on. */
+    val savesPower: Boolean
+        get() = powerSaving || closeBackground || pauseMedia || wifiOff || bluetoothOff || airplane
+
     val mutes: Set<InputGroup>
         get() = setOfNotNull(
             InputGroup.BUTTONS.takeIf { muteButtons },
@@ -52,8 +62,7 @@ data class LidChoices(
 
     /** Anything at all happens when the lid closes. */
     val active: Boolean
-        get() = enabled &&
-            (powerSaving || closeBackground || pauseMedia || wifiOff || bluetoothOff || airplane || mutes.isNotEmpty() || backToSleep)
+        get() = enabled && (savesPower || mutes.isNotEmpty() || backToSleep)
 }
 
 /** The values the lid actions change, as read at one moment; null: not read (or not to be changed). */
@@ -70,9 +79,10 @@ enum class LidItem { PERFORMANCE, FAN, WIFI, BLUETOOTH, AIRPLANE, INPUTS }
 
 /**
  * What a closed lid changed: [restore] holds the values to put back when it opens (null where nothing changed), [muted]
- * the input groups to unmute. Saved before anything changes, so a crash or a reboot can't lose it.
+ * the input groups to unmute; [pending] while the Save power part hasn't run yet (a delay, or media playing). Saved
+ * before anything changes, so a crash or a reboot can't lose it.
  */
-data class LidSession(val closedAt: Long, val restore: LidReadings, val muted: Set<InputGroup>) {
+data class LidSession(val closedAt: Long, val restore: LidReadings, val muted: Set<InputGroup>, val pending: Boolean = false) {
     fun encode(): String = listOf(
         "closed=$closedAt",
         "perf=${restore.performance ?: ""}",
@@ -81,6 +91,7 @@ data class LidSession(val closedAt: Long, val restore: LidReadings, val muted: S
         "bt=${restore.bluetooth.flag()}",
         "air=${restore.airplane.flag()}",
         "muted=${InputGroup.encode(muted)}",
+        "pending=${if (pending) 1 else 0}",
     ).joinToString(";")
 
     companion object {
@@ -98,6 +109,7 @@ data class LidSession(val closedAt: Long, val restore: LidReadings, val muted: S
                     airplane = fields["air"].bool(),
                 ),
                 muted = InputGroup.decode(fields["muted"]),
+                pending = fields["pending"] == "1",
             )
         }
 
@@ -121,6 +133,10 @@ object LidPlan {
     const val SAVING_PERFORMANCE = 0
     const val SAVING_FAN = 1
 
+    /** The choices for how long after closing the Save power part runs, in minutes. */
+    val DELAYS = listOf(0, 1, 5, 15)
+    const val MINUTE_MS = 60_000L
+
     /** The values the lid sets while closed; null where a choice leaves a value alone. */
     fun closedTargets(choices: LidChoices): LidReadings = LidReadings(
         performance = SAVING_PERFORMANCE.takeIf { choices.powerSaving },
@@ -132,20 +148,47 @@ object LidPlan {
 
     /**
      * The session for closing the lid with [choices] while [now] is in place: for every value the lid will change, the
-     * value to put back. A value that is already as wanted, or that couldn't be read, is left alone.
+     * value to put back. A value that is already as wanted, or that couldn't be read, is left alone. A [pending] session
+     * changes nothing yet: its Save power part comes later ([savingDone]).
      */
-    fun session(choices: LidChoices, now: LidReadings, time: Long): LidSession {
+    fun session(
+        choices: LidChoices,
+        now: LidReadings,
+        time: Long,
+        muted: Set<InputGroup> = mutes(choices, emptySet()),
+        pending: Boolean = false,
+    ): LidSession =
+        LidSession(closedAt = time, restore = if (pending) LidReadings() else restoreFor(choices, now), muted = muted, pending = pending)
+
+    /** [session] once its Save power part runs while [now] is in place. */
+    fun savingDone(session: LidSession, choices: LidChoices, now: LidReadings): LidSession =
+        session.copy(restore = restoreFor(choices, now), pending = false)
+
+    /** The groups to mute: the chosen ones, but the buttons stay on while one of [apps] (in front, playing) is kept. */
+    fun mutes(choices: LidChoices, apps: Set<String>): Set<InputGroup> = when {
+        !choices.enabled -> emptySet()
+        apps.any { it in choices.keepButtonsFor } -> choices.mutes - InputGroup.BUTTONS
+        else -> choices.mutes
+    }
+
+    /** The Save power part waits while media plays, when asked to. */
+    fun savingWaits(choices: LidChoices, musicActive: Boolean): Boolean = choices.notWhileMedia && musicActive
+
+    /** The Save power part runs later instead of at closing: after a delay, or once media stops. */
+    fun savingLater(choices: LidChoices, musicActive: Boolean): Boolean =
+        choices.enabled && choices.savesPower && (choices.delayMinutes > 0 || savingWaits(choices, musicActive))
+
+    /** When a later Save power part is first due (wall clock); while media plays it is checked again every minute. */
+    fun savingDueAt(session: LidSession, choices: LidChoices): Long = session.closedAt + choices.delayMinutes * MINUTE_MS
+
+    private fun restoreFor(choices: LidChoices, now: LidReadings): LidReadings {
         val target = closedTargets(choices)
-        return LidSession(
-            closedAt = time,
-            restore = LidReadings(
-                performance = back(target.performance, now.performance),
-                fan = back(target.fan, now.fan),
-                wifi = back(target.wifi, now.wifi),
-                bluetooth = back(target.bluetooth, now.bluetooth),
-                airplane = back(target.airplane, now.airplane),
-            ),
-            muted = if (choices.enabled) choices.mutes else emptySet(),
+        return LidReadings(
+            performance = back(target.performance, now.performance),
+            fan = back(target.fan, now.fan),
+            wifi = back(target.wifi, now.wifi),
+            bluetooth = back(target.bluetooth, now.bluetooth),
+            airplane = back(target.airplane, now.airplane),
         )
     }
 

@@ -77,7 +77,7 @@ import kotlin.math.roundToInt
 
 /** A short message in the middle of a widget, with an optional button. */
 @Composable
-private fun WidgetMessage(@StringRes text: Int, @StringRes button: Int? = null, focus: FocusRequester? = null, onClick: () -> Unit = {}) {
+internal fun WidgetMessage(@StringRes text: Int, @StringRes button: Int? = null, focus: FocusRequester? = null, onClick: () -> Unit = {}) {
     val palette = LocalThorPalette.current
     val interactive = LocalPanelInteractive.current
     var focused by remember { mutableStateOf(false) }
@@ -114,7 +114,7 @@ private fun WidgetMessage(@StringRes text: Int, @StringRes button: Int? = null, 
 
 /** A round button for the widgets (media controls, the note's tools). */
 @Composable
-private fun RoundButton(icon: ImageVector, size: Dp, focus: FocusRequester? = null, filled: Boolean = false, onClick: () -> Unit) {
+internal fun RoundButton(icon: ImageVector, size: Dp, focus: FocusRequester? = null, filled: Boolean = false, onClick: () -> Unit) {
     val palette = LocalThorPalette.current
     val interactive = LocalPanelInteractive.current
     var focused by remember { mutableStateOf(false) }
@@ -158,6 +158,9 @@ internal fun MediaCard(
         when {
             !media.access -> WidgetMessage(R.string.panelMediaNoAccess, R.string.panelMediaAllow, focus, onAllow)
             media.title == null -> WidgetMessage(R.string.panelMediaNothing)
+            size.columns == 1 -> Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                MediaControls(media, onMedia, focus, Modifier, compact = true)
+            }
             size.rows >= 2 && size.columns <= 2 -> Column(
                 verticalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxSize(),
@@ -169,7 +172,7 @@ internal fun MediaCard(
                 MediaControls(media, onMedia, focus, Modifier.align(Alignment.CenterHorizontally), compact = false)
             }
             else -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxSize()) {
-                if (size.columns >= 4 || size.rows >= 2) AlbumArt(media, Modifier.fillMaxHeight().aspectRatio(1f))
+                if (size.columns >= 3 || size.rows >= 2) AlbumArt(media, Modifier.fillMaxHeight().aspectRatio(1f))
                 Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                     MediaTitles(media, Modifier)
                     if (size.rows >= 2) {
@@ -410,9 +413,10 @@ internal fun AppsCard(
     onApp: (String, LaunchScreen) -> Unit,
     focus: FocusRequester?,
     modifier: Modifier,
+    @StringRes empty: Int = R.string.panelAppsEmpty,
 ) {
     PanelCard(modifier) {
-        if (widget.apps.isEmpty()) return@PanelCard WidgetMessage(R.string.panelAppsEmpty)
+        if (widget.apps.isEmpty()) return@PanelCard WidgetMessage(empty)
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val perRow = max(1, (maxWidth / APP_SLOT_WIDTH).toInt())
             val rows = max(1, (maxHeight / APP_SLOT_HEIGHT).toInt())

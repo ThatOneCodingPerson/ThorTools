@@ -65,7 +65,7 @@ class PanelLayoutTest {
 
     @Test
     fun `unknown tiles, widgets and sizes are dropped, columns stay in range, duplicates go`() {
-        val text = "columns=9;tiles=gone,system_back,system_back;w=levels:1x3,clock:2x2,device:3x3,levels:1x2;sliders=top,x"
+        val text = "columns=9;tiles=gone,system_back,system_back;w=levels:1x3,radar:2x2,device:3x3,levels:1x2;sliders=top,x"
         val layout = PanelLayout.decode(text)
         val page = layout.pages.single()
         assertEquals(listOf(ThorAction.BACK.id), page.tiles)

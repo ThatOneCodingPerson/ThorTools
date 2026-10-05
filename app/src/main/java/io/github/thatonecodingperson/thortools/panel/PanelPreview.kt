@@ -2,6 +2,8 @@ package io.github.thatonecodingperson.thortools.panel
 
 import android.content.Context
 import android.hardware.display.DisplayManager
+import android.net.Uri
+import android.os.SystemClock
 import android.util.DisplayMetrics
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -60,7 +62,18 @@ fun samplePanelState() = PanelUiState(
         GraphPoint(second * 1000L, 0.55f + 0.2f * wave, 0.35f + 0.15f * cos(second / 4f), 44f + 3f * wave)
     },
     media = NowPlaying(title = "Song title", artist = "Artist", app = "Music", playing = true),
+    front = FrontApp("Game", SystemClock.elapsedRealtime() - SAMPLE_PLAY_MS),
+    controllerOnTop = true,
+    timer = PanelTimer(countdownMs = SAMPLE_TIMER_MS),
+    screenshots = List(SAMPLE_SHOTS) { Screenshot(Uri.EMPTY, null) },
+    storage = StorageReading(usedGb = 182f, totalGb = 512f),
+    network = NetworkReading(NetworkType.WIFI, signalLevel = 3, rssi = -58, linkMbps = 866, pingMs = 21f),
+    toggles = mapOf(QuickToggle.WIFI to true, QuickToggle.BLUETOOTH to true, QuickToggle.AIRPLANE to false, QuickToggle.DND to false),
 )
+
+private const val SAMPLE_PLAY_MS = 47 * 60_000L
+private const val SAMPLE_TIMER_MS = 10 * 60_000L
+private const val SAMPLE_SHOTS = 8
 
 /**
  * The real panel content for page [page], laid out at the panel's true size ([widthDp] x [heightDp]) and scaled down to

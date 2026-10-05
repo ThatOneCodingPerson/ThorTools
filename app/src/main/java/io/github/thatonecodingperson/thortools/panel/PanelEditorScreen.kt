@@ -1,8 +1,10 @@
 package io.github.thatonecodingperson.thortools.panel
 
+import android.Manifest
 import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Context
+import android.content.pm.PackageManager
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -27,13 +29,21 @@ import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.material.icons.rounded.Screenshot
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.SportsEsports
+import androidx.compose.material.icons.rounded.Storage
+import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.ToggleOn
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilledTonalButton
@@ -105,6 +115,9 @@ data class PanelEditorUiModel(
     /** Every Notes widget's note, by id, for the text fields and the preview. */
     val notes: Map<String, PanelNote> = emptyMap(),
     val mediaAllowed: Boolean = false,
+    val screenshotsAllowed: Boolean = false,
+    /** The apps opened last, for the Recent apps preview. */
+    val recent: List<String> = emptyList(),
 ) {
     val currentPage: PanelPage get() = layout.pages[page.coerceIn(0, layout.pages.lastIndex)]
 }
@@ -129,7 +142,12 @@ class PanelEditorViewModel @Inject constructor(
         loadWidgetData()
     }
 
-    fun refresh() = _uiState.update { it.copy(mediaAllowed = mediaAllowed()) }
+    fun refresh() = _uiState.update {
+        it.copy(
+            mediaAllowed = mediaAllowed(),
+            screenshotsAllowed = context.checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED,
+        )
+    }
 
     fun selectPage(index: Int) = _uiState.update { it.copy(page = index) }
 
@@ -222,7 +240,20 @@ class PanelEditorViewModel @Inject constructor(
         }
     }
 
-    fun setAppsOn(screen: LaunchScreen) = changePage { page -> page.updateWidget(WidgetType.APPS) { it.copy(appsOn = screen) } }
+    fun setAppsOn(type: WidgetType, screen: LaunchScreen) = changePage { page -> page.updateWidget(type) { it.copy(appsOn = screen) } }
+
+    fun setRemind(minutes: Int) = changePage { page -> page.updateWidget(WidgetType.PLAY_TIMER) { it.copy(remind = minutes) } }
+
+    /** Root grants the pictures permission, then the check runs again. */
+    fun allowScreenshots() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                executor.executeAsRoot("pm grant ${context.packageName} ${Manifest.permission.READ_MEDIA_IMAGES}")
+            }
+            delay(ALLOW_SETTLE_MS)
+            refresh()
+        }
+    }
 
     /** Shown at once, written to the note's file a moment after the last key. */
     fun setNoteText(id: String, text: String) {
@@ -270,8 +301,10 @@ class PanelEditorViewModel @Inject constructor(
     /** The chosen apps' names and icons and the notes, off the main thread. */
     private fun loadWidgetData() {
         val widgets = _uiState.value.layout.pages.flatMap { it.widgets }
-        val packages = widgets.filter { it.type == WidgetType.APPS }.flatMap { it.apps }.distinct()
+        val recent = if (widgets.any { it.type == WidgetType.RECENT }) prefs.recentApps else emptyList()
+        val packages = (widgets.filter { it.type == WidgetType.APPS }.flatMap { it.apps } + recent).distinct()
         val noteIds = widgets.filter { it.type == WidgetType.NOTES }.map { it.note }.filter { it.isNotEmpty() }.distinct()
+        _uiState.update { it.copy(recent = recent) }
         viewModelScope.launch {
             val (apps, notes) = withContext(Dispatchers.IO) {
                 val packageManager = context.packageManager
@@ -312,6 +345,14 @@ private val WidgetType.icon: ImageVector
         WidgetType.GRAPH -> Icons.AutoMirrored.Rounded.ShowChart
         WidgetType.APPS -> Icons.Rounded.Apps
         WidgetType.NOTES -> Icons.AutoMirrored.Rounded.StickyNote2
+        WidgetType.PLAY_TIMER -> Icons.Rounded.HourglassTop
+        WidgetType.RECENT -> Icons.Rounded.History
+        WidgetType.CONTROLLER -> Icons.Rounded.SportsEsports
+        WidgetType.CLOCK -> Icons.Rounded.Timer
+        WidgetType.SCREENSHOTS -> Icons.Rounded.Screenshot
+        WidgetType.STORAGE -> Icons.Rounded.Storage
+        WidgetType.NETWORK -> Icons.Rounded.Wifi
+        WidgetType.TOGGLES -> Icons.Rounded.ToggleOn
     }
 
 @get:StringRes
@@ -325,6 +366,14 @@ private val WidgetType.label: Int
         WidgetType.GRAPH -> R.string.widgetGraph
         WidgetType.APPS -> R.string.widgetApps
         WidgetType.NOTES -> R.string.widgetNotes
+        WidgetType.PLAY_TIMER -> R.string.widgetPlayTimer
+        WidgetType.RECENT -> R.string.widgetRecent
+        WidgetType.CONTROLLER -> R.string.widgetController
+        WidgetType.CLOCK -> R.string.widgetClock
+        WidgetType.SCREENSHOTS -> R.string.widgetScreenshots
+        WidgetType.STORAGE -> R.string.widgetStorage
+        WidgetType.NETWORK -> R.string.widgetNetwork
+        WidgetType.TOGGLES -> R.string.widgetToggles
     }
 
 @get:StringRes
@@ -338,6 +387,14 @@ private val WidgetType.info: Int
         WidgetType.GRAPH -> R.string.widgetGraphInfo
         WidgetType.APPS -> R.string.widgetAppsInfo
         WidgetType.NOTES -> R.string.widgetNotesInfo
+        WidgetType.PLAY_TIMER -> R.string.widgetPlayTimerInfo
+        WidgetType.RECENT -> R.string.widgetRecentInfo
+        WidgetType.CONTROLLER -> R.string.widgetControllerInfo
+        WidgetType.CLOCK -> R.string.widgetClockInfo
+        WidgetType.SCREENSHOTS -> R.string.widgetScreenshotsInfo
+        WidgetType.STORAGE -> R.string.widgetStorageInfo
+        WidgetType.NETWORK -> R.string.widgetNetworkInfo
+        WidgetType.TOGGLES -> R.string.widgetTogglesInfo
     }
 
 @get:StringRes
@@ -448,7 +505,7 @@ fun PanelEditorScreen(viewModel: PanelEditorViewModel = hiltViewModel(), onBack:
                 PanelPreview(
                     layout = uiState.layout,
                     page = uiState.page,
-                    state = samplePanelState().copy(apps = uiState.chosenApps, notes = uiState.notes),
+                    state = samplePanelState().copy(apps = uiState.chosenApps, notes = uiState.notes, recent = uiState.recent),
                     widthDp = uiState.previewWidthDp,
                     heightDp = uiState.previewHeightDp,
                     modifier = Modifier
@@ -587,7 +644,42 @@ private fun WidgetEditor(
                     FilledTonalButton(onClick = viewModel::allowMedia) { Text(stringResource(R.string.panelMediaAllow)) }
                 }
             }
-            WidgetType.DEVICE, WidgetType.BATTERY, WidgetType.GRAPH -> Unit
+            WidgetType.PLAY_TIMER -> {
+                Label(stringResource(R.string.panelEditorRemind))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PanelLayout.REMINDERS.forEach { minutes ->
+                        FilterChip(
+                            selected = minutes == widget.remind,
+                            onClick = { viewModel.setRemind(minutes) },
+                            label = {
+                                Text(
+                                    if (minutes ==
+                                        0
+                                    ) {
+                                        stringResource(R.string.panelEditorRemindOff)
+                                    } else {
+                                        stringResource(R.string.panelTimerMinutes, minutes)
+                                    },
+                                )
+                            },
+                        )
+                    }
+                }
+                Muted(stringResource(R.string.panelEditorRemindInfo))
+            }
+            WidgetType.RECENT -> OpensOn(widget, viewModel)
+            WidgetType.SCREENSHOTS -> {
+                Muted(
+                    stringResource(if (state.screenshotsAllowed) R.string.panelEditorShotsAllowed else R.string.panelEditorShotsNotAllowed),
+                )
+                if (!state.screenshotsAllowed) {
+                    FilledTonalButton(onClick = viewModel::allowScreenshots) { Text(stringResource(R.string.panelMediaAllow)) }
+                }
+                OpensOn(widget, viewModel)
+            }
+            WidgetType.DEVICE, WidgetType.BATTERY, WidgetType.GRAPH, WidgetType.CONTROLLER, WidgetType.CLOCK,
+            WidgetType.STORAGE, WidgetType.NETWORK, WidgetType.TOGGLES,
+            -> Unit
         }
     }
 }
@@ -647,12 +739,19 @@ private fun AppsOptions(widget: PanelWidget, state: PanelEditorUiModel, viewMode
         Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
         Text(text = stringResource(R.string.panelEditorAddApp), modifier = Modifier.padding(start = 8.dp))
     }
+    OpensOn(widget, viewModel)
+}
+
+/** The screen what the widget opens goes to. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun OpensOn(widget: PanelWidget, viewModel: PanelEditorViewModel) {
     Label(stringResource(R.string.panelEditorAppsOn))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         LaunchScreen.entries.forEach { screen ->
             FilterChip(
                 selected = screen == widget.appsOn,
-                onClick = { viewModel.setAppsOn(screen) },
+                onClick = { viewModel.setAppsOn(widget.type, screen) },
                 label = { Text(stringResource(screen.label)) },
             )
         }

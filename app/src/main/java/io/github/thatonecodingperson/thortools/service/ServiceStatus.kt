@@ -24,6 +24,7 @@ class ServiceStatus @Inject constructor() {
         rawInput = null
         toggleQuickPanel = null
         onAccessChanged = null
+        chargeSwitches = null
     }
 
     @Volatile
@@ -50,6 +51,11 @@ class ServiceStatus @Inject constructor() {
      */
     @Volatile
     var buttonRecorder: ((PadButton, Boolean) -> Unit)? = null
+
+    /** How often charging switched in the charging alert's window; null while the alert isn't watching. */
+    @Volatile
+    var chargeSwitches: Int? = null
+        internal set
 
     /** The display Thor Tools' own screen (MainActivity) is showing on; null while it isn't in front. */
     @Volatile

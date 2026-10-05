@@ -20,24 +20,45 @@ data class WidgetSize(val columns: Int, val rows: Int) {
 
 private fun size(columns: Int, rows: Int) = WidgetSize(columns, rows)
 
+/** "3x3 2x2" as sizes. */
+private fun sizes(list: String): List<WidgetSize> = list.split(' ').map { checkNotNull(WidgetSize.decode(it)) }
+
 /**
  * What a page can hold, each at most once, with the sizes it comes in (the first one is where a new one starts).
  * [id] is stored, so it must never change.
  */
 enum class WidgetType(val id: String, val sizes: List<WidgetSize>) {
     /** The page's icons ([PanelPage.tiles]). */
-    TILES("tiles", listOf(size(3, 3), size(2, 2), size(3, 2), size(4, 2), size(2, 3), size(4, 3), size(2, 4), size(3, 4), size(4, 4))),
+    TILES("tiles", sizes("3x3 2x2 3x2 4x2 2x3 4x3 2x4 3x4 4x4 4x1 2x1 3x1")),
 
     /** Volume and the brightness of both screens. */
-    LEVELS("levels", listOf(size(1, 3), size(1, 2), size(1, 4), size(2, 2), size(2, 1), size(3, 1), size(4, 1))),
+    LEVELS("levels", sizes("1x3 1x2 1x4 2x2 2x1 3x1 4x1 2x3 2x4 3x2 4x2")),
 
     /** Refresh rate, CPU, GPU, power, memory and temperatures. */
-    DEVICE("device", listOf(size(4, 1), size(4, 2), size(2, 2))),
-    MEDIA("media", listOf(size(4, 1), size(2, 1), size(2, 2), size(4, 2))),
-    BATTERY("battery", listOf(size(2, 1), size(1, 1), size(2, 2))),
-    GRAPH("graph", listOf(size(4, 1), size(2, 1), size(2, 2), size(4, 2))),
-    APPS("apps", listOf(size(4, 1), size(1, 1), size(2, 1), size(2, 2), size(4, 2))),
-    NOTES("notes", listOf(size(2, 2), size(4, 2), size(2, 3), size(4, 3), size(4, 4))),
+    DEVICE("device", sizes("4x1 4x2 2x2 2x1 3x1 3x2")),
+    MEDIA("media", sizes("4x1 2x1 2x2 4x2 1x1 3x1 3x2")),
+    BATTERY("battery", sizes("2x1 1x1 2x2 1x2 3x1 4x1")),
+    GRAPH("graph", sizes("4x1 2x1 2x2 4x2 3x1 3x2 4x3")),
+    APPS("apps", sizes("4x1 1x1 2x1 2x2 4x2 3x1 1x2 3x2 4x3")),
+    NOTES("notes", sizes("2x2 4x2 2x3 4x3 4x4 3x2 3x3 2x4")),
+
+    /** How long the app in front has been there, with a break reminder. */
+    PLAY_TIMER("playtime", sizes("2x1 1x1 3x1 4x1 2x2")),
+
+    /** The apps opened last, one tap back in. */
+    RECENT("recent", sizes("4x1 2x1 3x1 2x2 4x2")),
+
+    /** Layout, L2/R2, the lock and the screen the controller is on. */
+    CONTROLLER("controller", sizes("2x2 2x1 3x1 4x1")),
+
+    /** The time and date, with a stopwatch and a timer. */
+    CLOCK("clock", sizes("2x2 2x1 1x1 4x1 4x2 3x2")),
+    SCREENSHOTS("screenshots", sizes("4x1 2x1 2x2 4x2 3x1")),
+    STORAGE("storage", sizes("2x1 1x1 2x2 4x1")),
+    NETWORK("network", sizes("2x1 1x1 2x2 4x1")),
+
+    /** Wi-Fi, Bluetooth, airplane mode and Do not disturb. */
+    TOGGLES("toggles", sizes("4x1 2x1 2x2 3x1")),
     ;
 
     val defaultSize: WidgetSize get() = sizes.first()
@@ -55,8 +76,9 @@ enum class LevelSlider(val id: String) {
 }
 
 /**
- * One widget on a page. The options only matter to their type: [sliders] to the sliders, [apps] and [appsOn] to App
- * shortcuts, [note] (the note's file name) to Notes.
+ * One widget on a page. The options only matter to their type: [sliders] to the sliders, [apps] to App shortcuts,
+ * [appsOn] (where an app or a picture opens) to App shortcuts, Recent apps and Screenshots, [note] (the note's file
+ * name) to Notes, [remind] (minutes between break reminders, 0 for none) to the play timer.
  */
 data class PanelWidget(
     val type: WidgetType,
@@ -65,6 +87,7 @@ data class PanelWidget(
     val apps: List<String> = emptyList(),
     val appsOn: LaunchScreen = LaunchScreen.TOP,
     val note: String = "",
+    val remind: Int = 0,
 )
 
 /**
@@ -182,11 +205,10 @@ data class PanelLayout(val pages: List<PanelPage>) {
             page.widget(WidgetType.LEVELS)?.let { levels ->
                 add("sliders=${levels.sliders.sortedBy(LevelSlider::ordinal).joinToString(",") { it.id }}")
             }
-            page.widget(WidgetType.APPS)?.let {
-                add("apps=${it.apps.joinToString(",")}")
-                add("appson=${it.appsOn.id}")
-            }
+            page.widget(WidgetType.APPS)?.let { add("apps=${it.apps.joinToString(",")}") }
+            page.widgets.filter { it.type in OPENS_SOMETHING }.forEach { add("${it.type.id}on=${it.appsOn.id}") }
             page.widget(WidgetType.NOTES)?.let { add("note=${it.note}") }
+            page.widget(WidgetType.PLAY_TIMER)?.let { add("remind=${it.remind}") }
         }.joinToString(";")
     }
 
@@ -196,6 +218,12 @@ data class PanelLayout(val pages: List<PanelPage>) {
 
         /** The Notes widget of the default layout writes to this file. */
         const val DEFAULT_NOTE = "main"
+
+        /** The play timer's break reminders, in minutes (0: none). */
+        val REMINDERS = listOf(0, 30, 60, 90, 120)
+
+        /** Widgets that open an app or a picture on a screen of their choice. */
+        private val OPENS_SOMETHING = setOf(WidgetType.APPS, WidgetType.RECENT, WidgetType.SCREENSHOTS)
 
         val DEFAULT = PanelLayout(
             listOf(
@@ -264,15 +292,23 @@ data class PanelLayout(val pages: List<PanelPage>) {
             return values["w"].orEmpty().split(',').mapNotNull { item ->
                 val type = WidgetType.byId(item.substringBefore(':')) ?: return@mapNotNull null
                 val size = WidgetSize.decode(item.substringAfter(':', ""))?.takeIf { it in type.sizes } ?: type.defaultSize
+                val opensOn = LaunchScreen.entries.find { it.id == values["${type.id}on"] } ?: LaunchScreen.TOP
                 when (type) {
                     WidgetType.LEVELS -> PanelWidget(type, size, sliders = sliders ?: LevelSlider.entries.toSet())
                     WidgetType.APPS -> PanelWidget(
                         type = type,
                         size = size,
                         apps = values["apps"].orEmpty().split(',').filter { it.isNotBlank() }.distinct(),
-                        appsOn = LaunchScreen.entries.find { it.id == values["appson"] } ?: LaunchScreen.TOP,
+                        appsOn = opensOn,
                     )
+                    WidgetType.RECENT, WidgetType.SCREENSHOTS -> PanelWidget(type, size, appsOn = opensOn)
                     WidgetType.NOTES -> PanelWidget(type, size, note = values["note"].orEmpty())
+                    WidgetType.PLAY_TIMER -> PanelWidget(
+                        type,
+                        size,
+                        remind =
+                        values["remind"]?.toIntOrNull()?.takeIf { it in REMINDERS } ?: 0,
+                    )
                     else -> PanelWidget(type, size)
                 }
             }.distinctBy { it.type }

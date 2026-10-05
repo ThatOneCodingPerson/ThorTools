@@ -119,6 +119,7 @@ fun OdinFeaturesScreen(
                             ),
                         )
                     }
+                    NoteCard(stringResource(R.string.chargeLimitNote))
                 }
             },
             right = {

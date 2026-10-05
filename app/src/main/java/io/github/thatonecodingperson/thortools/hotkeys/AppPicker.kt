@@ -59,6 +59,7 @@ fun AppPicker(
                                 AppPickerMode.OPEN_APP -> R.string.hotkeyPickApp
                                 AppPickerMode.HOTKEYS_OFF -> R.string.hotkeysOffApps
                                 AppPickerMode.HOTKEY_APPS -> R.string.hotkeyAppsTitle
+                                AppPickerMode.LID_KEEP_BUTTONS -> R.string.lidKeepButtons
                             },
                         ),
                     )
@@ -72,7 +73,13 @@ fun AppPicker(
         Column(Modifier.padding(top = padding.calculateTopPadding()).fillMaxSize()) {
             if (mode != AppPickerMode.OPEN_APP) {
                 Text(
-                    text = stringResource(if (mode == AppPickerMode.HOTKEYS_OFF) R.string.hotkeysOffAppsInfo else R.string.hotkeyAppsInfo),
+                    text = stringResource(
+                        when (mode) {
+                            AppPickerMode.HOTKEYS_OFF -> R.string.hotkeysOffAppsInfo
+                            AppPickerMode.LID_KEEP_BUTTONS -> R.string.lidKeepButtonsPickerInfo
+                            else -> R.string.hotkeyAppsInfo
+                        },
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp),

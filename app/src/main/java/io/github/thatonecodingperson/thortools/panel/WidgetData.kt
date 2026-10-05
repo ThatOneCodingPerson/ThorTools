@@ -85,3 +85,68 @@ object BatteryEstimate {
 
     private const val MAX_MINUTES = 48 * 60
 }
+
+/** The clock widget's stopwatch, or a timer when [countdownMs] is set. [startedAt]: when it last started (elapsed ms). Pure. */
+data class PanelTimer(val countdownMs: Long? = null, val accumulatedMs: Long = 0, val startedAt: Long? = null) {
+    val running: Boolean get() = startedAt != null
+
+    fun elapsed(now: Long): Long = accumulatedMs + (startedAt?.let { now - it } ?: 0)
+
+    /** Null for the stopwatch. */
+    fun remaining(now: Long): Long? = countdownMs?.let { (it - elapsed(now)).coerceAtLeast(0) }
+
+    /** When a running timer reaches zero (elapsed ms); null for the stopwatch or while paused. */
+    fun endsAt(): Long? = if (countdownMs != null && startedAt != null) startedAt + countdownMs - accumulatedMs else null
+
+    fun start(now: Long) = if (running || remaining(now) == 0L) this else copy(startedAt = now)
+
+    fun pause(now: Long) = if (!running) this else copy(accumulatedMs = elapsed(now), startedAt = null)
+
+    fun reset() = copy(accumulatedMs = 0, startedAt = null)
+
+    companion object {
+        /** `1:02:03`, or `02:03` under an hour. */
+        fun format(ms: Long): String {
+            val seconds = (ms.coerceAtLeast(0) + 999) / 1000
+            val h = seconds / 3600
+            val m = seconds % 3600 / 60
+            val s = seconds % 60
+            return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%02d:%02d".format(m, s)
+        }
+    }
+}
+
+/** The play timer's rules. Pure. */
+object PlayTime {
+    /** `1:23:45`, or `12:34` under an hour (minutes and seconds). */
+    fun format(ms: Long): String {
+        val seconds = ms.coerceAtLeast(0) / 1000
+        val h = seconds / 3600
+        return if (h > 0) "%d:%02d:%02d".format(h, seconds % 3600 / 60, seconds % 60) else "%d:%02d".format(seconds / 60, seconds % 60)
+    }
+
+    /**
+     * The reminder to show now, counting from 1, when [playedMs] in one app has passed another [remindMinutes] since the
+     * [shown] reminders before; null when none is due (or reminders are off).
+     */
+    fun reminderDue(playedMs: Long, remindMinutes: Int, shown: Int): Int? {
+        if (remindMinutes <= 0) return null
+        val due = (playedMs / (remindMinutes * 60_000L)).toInt()
+        return due.takeIf { it > shown }
+    }
+}
+
+/** Reads the round-trip time from one line of `ping` output (`time=12.3 ms`). Pure. */
+object PingParser {
+    private val time = Regex("""time[=<]([0-9.]+) ?ms""")
+
+    fun millis(output: String?): Float? = output?.let { time.find(it)?.groupValues?.get(1)?.toFloatOrNull() }
+}
+
+/** The Recent apps widget's list. Pure. */
+object RecentApps {
+    const val KEEP = 12
+
+    /** [app] first, without its earlier place, and no more than [KEEP]. */
+    fun opened(recent: List<String>, app: String): List<String> = (listOf(app) + recent.filter { it != app }).take(KEEP)
+}

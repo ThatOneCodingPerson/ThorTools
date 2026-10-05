@@ -32,6 +32,8 @@ data class HomeSummary(
     val profiles: Int? = null,
     val lidActions: Int = 0,
     val chargeAlert: Boolean = false,
+    /** The charge limit automation's levels; null while it is off. */
+    val chargeLimit: IntRange? = null,
     /** The theme's name, or null for Android's own colours. */
     val theme: ThorPalette? = null,
 )

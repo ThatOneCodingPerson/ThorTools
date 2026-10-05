@@ -21,6 +21,7 @@ import android.view.MotionEvent
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityWindowInfo
 import dagger.hilt.android.AndroidEntryPoint
+import io.github.thatonecodingperson.thortools.R
 import io.github.thatonecodingperson.thortools.actions.ActionCall
 import io.github.thatonecodingperson.thortools.actions.ActionHost
 import io.github.thatonecodingperson.thortools.actions.ActionRunner
@@ -66,7 +67,11 @@ import io.github.thatonecodingperson.thortools.models.RefreshRate
 import io.github.thatonecodingperson.thortools.models.ScreenMode
 import io.github.thatonecodingperson.thortools.panel.CloseReason
 import io.github.thatonecodingperson.thortools.panel.FocusMover
+import io.github.thatonecodingperson.thortools.panel.FrontApp
+import io.github.thatonecodingperson.thortools.panel.PlayTime
 import io.github.thatonecodingperson.thortools.panel.QuickPanel
+import io.github.thatonecodingperson.thortools.panel.RecentApps
+import io.github.thatonecodingperson.thortools.panel.WidgetType
 import io.github.thatonecodingperson.thortools.tools.AynHooks
 import io.github.thatonecodingperson.thortools.tools.BatteryLevelReceiver
 import io.github.thatonecodingperson.thortools.tools.ShellExecutor
@@ -304,6 +309,30 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
     @Volatile
     private var lastAppPackage: String? = null
 
+    /** When [lastAppPackage] came to the front (elapsed ms), for the play timer. */
+    @Volatile
+    private var frontSince = SystemClock.elapsedRealtime()
+
+    /** Break reminders already shown for the app in front. Main thread. */
+    private var breaksShown = 0
+    private lateinit var breakNote: FeedbackCue
+
+    /** Once a minute: a break reminder when the play timer's interval has passed for the app in front. */
+    private val breakCheck = object : Runnable {
+        override fun run() {
+            mainHandler.postDelayed(this, BREAK_CHECK_MS)
+            val app = lastAppPackage ?: return
+            val remind = prefs.panelLayout.pages.firstNotNullOfOrNull { it.widget(WidgetType.PLAY_TIMER) }?.remind ?: return
+            val played = SystemClock.elapsedRealtime() - frontSince
+            val due = PlayTime.reminderDue(played, remind, breaksShown) ?: return
+            breaksShown = due
+            val name = runCatching {
+                packageManager.getApplicationLabel(packageManager.getApplicationInfo(app, 0)).toString()
+            }.getOrDefault(app)
+            breakNote.show(getString(R.string.panelBreak, name, PlayTime.format(played)), screenFocus.displayId())
+        }
+    }
+
     // OdinTools appearing or disappearing changes the defaults of every overlapping feature.
     private val odinToolsPackageReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -370,6 +399,11 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
             packageName in homePackages -> null
             packageName == this.packageName || ignoredPackages.contains(packageName) || currentIme.contains(packageName) -> return
             else -> packageName
+        }
+        if (app != lastAppPackage) {
+            frontSince = SystemClock.elapsedRealtime()
+            breaksShown = 0
+            app?.let { prefs.recentApps = RecentApps.opened(prefs.recentApps, it) }
         }
         lastAppPackage = app
         useHotkeysForApp()
@@ -807,8 +841,11 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
             lockedTo = { controllerLock.lockedTo },
             thorToolsShownOn = { status.appShownOn },
             onMotion = ::onPanelMotion,
+            frontApp = { lastAppPackage?.let { FrontApp(it, frontSince) } },
         ) { call -> actionRunner.run(call) }
         status.toggleQuickPanel = { mainHandler.post { quickPanel.toggle(lastAppPackage) } }
+        breakNote = FeedbackCue(this, prefs, hideAfterMs = BREAK_NOTE_MS, windowTitle = "ThorToolsBreakNote")
+        mainHandler.postDelayed(breakCheck, BREAK_CHECK_MS)
         status.onAccessChanged = { mainHandler.post { KeepAliveNotification.show(this) } }
         rawInput = RawInputClient(this, executor, rawInputListener)
         status.rawInput = rawInput
@@ -821,6 +858,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
             closeBackground = { actionRunner.run(ActionCall(ThorAction.CLEAR_BACKGROUND)) },
             sleepNow = { performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN) },
             notRestored = { items -> lidNote.show(LidText.notRestored(this, items), Display.DEFAULT_DISPLAY) },
+            frontApp = { lastAppPackage },
         )
         systemPress = SystemPress(
             service = this,
@@ -908,6 +946,8 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         private const val FOCUS_READ_RETRY_MS = 100L
         private const val CATCH_AFTER_MS = 150L
         private const val LID_NOTE_MS = 8_000L
+        private const val BREAK_NOTE_MS = 10_000L
+        private const val BREAK_CHECK_MS = 60_000L
 
         private val ignoredPackages = listOf(
             "com.android.launcher3",

@@ -11,6 +11,7 @@ import io.github.thatonecodingperson.thortools.coexist.Overlap
 import io.github.thatonecodingperson.thortools.hotkeys.Hotkey
 import io.github.thatonecodingperson.thortools.hotkeys.HotkeyList
 import io.github.thatonecodingperson.thortools.lid.LidChoices
+import io.github.thatonecodingperson.thortools.lid.LidPlan
 import io.github.thatonecodingperson.thortools.lid.LidResult
 import io.github.thatonecodingperson.thortools.lid.LidSession
 import io.github.thatonecodingperson.thortools.models.ControllerStyle
@@ -199,6 +200,11 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
         get() = prefs.getBoolean(KEY_PANEL_ONLY_AYN_CLOSES, true)
         set(value) = prefs.edit().putBoolean(KEY_PANEL_ONLY_AYN_CLOSES, value).apply()
 
+    /** The apps opened last, newest first, for the Recent apps widget. */
+    var recentApps: List<String>
+        get() = prefs.getString(KEY_RECENT_APPS, null)?.lines()?.filter { it.isNotBlank() }.orEmpty()
+        set(value) = prefs.edit().putString(KEY_RECENT_APPS, value.joinToString("\n")).apply()
+
     /** The setup wizard was finished or skipped; it then only opens when asked for. */
     var setupDone
         get() = prefs.getBoolean(KEY_SETUP_DONE, false)
@@ -218,6 +224,9 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
             muteController = prefs.getBoolean(KEY_LID_MUTE_CONTROLLER, false),
             muteTouch = prefs.getBoolean(KEY_LID_MUTE_TOUCH, false),
             backToSleep = prefs.getBoolean(KEY_LID_BACK_TO_SLEEP, false),
+            delayMinutes = prefs.getInt(KEY_LID_DELAY, 0).takeIf { it in LidPlan.DELAYS } ?: 0,
+            notWhileMedia = prefs.getBoolean(KEY_LID_NOT_WHILE_MEDIA, false),
+            keepButtonsFor = prefs.getStringSet(KEY_LID_KEEP_BUTTONS, null)?.toSet().orEmpty(),
         )
         set(value) = prefs.edit()
             .putBoolean(KEY_LID_ENABLED, value.enabled)
@@ -231,6 +240,9 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
             .putBoolean(KEY_LID_MUTE_CONTROLLER, value.muteController)
             .putBoolean(KEY_LID_MUTE_TOUCH, value.muteTouch)
             .putBoolean(KEY_LID_BACK_TO_SLEEP, value.backToSleep)
+            .putInt(KEY_LID_DELAY, value.delayMinutes)
+            .putBoolean(KEY_LID_NOT_WHILE_MEDIA, value.notWhileMedia)
+            .putStringSet(KEY_LID_KEEP_BUTTONS, value.keepButtonsFor)
             .apply()
 
     /**
@@ -362,6 +374,7 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
         private const val KEY_PANEL_CLEAN_MEMORY = "panel_clean_memory"
         private const val KEY_PANEL_ONLY_AYN_CLOSES = "panel_only_ayn_closes"
         private const val KEY_SETUP_DONE = "setup_done"
+        private const val KEY_RECENT_APPS = "recent_apps"
         private const val KEY_LID_ENABLED = "lid_enabled"
         private const val KEY_LID_POWER_SAVING = "lid_power_saving"
         private const val KEY_LID_CLOSE_BACKGROUND = "lid_close_background"
@@ -373,6 +386,9 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
         private const val KEY_LID_MUTE_CONTROLLER = "lid_mute_controller"
         private const val KEY_LID_MUTE_TOUCH = "lid_mute_touch"
         private const val KEY_LID_BACK_TO_SLEEP = "lid_back_to_sleep"
+        private const val KEY_LID_DELAY = "lid_delay_minutes"
+        private const val KEY_LID_NOT_WHILE_MEDIA = "lid_not_while_media"
+        private const val KEY_LID_KEEP_BUTTONS = "lid_keep_buttons_for"
         private const val KEY_LID_SESSION = "lid_session"
         private const val KEY_LID_LAST = "lid_last_result"
         private const val KEY_CUSTOM_PALETTES = "custom_palettes"

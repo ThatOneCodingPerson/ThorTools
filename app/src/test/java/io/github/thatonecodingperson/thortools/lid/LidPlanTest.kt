@@ -137,4 +137,43 @@ class LidPlanTest {
         assertEquals(3, LidChoices(wifiOff = true, muteTouch = true, backToSleep = true).switchedOn)
         assertEquals(0, LidChoices(enabled = false, wifiOff = true).switchedOn)
     }
+
+    @Test
+    fun `chosen apps keep the buttons on, the other mutes stay`() {
+        val choices = LidChoices(muteButtons = true, muteTouch = true, keepButtonsFor = setOf("music"))
+        assertEquals(setOf(InputGroup.TOUCH), LidPlan.mutes(choices, setOf("game", "music")))
+        assertEquals(setOf(InputGroup.BUTTONS, InputGroup.TOUCH), LidPlan.mutes(choices, setOf("game")))
+        assertEquals(setOf(InputGroup.BUTTONS, InputGroup.TOUCH), LidPlan.mutes(choices, emptySet()))
+        assertEquals(emptySet<InputGroup>(), LidPlan.mutes(choices.copy(enabled = false), setOf("game")))
+    }
+
+    @Test
+    fun `save power runs later after a delay, or while media plays when asked`() {
+        val wifi = LidChoices(wifiOff = true)
+        assertFalse(LidPlan.savingLater(wifi, musicActive = true))
+        assertTrue(LidPlan.savingLater(wifi.copy(delayMinutes = 5), musicActive = false))
+        assertTrue(LidPlan.savingLater(wifi.copy(notWhileMedia = true), musicActive = true))
+        assertFalse(LidPlan.savingLater(wifi.copy(notWhileMedia = true), musicActive = false))
+        // Nothing to save, nothing to wait for: only the mutes, at once.
+        assertFalse(LidPlan.savingLater(LidChoices(muteTouch = true, delayMinutes = 5), musicActive = false))
+        assertFalse(LidPlan.savingLater(wifi.copy(enabled = false, delayMinutes = 5), musicActive = false))
+    }
+
+    @Test
+    fun `a waiting session changes nothing until its save power part runs`() {
+        val choices = LidChoices(wifiOff = true, muteTouch = true, delayMinutes = 5)
+        val waiting = LidPlan.session(choices, now, time = 1_000, pending = true)
+        assertEquals(LidSession(1_000, LidReadings(), setOf(InputGroup.TOUCH), pending = true), waiting)
+        assertEquals(emptyList<LidItem>(), LidPlan.notRestored(waiting, now.copy(wifi = false), mutedInputs = 0))
+        assertEquals(1_000 + 5 * LidPlan.MINUTE_MS, LidPlan.savingDueAt(waiting, choices))
+        val done = LidPlan.savingDone(waiting, choices, now)
+        assertEquals(LidSession(1_000, LidReadings(wifi = true), setOf(InputGroup.TOUCH)), done)
+    }
+
+    @Test
+    fun `a waiting session survives being stored, and older ones read as done`() {
+        val waiting = LidSession(7, LidReadings(), setOf(InputGroup.BUTTONS), pending = true)
+        assertEquals(waiting, LidSession.decode(waiting.encode()))
+        assertFalse(LidSession.decode("closed=7;perf=;fan=;wifi=1;bt=;air=;muted=-")!!.pending)
+    }
 }

@@ -105,6 +105,10 @@ class PanelCallbacks(
     val onAllowMedia: () -> Unit = {},
     val onApp: (String, LaunchScreen) -> Unit = { _, _ -> },
     val onNoteDrawn: (String, List<NoteStroke>) -> Unit = { _, _ -> },
+    val onTimer: (TimerCommand) -> Unit = {},
+    val onToggle: (QuickToggle) -> Unit = {},
+    val onScreenshot: (Screenshot, LaunchScreen) -> Unit = { _, _ -> },
+    val onAllowScreenshots: () -> Unit = {},
 )
 
 /** The panel: a header with page dots, then the pages, each a grid of widgets ([WidgetGrid]). */
@@ -172,10 +176,13 @@ private fun PanelPages(
 private fun takesFocus(widget: PanelWidget, page: PanelPage, state: PanelUiState): Boolean = when (widget.type) {
     WidgetType.TILES -> page.tiles.isNotEmpty()
     WidgetType.LEVELS -> widget.sliders.isNotEmpty()
-    WidgetType.DEVICE, WidgetType.NOTES -> true
+    WidgetType.DEVICE, WidgetType.NOTES, WidgetType.CONTROLLER, WidgetType.TOGGLES -> true
+    WidgetType.CLOCK -> widget.size.columns > 1 && widget.size.rows > 1 || widget.size.columns >= 3
     WidgetType.MEDIA -> !state.media.access || state.media.title != null
     WidgetType.APPS -> widget.apps.isNotEmpty()
-    WidgetType.BATTERY, WidgetType.GRAPH -> false
+    WidgetType.RECENT -> state.recent.isNotEmpty()
+    WidgetType.SCREENSHOTS -> !state.screenshotsAllowed || state.screenshots.isNotEmpty()
+    WidgetType.BATTERY, WidgetType.GRAPH, WidgetType.PLAY_TIMER, WidgetType.STORAGE, WidgetType.NETWORK -> false
 }
 
 @Composable
@@ -241,6 +248,31 @@ private fun WidgetContent(
         WidgetType.GRAPH -> GraphCard(state, modifier)
         WidgetType.APPS -> AppsCard(widget, state.apps, callbacks.onApp, focus, modifier)
         WidgetType.NOTES -> NotesCard(widget.note, state.notes[widget.note], callbacks.onNoteDrawn, focus, modifier)
+        WidgetType.PLAY_TIMER -> PlayTimeCard(
+            state.front,
+            state.front?.let {
+                state.apps[it.packageName]
+            },
+            widget.size,
+            widget.remind,
+            modifier,
+        )
+        WidgetType.RECENT -> AppsCard(
+            widget.copy(apps = state.recent),
+            state.apps,
+            callbacks.onApp,
+            focus,
+            modifier,
+            empty = R.string.panelRecentEmpty,
+        )
+        WidgetType.CONTROLLER -> ControllerStatusCard(state, widget.size, callbacks.onTile, focus, modifier)
+        WidgetType.CLOCK -> ClockCard(state.timer, widget.size, callbacks.onTimer, focus, modifier)
+        WidgetType.SCREENSHOTS -> ScreenshotsCard(state, {
+            callbacks.onScreenshot(it, widget.appsOn)
+        }, callbacks.onAllowScreenshots, focus, modifier)
+        WidgetType.STORAGE -> StorageCard(state, widget.size, modifier)
+        WidgetType.NETWORK -> NetworkCard(state.network, widget.size, modifier)
+        WidgetType.TOGGLES -> TogglesCard(state.toggles, widget.size, callbacks.onToggle, focus, modifier)
     }
 }
 
@@ -644,7 +676,39 @@ private fun DeviceCard(state: PanelUiState, onRefreshRate: () -> Unit, focus: Fo
         )
     }
     PanelCard(modifier) {
-        if (size.columns < WidgetGrid.COLUMNS) {
+        if (size.rows == 1 && size.columns < WidgetGrid.COLUMNS) {
+            // 2x1: the refresh rate and the temperatures; 3x1 adds the CPU and GPU gauges.
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(GAP),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                RefreshRate(state.refreshHz, focus, onRefreshRate)
+                if (size.columns >= 3) {
+                    Gauge(
+                        stats.cpuGhz?.let {
+                            "%.1f".format(it)
+                        } ?: none,
+                        stats.cpuLoad,
+                        palette.chart[0],
+                        R.string.panelStatCpu,
+                        ring,
+                        Modifier.weight(1f),
+                    )
+                    Gauge(
+                        stats.gpuMhz?.toString() ?: none,
+                        stats.gpuLoad,
+                        palette.chart[1],
+                        R.string.panelStatGpu,
+                        ring,
+                        Modifier.weight(1f),
+                    )
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
+                Temperatures(stats)
+            }
+        } else if (size.columns < WidgetGrid.COLUMNS) {
             Column(verticalArrangement = Arrangement.spacedBy(GAP), modifier = Modifier.fillMaxSize()) {
                 Row(horizontalArrangement = Arrangement.spacedBy(GAP), modifier = Modifier.weight(1f).fillMaxWidth()) {
                     RefreshRate(state.refreshHz, focus, onRefreshRate)

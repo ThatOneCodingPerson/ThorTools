@@ -70,6 +70,13 @@ each other. Without OdinTools you won't see any of this: Thor Tools has every Od
   - **Performance graph**: CPU, GPU and temperature over the last minute
   - **App shortcuts**: your apps, opened on the screen you choose
   - **Notes**: draw on it with a finger, or type a note in the app
+  - **Play timer**: how long the game in front has been open, with an optional break reminder
+  - **Recent apps**: the apps you opened last, one tap to go back
+  - **Controller status**: layout, L2/R2, the lock and which screen has the controller; tap a line to change it
+  - **Clock and timer**: the time, a stopwatch and a countdown that keeps running with the panel closed
+  - **Screenshots**: your latest screenshots; tap one to open it
+  - **Storage and memory**, **Network** (Wi-Fi signal and ping) and **Quick toggles** (Wi-Fi, Bluetooth, airplane
+    mode, Do not disturb)
 - Arrange pages and widgets in the panel editor with a live preview; open it from the pencil in the panel
 - By default only the AYN button (or the panel's close button) closes it, so you can use several tiles in a row
 
@@ -92,8 +99,15 @@ each other. Without OdinTools you won't see any of this: Thor Tools has every Od
   Wi-Fi, Bluetooth or airplane mode off, the AYN and volume buttons, the controller or the touchscreens turned off,
   and back to sleep after an accidental wake (plugging in the charger, say). Opening the lid puts everything back and
   checks that it did. Everything is off until you switch it on, and the power button always works
-- **Charging stability alert**: a notification when charging keeps flipping between fast, slow and not charging,
-  which on the Thor usually means a reboot is needed
+  - Save power right away or after 1, 5 or 15 minutes, and not while music or a video plays
+  - Keep the AYN and volume buttons working for chosen apps, such as a music player
+- **Charging stability alert**: a notification when charging keeps switching between rapid, slow and not charging,
+  with a restart button. The screen explains the Thor's known charging issue, what owners report helps and what's
+  normal
+- **Charge limit automation**: keeps the battery between two levels while plugged in, using AYN's charging
+  separation, with a warning when AYN's own 80 % limit gets in the way
+- **Charging right now**: charger type, the watts it offers and the watts coming in, battery health, and whether
+  AYN's 80 % limit and charging separation are on
 
 ### App profiles
 - Per app: controller style, L2/R2 mode, performance and fan (from OdinTools), plus refresh rate and the bottom screen
@@ -102,8 +116,8 @@ each other. Without OdinTools you won't see any of this: Thor Tools has every Od
 ### From OdinTools (all in the OdinTools features menu)
 - Controller and L2/R2 style for external displays
 - Quick settings tiles that cycle the controller style and L2/R2 mode
-- Display saturation, vibration strength and charge-limit automation, each kept after a restart if you like; on the
-  Odin 2 also M1/M2 remapping
+- Display saturation, vibration strength and charge-limit automation (also in Power management), each kept after a
+  restart if you like; on the Odin 2 also M1/M2 remapping
 
 ### Look and setup
 - A main menu that shows how everything stands at a glance, with shortcuts to the pages you use most
@@ -116,7 +130,7 @@ each other. Without OdinTools you won't see any of this: Thor Tools has every Od
 - Stays running: a quiet notification, a battery-optimisation exemption and a check after boot
 
 ### Planned
-- Charging dashboard: live watts, 80 % limit, direct power, battery health
+- AYN's 80 % limit, charging separation and charge caps as switches, and a charging log
 - Screen modes and bottom-screen auto-off
 
 ## Install

@@ -30,7 +30,7 @@ sealed interface HotkeyTab {
     data object Options : HotkeyTab
 }
 
-enum class AppPickerMode { OPEN_APP, HOTKEYS_OFF, HOTKEY_APPS }
+enum class AppPickerMode { OPEN_APP, HOTKEYS_OFF, HOTKEY_APPS, LID_KEEP_BUTTONS }
 
 data class HotkeysUiModel(
     val hotkeys: List<Hotkey> = emptyList(),
@@ -236,7 +236,7 @@ class HotkeysViewModel @Inject constructor(
             AppPickerMode.HOTKEY_APPS -> changeDraft { draft ->
                 draft.copy(apps = if (packageName in draft.apps) draft.apps - packageName else draft.apps + packageName)
             }
-            null -> Unit
+            AppPickerMode.LID_KEEP_BUTTONS, null -> Unit
         }
     }
 
