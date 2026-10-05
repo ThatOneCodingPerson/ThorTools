@@ -37,6 +37,7 @@ data class HotkeyDraft(
     val showText: Boolean = true,
     val lock: Boolean = false,
     val cleanMemory: Boolean = false,
+    val apps: Set<String> = emptySet(),
 ) {
     val choice: PressChoice get() = if (combo) PressChoice.COMBO else PressChoice.entries.first { it.single == press }
 
@@ -59,6 +60,7 @@ data class HotkeyDraft(
             showText = showText,
             lock = lock && Hotkey.canLock(action),
             cleanMemory = cleanMemory && Hotkey.canCleanMemory(action),
+            apps = apps,
         )
     }
 
@@ -87,6 +89,7 @@ data class HotkeyDraft(
                 showText = hotkey.showText,
                 lock = hotkey.lock,
                 cleanMemory = hotkey.cleanMemory,
+                apps = hotkey.apps,
             )
         }
     }

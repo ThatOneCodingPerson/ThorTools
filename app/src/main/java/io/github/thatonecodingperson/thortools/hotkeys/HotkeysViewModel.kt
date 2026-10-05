@@ -30,7 +30,7 @@ sealed interface HotkeyTab {
     data object Options : HotkeyTab
 }
 
-enum class AppPickerMode { OPEN_APP, HOTKEYS_OFF }
+enum class AppPickerMode { OPEN_APP, HOTKEYS_OFF, HOTKEY_APPS }
 
 data class HotkeysUiModel(
     val hotkeys: List<Hotkey> = emptyList(),
@@ -51,10 +51,16 @@ data class HotkeysUiModel(
 
     fun app(packageName: String): LaunchableApp? = apps.find { it.packageName == packageName }
 
-    /** The other hotkey with the same trigger as the draft, which saving would replace. */
+    /** The other hotkey the draft [Hotkey.clashes] with, which saving would replace. */
     fun draftConflict(): Hotkey? {
         val wanted = draft?.toHotkey() ?: return null
-        return hotkeys.find { it != draft.editing && it.sameTrigger(wanted) }
+        return hotkeys.find { it != draft.editing && it.clashes(wanted) }
+    }
+
+    /** The hotkey for every app that the draft, limited to some apps, takes the place of there. */
+    fun draftShadows(): Hotkey? {
+        val wanted = draft?.toHotkey()?.takeIf { it.apps.isNotEmpty() } ?: return null
+        return hotkeys.find { it != draft.editing && it.apps.isEmpty() && it.sameTrigger(wanted) }
     }
 }
 
@@ -144,6 +150,9 @@ class HotkeysViewModel @Inject constructor(
 
     fun setDraftCleanMemory(on: Boolean) = changeDraft { it.copy(cleanMemory = on) }
 
+    /** Back to every app; the apps chosen before are forgotten. */
+    fun setDraftEverywhere() = changeDraft { it.copy(apps = emptySet()) }
+
     fun pickScreen(screen: LaunchScreen) = changeDraft { draft ->
         AppLaunch.decode(draft.arg)?.let { draft.copy(arg = it.copy(screen = screen).encode()) } ?: draft
     }
@@ -223,6 +232,9 @@ class HotkeysViewModel @Inject constructor(
             AppPickerMode.HOTKEYS_OFF -> {
                 val off = _uiState.value.offApps
                 prefs.hotkeyOffApps = if (packageName in off) off - packageName else off + packageName
+            }
+            AppPickerMode.HOTKEY_APPS -> changeDraft { draft ->
+                draft.copy(apps = if (packageName in draft.apps) draft.apps - packageName else draft.apps + packageName)
             }
             null -> Unit
         }

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.thatonecodingperson.thortools.coexist.OdinToolsDetector
+import io.github.thatonecodingperson.thortools.coexist.Overlap
 import io.github.thatonecodingperson.thortools.data.SharedPrefsRepo
 import io.github.thatonecodingperson.thortools.tools.DeviceType
 import io.github.thatonecodingperson.thortools.tools.DeviceUtils
@@ -29,6 +30,9 @@ data class DisplayUiModel(
     val currentVibration: Int = 0,
     val themeId: String = ThorThemes.default.id,
     val themes: List<ThorPalette> = ThorThemes.builtIn,
+    /** Without OdinTools these live here; with it, on the OdinTools coexistence page. */
+    val saturationAtBoot: Boolean = true,
+    val vibrationAtBoot: Boolean = true,
 )
 
 @HiltViewModel
@@ -53,11 +57,31 @@ class DisplayViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 odinToolsInstalled = odinTools.isInstalled(),
-                vibrationEnabled = settings.vibrationEnabled,
+                saturationAtBoot = prefs.isEnabled(Overlap.SATURATION_AT_BOOT),
+                vibrationAtBoot = prefs.isEnabled(Overlap.VIBRATION_AT_BOOT),
                 themeId = prefs.themeId,
                 themes = ThorThemes.builtIn + prefs.customPalettes,
             )
         }
+        // Read through PServer when Android hides the key: never on the main thread.
+        readVibration()
+    }
+
+    private fun readVibration() {
+        viewModelScope.launch {
+            val enabled = withContext(Dispatchers.IO) { settings.vibrationEnabled }
+            _uiState.update { it.copy(vibrationEnabled = enabled) }
+        }
+    }
+
+    fun setSaturationAtBoot(on: Boolean) {
+        prefs.setEnabled(Overlap.SATURATION_AT_BOOT, on)
+        _uiState.update { it.copy(saturationAtBoot = on) }
+    }
+
+    fun setVibrationAtBoot(on: Boolean) {
+        prefs.setEnabled(Overlap.VIBRATION_AT_BOOT, on)
+        _uiState.update { it.copy(vibrationAtBoot = on) }
     }
 
     fun saturationClicked() {

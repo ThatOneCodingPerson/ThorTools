@@ -20,7 +20,6 @@
     <string name="quiet">Quiet</string>
     <string name="smart">Smart</string>
     <string name="sport">Sport</string>
-    <string name="topBarVersions">Device version:\nApp version:</string>
 
 
     <string name="buttons">Buttons</string>
@@ -39,7 +38,7 @@
 
     <string name="saturation">Display saturation</string>
     <string name="display">Display</string>
-    <string name="saturationDescription">Change the saturation of the display. Will be re-applied on reboot. Default value is 1.0.</string>
+    <string name="saturationDescription">Change the saturation of the display. Default value is 1.0.</string>
 
     <string name="videoOutputOverride">External override</string>
     <string name="videoOutputOverrideDescription">Set up override when connected to an external display. Switch off to disable.</string>
@@ -48,6 +47,17 @@
 
     <string name="appOverrides">App overrides</string>
     <string name="appOverridesDescription">Set up overrides per app. Switch off to globally disable app overrides.</string>
+    <string name="profileThorToolsOwn">Thor Tools\' own</string>
+    <string name="profileRefreshRate">Refresh rate</string>
+    <string name="profileRefreshRateInfo">Set while this app is in front; the earlier rate comes back exactly when you leave it.</string>
+    <string name="profileBottomScreen">Bottom screen</string>
+    <string name="refreshRate60">60 Hz</string>
+    <string name="refreshRate120">120 Hz</string>
+    <string name="bottomScreenRuleOff">Off</string>
+    <string name="bottomScreenRuleOffInfo">The bottom screen goes off while this app is on the top screen, and comes back when you leave it. Saves battery in single-screen games.</string>
+    <string name="bottomScreenRuleOn">On</string>
+    <string name="bottomScreenRuleOnInfo">The bottom screen stays on while this app is in front, even if it was off.</string>
+    <string name="profileLeftToOdinTools">OdinTools handles controller style, L2/R2, performance and fan (see App profiles), so those rows below don\'t apply. Refresh rate and the bottom screen are Thor Tools\' own and still work.</string>
     <string name="addOverride">Add app override</string>
     <string name="deleteOverride">Delete override</string>
     <string name="deleteConfirm">Do you really want to delete this item?</string>
@@ -90,15 +100,10 @@
     <string name="controllerAndButtons">Controller &amp; buttons</string>
     <string name="appProfiles">App profiles</string>
     <string name="setupAndDiagnostics">Setup &amp; diagnostics</string>
-    <string name="controllerAndButtonsSummary">Controller style, L2/R2, hotkeys and the Home button</string>
-    <string name="appProfilesSummary">Per-app controller, performance and fan, and the style on an external display</string>
-    <string name="displaySummary">Display saturation</string>
-    <string name="setupAndDiagnosticsSummary">OdinTools coexistence, the diagnostics report and logs</string>
     <string name="back">Back</string>
 
     <string name="charging">Charging</string>
     <string name="powerManagement">Power management</string>
-    <string name="powerManagementSummary">Charging alert, what happens when the lid closes</string>
     <string name="lidHeader">Lid</string>
     <string name="lidTitle">When the lid closes</string>
     <string name="lidRowSummary">Save power and keep the Thor asleep while it\'s closed. Everything goes back when it opens.</string>
@@ -224,12 +229,101 @@
     <string name="accessInputHelperNotNeeded">Not running while the accessibility service is off</string>
     <string name="actionOpenQuickPanel">Thor Tools quick panel</string>
     <string name="quickPanel">Quick panel</string>
-    <string name="quickPanelDescription">The overlay the AYN button opens: modes, screenshot, volume, brightness</string>
     <string name="panelTakesController">Panel takes the controller</string>
     <string name="panelTakesControllerDescription">Move through the panel with the D-pad and A. Off: touch only, the game keeps the controller.</string>
     <string name="panelOnlyAynCloses">Only the AYN button closes the panel</string>
     <string name="panelOnlyAynClosesDescription">The panel stays open until you tap AYN or its close button: tiles, B, Back, Home and touches beside it leave it open. Off: those close it too, as before.</string>
     <string name="openQuickPanelNow">Open the panel now</string>
+    <string name="wizardTitle">Set up Thor Tools</string>
+    <string name="wizardSkip">Skip</string>
+    <string name="wizardBack">Back</string>
+    <string name="wizardNext">Next</string>
+    <string name="wizardFinish">Finish</string>
+    <string name="wizardStepOf">Step %1$d of %2$d</string>
+    <string name="wizardRunAgain">Run the setup again</string>
+    <string name="wizardRunAgainDescription">Access, hotkeys, the quick panel and a theme, one step at a time</string>
+    <string name="wizardWelcome">Welcome to Thor Tools</string>
+    <string name="wizardWelcomeIntro">A few steps get the most out of your Thor. Everything here can be changed later, and Skip leaves it all as it is.</string>
+    <string name="wizardPointPanel">A quick panel on the AYN button: modes, sliders, stats and widgets</string>
+    <string name="wizardPointHotkeys">Hotkeys on Home, Back, AYN and the volume keys, alone or in combos</string>
+    <string name="wizardPointScreens">Tools for the two screens: swap apps, Home on either screen, move the controller</string>
+    <string name="wizardPointPower">Power management: what happens when the lid closes, and a charging alert</string>
+    <string name="wizardPointProfiles">App profiles: controller, performance, refresh rate and more, per app</string>
+    <string name="wizardOdinTools">OdinTools is installed. Features both apps change start switched off here, so the two don\'t undo each other; Setup &amp; diagnostics, OdinTools coexistence, explains each one.</string>
+    <string name="wizardAccess">What Thor Tools needs</string>
+    <string name="wizardAccessIntro">Thor Tools allows most of this itself through AYN\'s system service. Tap the button, or one line at a time; Android only asks where it has to.</string>
+    <string name="wizardFixAll">Set everything up</string>
+    <string name="wizardAccessOk">All set: nothing is missing.</string>
+    <string name="wizardNoRoot">AYN\'s system service doesn\'t answer. Turn off "Force SELinux" in AYN\'s settings (it is off from the factory) and open Thor Tools again.</string>
+    <string name="wizardHotkeys">The AYN button and hotkeys</string>
+    <string name="wizardHotkeysIntro">A tap of the AYN button opens the quick panel and holding it opens AYN\'s drawer. Pick a set of ready-made hotkeys to start from.</string>
+    <string name="wizardAddHotkeys">Add these hotkeys</string>
+    <string name="wizardHotkeysAdded">Added %1$d hotkeys.</string>
+    <string name="wizardHotkeysNoneFree">Nothing added: their keys are already in use.</string>
+    <string name="wizardHotkeysLater">Hotkeys you already have stay as they are. Controller &amp; buttons, Hotkeys, lists and changes them.</string>
+    <string name="wizardPanel">The quick panel</string>
+    <string name="wizardPanelIntro">The panel opens on the bottom screen. Pages and widgets are arranged in Quick panel, Edit panel.</string>
+    <string name="wizardTryPanel">Try it: open the panel</string>
+    <string name="wizardTheme">A theme</string>
+    <string name="wizardThemeIntro">For Thor Tools and the quick panel.</string>
+    <string name="wizardThemeLater">Display, Themes has previews, and makes your own.</string>
+    <string name="wizardDone">All set</string>
+    <string name="wizardDoneIntro">A few more places worth a look:</string>
+    <string name="wizardDonePower">Power management: pick what happens when the lid closes</string>
+    <string name="wizardDoneProfiles">App profiles: settings that follow each game</string>
+    <string name="wizardDoneEditor">Quick panel, Edit panel: widgets in the sizes you like</string>
+    <string name="wizardDoneAgain">Setup &amp; diagnostics: run this setup again any time</string>
+    <string name="keepAfterRestart">Keep it after a restart</string>
+    <string name="saturationAtBootInfo">Thor Tools sets this saturation again each time the Thor starts.</string>
+    <string name="vibrationAtBootInfo">Thor Tools sets this vibration strength again each time the device starts.</string>
+    <string name="coexistenceSuperset">Thor Tools has every setting OdinTools has, and more for the Thor. You don\'t need both, but they can stay installed together: here you choose which app handles each feature they share.</string>
+    <string name="coexistenceAppInfo">OdinTools\' app info</string>
+    <string name="homeService">Service</string>
+    <string name="homeHelper">Helper</string>
+    <string name="homeRunning">%1$s running</string>
+    <string name="homeOff">%1$s off</string>
+    <string name="homeOpenPanel">Open the quick panel</string>
+    <string name="homeThemes">Themes</string>
+    <string name="homeNoProfiles">No apps yet</string>
+    <string name="homeLidOff">Lid actions off</string>
+    <string name="homeChargeAlertOn">Charging alert on</string>
+    <string name="homeChargeAlertOff">Charging alert off</string>
+    <string name="homeTheme">Theme: %1$s</string>
+    <string name="homeSetupOk">Everything is allowed</string>
+    <string name="homeSetupCheck">Something needs a look</string>
+    <string name="homeOdinTools">OdinTools is installed too</string>
+    <string name="homeOdinToolsChoose">Choose who does what</string>
+    <plurals name="homeHotkeys">
+        <item quantity="one">%1$d hotkey</item>
+        <item quantity="other">%1$d hotkeys</item>
+    </plurals>
+    <plurals name="homePages">
+        <item quantity="one">%1$d page</item>
+        <item quantity="other">%1$d pages</item>
+    </plurals>
+    <plurals name="homeWidgets">
+        <item quantity="one">%1$d widget</item>
+        <item quantity="other">%1$d widgets</item>
+    </plurals>
+    <plurals name="homeProfiles">
+        <item quantity="one">%1$d app</item>
+        <item quantity="other">%1$d apps</item>
+    </plurals>
+    <plurals name="homeLidActions">
+        <item quantity="one">%1$d lid action on</item>
+        <item quantity="other">%1$d lid actions on</item>
+    </plurals>
+    <string name="odinFeatures">OdinTools features</string>
+    <string name="odinFeaturesIntro">Everything OdinTools does, built into Thor Tools: you don\'t need OdinTools for any of it.</string>
+    <string name="odinFeaturesOverridesInfo">Each app can set the controller style, L2/R2, performance and fan while it\'s in front. Thor Tools adds the refresh rate and the bottom screen.</string>
+    <string name="odinFeaturesEditApps">Edit the apps</string>
+    <string name="odinFeaturesChooseStyle">Choose the style</string>
+    <string name="odinFeaturesLevels">Levels: %1$d %% to %2$d %%</string>
+    <string name="odinFeaturesSetSaturation">Set the saturation</string>
+    <string name="odinFeaturesSetStrength">Set the strength</string>
+    <string name="odinFeaturesFootnote">Vibration strength and the charge limit came from the Odin 2; the Thor has the same controls.</string>
+    <string name="homeOdinFeaturesLine">Saturation, vibration, the charge limit, the external display style and app overrides, all built in</string>
+    <string name="homeOdinToolsLine">Thor Tools has every OdinTools setting and more. Choose which app handles what</string>
     <string name="panelYours">Your panel</string>
     <string name="mediaListenerLabel">Thor Tools: what\'s playing</string>
     <string name="panelMediaNoAccess">Show what\'s playing here, with play, pause and skip.</string>
@@ -640,6 +734,15 @@
     <string name="hotkeyPress">Press</string>
     <string name="hotkeyNotAllowed">Home and Back held together can\'t be a hotkey.</string>
     <string name="hotkeyReplaces">Now used for: %1$s. Saving moves it to this action.</string>
+    <string name="hotkeyShadows">In these apps it takes the place of the hotkey for every app with the same keys (%1$s), which still works everywhere else.</string>
+    <string name="hotkeyAppOff">Hotkeys are off in %1$s (Options): only the AYN button\'s work there, so this one won\'t either.</string>
+    <string name="hotkeyWorksIn">Works in</string>
+    <string name="hotkeyEveryApp">Every app</string>
+    <string name="hotkeyChosenApps">Only in chosen apps</string>
+    <string name="hotkeyChangeApps">Change the apps</string>
+    <string name="hotkeyOnlyIn">Only in %1$s</string>
+    <string name="hotkeyAppsTitle">Apps for this hotkey</string>
+    <string name="hotkeyAppsInfo">Tick the apps this hotkey works in. There it takes the place of a hotkey for every app with the same keys. With none ticked it works in every app.</string>
     <string name="hotkeysTabYours">Your hotkeys</string>
     <string name="hotkeysTabSuggested">Suggestions</string>
     <string name="hotkeysTabOptions">Options</string>

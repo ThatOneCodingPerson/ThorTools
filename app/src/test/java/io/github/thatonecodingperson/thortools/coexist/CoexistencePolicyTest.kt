@@ -30,4 +30,11 @@ class CoexistencePolicyTest {
         assertFalse(CoexistencePolicy.needsConfirmation(turningOn = false, odinToolsInstalled = true))
         assertFalse(CoexistencePolicy.needsConfirmation(turningOn = true, odinToolsInstalled = false))
     }
+
+    @Test
+    fun `a guard only switch is on without OdinTools, whatever was stored next to it`() {
+        assertTrue(CoexistencePolicy.resolve(defaultEnabled = true, stored = false, odinToolsInstalled = false, guardOnly = true))
+        assertFalse(CoexistencePolicy.resolve(defaultEnabled = true, stored = false, odinToolsInstalled = true, guardOnly = true))
+        assertFalse(CoexistencePolicy.resolve(defaultEnabled = true, stored = null, odinToolsInstalled = true, guardOnly = true))
+    }
 }

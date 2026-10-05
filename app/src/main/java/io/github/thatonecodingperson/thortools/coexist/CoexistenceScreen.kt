@@ -1,5 +1,8 @@
 package io.github.thatonecodingperson.thortools.coexist
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -16,10 +19,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import io.github.thatonecodingperson.thortools.R
+import io.github.thatonecodingperson.thortools.hotkeys.NoteCard
 import io.github.thatonecodingperson.thortools.ui.composables.OverlapConfirmDialog
 import io.github.thatonecodingperson.thortools.ui.composables.SubTopAppBar
 import io.github.thatonecodingperson.thortools.ui.composables.SwitchPreference
@@ -27,6 +32,7 @@ import io.github.thatonecodingperson.thortools.ui.composables.SwitchPreference
 @Composable
 fun CoexistenceScreen(viewModel: CoexistenceViewModel = hiltViewModel(), onBack: () -> Unit) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) { viewModel.refresh() }
 
@@ -56,6 +62,18 @@ fun CoexistenceScreen(viewModel: CoexistenceViewModel = hiltViewModel(), onBack:
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
+            if (odinTools.installed) {
+                NoteCard(
+                    text = stringResource(R.string.coexistenceSuperset),
+                    actionLabel = stringResource(R.string.coexistenceAppInfo),
+                    onAction = {
+                        context.startActivity(
+                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", OdinToolsDetector.PACKAGE, null)),
+                        )
+                    },
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
             Text(
                 text = stringResource(R.string.coexistenceIntro),
                 style = MaterialTheme.typography.bodySmall,

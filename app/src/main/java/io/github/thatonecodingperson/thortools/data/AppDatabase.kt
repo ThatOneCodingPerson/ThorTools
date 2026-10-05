@@ -8,11 +8,12 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [AppOverrideEntity::class],
-    version = 6,
+    version = 7,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
         AutoMigration(from = 3, to = 4),
+        AutoMigration(from = 6, to = 7),
     ],
     exportSchema = true,
 )

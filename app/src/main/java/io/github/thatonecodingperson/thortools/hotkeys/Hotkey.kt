@@ -187,7 +187,8 @@ enum class PressKind(val id: String, val taps: Int?, @StringRes val label: Int, 
  * One hotkey: a [press] of [button], or, with [second], holding [button] and a [press] of [second]. [arg] is the
  * action's argument: an encoded [AppLaunch] for [ThorAction.LAUNCH_APP], a [CloseAppArg] for [ThorAction.CLOSE_APP].
  * [showText]: a short note on the screen says what it did. [lock]: a controller move also locks the controller there
- * (see [canLock]). [cleanMemory]: closing background apps also cleans memory (see [canCleanMemory]).
+ * (see [canLock]). [cleanMemory]: closing background apps also cleans memory (see [canCleanMemory]). [apps]: only in these
+ * apps (package names), where it takes the place of a hotkey for every app with the same trigger; empty: in every app.
  */
 data class Hotkey(
     val button: PadButton,
@@ -198,11 +199,19 @@ data class Hotkey(
     val showText: Boolean = true,
     val lock: Boolean = false,
     val cleanMemory: Boolean = false,
+    val apps: Set<String> = emptySet(),
 ) {
     fun sameTrigger(other: Hotkey) = button == other.button && second == other.second && press == other.press
 
-    /** The same trigger doing the same thing, whatever its switches. */
-    fun sameJob(other: Hotkey) = sameTrigger(other) && action == other.action && arg == other.arg
+    /**
+     * Both can't be kept: the same trigger, and both for every app or both for some app in common. A hotkey for chosen
+     * apps next to one for every app is fine: it wins in its apps.
+     */
+    fun clashes(other: Hotkey) =
+        sameTrigger(other) && apps.isEmpty() == other.apps.isEmpty() && (apps.isEmpty() || apps.any { it in other.apps })
+
+    /** The same trigger doing the same thing in the same apps, whatever its switches. */
+    fun sameJob(other: Hotkey) = sameTrigger(other) && action == other.action && arg == other.arg && apps == other.apps
 
     /**
      * A single tap doing what the button does anyway (Home = Home, Back = Back): the button's own job, listed so it can be
@@ -248,8 +257,9 @@ data class Hotkey(
 }
 
 /**
- * The stored form: one hotkey per line, `button;second;press;action;arg;switches` where switches lists `text`, `lock`
- * and `memory`. Lines from 0.14.0 and earlier have no switches field; unknown switches are ignored.
+ * The stored form: one hotkey per line, `button;second;press;action;arg;switches[;apps]` where switches lists `text`,
+ * `lock` and `memory`, and apps the package names a hotkey is limited to (left out for every app). Lines from 0.14.0 and
+ * earlier have no switches field; unknown switches are ignored.
  */
 object HotkeyList {
     /** A tap of the AYN button opens or closes the Thor Tools quick panel. */
@@ -266,7 +276,7 @@ object HotkeyList {
 
     /** [hotkeys] with [aynPanel] added when nothing is bound to a single tap of AYN; a tap bound elsewhere stays. */
     fun withAynPanel(hotkeys: List<Hotkey>): List<Hotkey> =
-        if (hotkeys.any { it.sameTrigger(aynPanel) }) hotkeys else listOf(aynPanel) + hotkeys
+        if (hotkeys.any { it.clashes(aynPanel) }) hotkeys else listOf(aynPanel) + hotkeys
 
     /** [hotkeys] with [ownPresses] added where nothing is bound to that single tap; a tap bound elsewhere stays. */
     fun withOwnPresses(hotkeys: List<Hotkey>): List<Hotkey> = addFreeSuggestions(hotkeys, ownPresses)
@@ -277,7 +287,16 @@ object HotkeyList {
             SWITCH_LOCK.takeIf { hotkey.lock },
             SWITCH_MEMORY.takeIf { hotkey.cleanMemory },
         ).joinToString(",")
-        listOf(hotkey.button.id, hotkey.second?.id.orEmpty(), hotkey.press.id, hotkey.action.id, hotkey.arg.orEmpty(), switches)
+        val apps = hotkey.apps.sorted().joinToString(",").takeIf { it.isNotEmpty() }
+        listOfNotNull(
+            hotkey.button.id,
+            hotkey.second?.id.orEmpty(),
+            hotkey.press.id,
+            hotkey.action.id,
+            hotkey.arg.orEmpty(),
+            switches,
+            apps,
+        )
             .joinToString(";")
     }
 
@@ -288,7 +307,7 @@ object HotkeyList {
     fun decode(text: String?, textByDefault: Boolean = true): List<Hotkey> {
         if (text == null) return defaults
         return text.lines().mapNotNull { line ->
-            val parts = line.split(';', limit = 6)
+            val parts = line.split(';', limit = 7)
             val switches = parts.getOrNull(5)?.split(',')
             if (parts.size < 4) return@mapNotNull null
             val button = PadButton.byId(parts[0]) ?: return@mapNotNull null
@@ -303,17 +322,25 @@ object HotkeyList {
                 showText = switches?.contains(SWITCH_TEXT) ?: textByDefault,
                 lock = switches?.contains(SWITCH_LOCK) == true,
                 cleanMemory = switches?.contains(SWITCH_MEMORY) == true,
+                apps = parts.getOrNull(6)?.split(',')?.filter { it.isNotBlank() }?.toSet().orEmpty(),
             )
         }
     }
 
-    /** [hotkey] added, replacing [replacing] and any hotkey with the same trigger. */
+    /** The hotkeys that count in [app]: its own, and every hotkey for all apps whose trigger it has no own one for. */
+    fun forApp(hotkeys: List<Hotkey>, app: String?): List<Hotkey> {
+        val own = if (app == null) emptyList() else hotkeys.filter { app in it.apps }
+        if (own.isEmpty()) return hotkeys.filter { it.apps.isEmpty() }
+        return hotkeys.filter { hotkey -> hotkey.apps.isEmpty() && own.none { it.sameTrigger(hotkey) } } + own
+    }
+
+    /** [hotkey] added, replacing [replacing] and any hotkey it [Hotkey.clashes] with. */
     fun put(hotkeys: List<Hotkey>, hotkey: Hotkey, replacing: Hotkey? = null): List<Hotkey> =
-        hotkeys.filterNot { it == replacing || it.sameTrigger(hotkey) } + hotkey
+        hotkeys.filterNot { it == replacing || it.clashes(hotkey) } + hotkey
 
     /** [hotkeys] plus every one of [suggestions] whose trigger is still free; nothing is replaced. */
     fun addFreeSuggestions(hotkeys: List<Hotkey>, suggestions: List<Hotkey>): List<Hotkey> =
-        hotkeys + suggestions.filter { suggestion -> hotkeys.none { it.sameTrigger(suggestion) } }
+        hotkeys + suggestions.filter { suggestion -> hotkeys.none { it.clashes(suggestion) } }
 
     private const val SWITCH_TEXT = "text"
     private const val SWITCH_LOCK = "lock"

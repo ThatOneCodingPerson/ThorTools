@@ -14,7 +14,7 @@ charge automation; and saturation or vibration re-applied at boot. **If OdinTool
 switched off in Thor Tools.** Each of them carries a small *OdinTools* tag in its menu, and the *OdinTools
 coexistence* page under Setup & diagnostics explains each one.
 You can still switch any of them on. Turn the matching feature off in OdinTools first, so the two apps don't undo
-each other.
+each other. Without OdinTools you won't see any of this: Thor Tools has every OdinTools setting in its own menus.
 
 ## Features
 
@@ -39,8 +39,9 @@ each other.
   another, including a D-pad direction or a stick flick) run any action or open an app on the screen you choose
 - A single press of Home or Back still does its usual job, and game buttons are only used in combos, so games keep
   their controls
-- Record a hotkey by pressing it, start from ready-made suggestions (the Thor Profile among them), turn hotkeys off
-  per app; a hotkey can show what it did on screen, and a controller move can also lock the controller there
+- Record a hotkey by pressing it, start from ready-made suggestions (the Thor Profile among them), limit a hotkey to
+  chosen apps (it takes the place of the usual one there) or turn hotkeys off per app; a hotkey can show what it did
+  on screen, and a controller move can also lock the controller there
 
 ### Two screens
 - Swap the apps between the screens, close the other screen's app, Home on the screen you're using or on both
@@ -55,15 +56,22 @@ each other.
 - **Charging stability alert**: a notification when charging keeps flipping between fast, slow and not charging,
   which on the Thor usually means a reboot is needed
 
-### From OdinTools
-- App profiles: per-app controller style, L2/R2 mode, performance and fan
+### App profiles
+- Per app: controller style, L2/R2 mode, performance and fan (from OdinTools), plus refresh rate and the bottom screen
+  off while the app is on the top screen; everything goes back when you leave the app
+
+### From OdinTools (all in the OdinTools features menu)
 - Controller and L2/R2 style for external displays
 - Quick settings tiles that cycle the controller style and L2/R2 mode
-- Display saturation; on the Odin 2 also vibration strength, M1/M2 remapping and charge-limit automation
+- Display saturation, vibration strength and charge-limit automation, each kept after a restart if you like; on the
+  Odin 2 also M1/M2 remapping
 
 ### Look and setup
+- A main menu that shows how everything stands at a glance, with shortcuts to the pages you use most
 - Themes: Midnight, Graphite, Glacier, Ember, Forest, Daylight, Android's own colours or one you make yourself, for
   the app and the panel
+- A guided setup on first start (access, hotkeys, the quick panel, a theme), and again any time from Setup &
+  diagnostics
 - Permissions & access: every permission Thor Tools relies on, with its real state and a one-tap fix
 - Diagnostics: device facts, a button tester, and a report you can copy or save to Downloads
 - Stays running: a quiet notification, a battery-optimisation exemption and a check after boot
@@ -71,7 +79,6 @@ each other.
 ### Planned
 - Charging dashboard: live watts, 80 % limit, direct power, battery health
 - Screen modes and bottom-screen auto-off
-- Guided first-run setup
 
 ## Install
 

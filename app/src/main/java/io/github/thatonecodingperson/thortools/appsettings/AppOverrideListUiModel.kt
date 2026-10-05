@@ -1,6 +1,8 @@
 package io.github.thatonecodingperson.thortools.appsettings
 
 import android.graphics.drawable.Drawable
+import io.github.thatonecodingperson.thortools.models.AppRefreshRate
+import io.github.thatonecodingperson.thortools.models.BottomScreenRule
 import io.github.thatonecodingperson.thortools.models.ControllerStyle
 import io.github.thatonecodingperson.thortools.models.FanMode
 import io.github.thatonecodingperson.thortools.models.L2R2Style
@@ -20,6 +22,8 @@ data class AppOverridesUiModel(
     val navigateBack: Boolean = false,
     val isNewApp: Boolean = false,
     val disabledFanModeKeys: List<String> = emptyList(),
+    /** OdinTools handles controller style, L2/R2, performance and fan, so only Thor Tools' own rows apply. */
+    val leftToOdinTools: Boolean = false,
 )
 
 data class AppUiModel(
@@ -31,4 +35,6 @@ data class AppUiModel(
     val l2r2Style: L2R2Style? = null,
     val fanMode: FanMode? = null,
     val perfMode: PerfMode? = null,
+    val refreshRate: AppRefreshRate? = null,
+    val bottomScreen: BottomScreenRule? = null,
 )

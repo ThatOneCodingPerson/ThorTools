@@ -1,0 +1,61 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 7,
+    "identityHash": "6bf0349c95595ef7b63c70a98a70957f",
+    "entities": [
+      {
+        "tableName": "appoverride",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`packageName` TEXT NOT NULL, `controllerStyle` TEXT, `l2R2Style` TEXT, `perfMode` TEXT, `fanMode` TEXT, `refreshRate` TEXT, `bottomScreen` TEXT, PRIMARY KEY(`packageName`))",
+        "fields": [
+          {
+            "fieldPath": "packageName",
+            "columnName": "packageName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "controllerStyle",
+            "columnName": "controllerStyle",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "l2R2Style",
+            "columnName": "l2R2Style",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "perfMode",
+            "columnName": "perfMode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "fanMode",
+            "columnName": "fanMode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "refreshRate",
+            "columnName": "refreshRate",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "bottomScreen",
+            "columnName": "bottomScreen",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "packageName"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '6bf0349c95595ef7b63c70a98a70957f')"
+    ]
+  }
+}

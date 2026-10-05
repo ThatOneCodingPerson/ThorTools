@@ -55,11 +55,15 @@ import io.github.thatonecodingperson.thortools.input.WindowSnapshot
 import io.github.thatonecodingperson.thortools.lid.LidController
 import io.github.thatonecodingperson.thortools.lid.LidText
 import io.github.thatonecodingperson.thortools.main.MainActivity
+import io.github.thatonecodingperson.thortools.models.AppRefreshRate
+import io.github.thatonecodingperson.thortools.models.BottomScreenRule
 import io.github.thatonecodingperson.thortools.models.ControllerStyle
 import io.github.thatonecodingperson.thortools.models.ControllerStyle.Unknown
 import io.github.thatonecodingperson.thortools.models.FanMode
 import io.github.thatonecodingperson.thortools.models.L2R2Style
 import io.github.thatonecodingperson.thortools.models.PerfMode
+import io.github.thatonecodingperson.thortools.models.RefreshRate
+import io.github.thatonecodingperson.thortools.models.ScreenMode
 import io.github.thatonecodingperson.thortools.panel.CloseReason
 import io.github.thatonecodingperson.thortools.panel.FocusMover
 import io.github.thatonecodingperson.thortools.panel.QuickPanel
@@ -111,11 +115,16 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
     private var overridesDelay = false
     private var perAppControlsEnabled = true
 
+    // The four categories OdinTools also manages, applied only while Thor Tools has them (see Overlap.PER_APP_CONTROLS).
     private var hasSetOverride = false
     private var savedControllerStyle: ControllerStyle? = null
     private var savedL2R2Style: L2R2Style? = null
     private var savedPerfMode: PerfMode? = null
     private var savedFanMode: FanMode? = null
+
+    // Thor Tools' own categories; OdinTools doesn't touch them, so they apply either way. Null: not changed now.
+    private var savedRefreshRate: RefreshRate.Saved? = null
+    private var savedScreenMode: Int? = null
 
     @Volatile
     private var currentIme = ""
@@ -134,12 +143,15 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
     private val overrideExecutor = Executors.newSingleThreadExecutor()
     private lateinit var actionRunner: ActionRunner
 
-    // Main thread only, like the key events it reads; replaced whenever the hotkey list changes.
+    // Main thread only, like the key events it reads; replaced whenever the hotkey list or the app in front changes.
+    private var allHotkeys = HotkeyList.defaults
+    private var scopeWaiting = false
     private var hotkeyList = HotkeyList.defaults
     private var hotkeys = HotkeyRecognizer(hotkeyList)
     private val hotkeyTimer = Runnable {
         carryOut(hotkeys.onTimer(SystemClock.uptimeMillis()))
         watchJoystick()
+        useWaitingHotkeys()
     }
     private lateinit var joystickCatcher: JoystickCatcher
 
@@ -321,12 +333,21 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
     private fun handleApp(packageName: String) {
         currentForegroundPackage = packageName
         val override = overrides.find { it.packageName == packageName }
-        overrideExecutor.execute { if (override != null) applyOverride(override) else resetOverrides() }
+        val odinCategories = perAppControlsEnabled
+        val appOnTop = override?.bottomScreen != null && actionHost.appsOnScreens()[Display.DEFAULT_DISPLAY] == packageName
+        overrideExecutor.execute {
+            if (override != null) {
+                if (odinCategories) applyOverride(override) else resetOverrides()
+                applyScreenRules(override, appOnTop)
+            } else {
+                resetOverrides()
+                resetScreenRules()
+            }
+        }
     }
 
     private fun shouldIgnore(packageName: String): Boolean {
         if (overridesEnabled.not()) return true // User disabled overrides globally
-        if (perAppControlsEnabled.not()) return true // Left to OdinTools
         if (::overrides.isInitialized.not()) return true // Got an event before the DB was returning data
         if (ignoredPackages.contains(packageName)) return true // Ignore some system packages
         if (packageName == currentForegroundPackage) return true // No action on duplicate events
@@ -351,6 +372,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
             else -> packageName
         }
         lastAppPackage = app
+        useHotkeysForApp()
     }
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
@@ -392,7 +414,10 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         if (newPress && hotkeys.heldSince == event.eventTime) heldFrom = event.deviceId
         carryOut(step)
         // Answer the key first; the catcher's window is a WindowManager call.
-        mainHandler.post { watchJoystick() }
+        mainHandler.post {
+            watchJoystick()
+            useWaitingHotkeys()
+        }
         return step.consume to describe(step, if (step.consume) "swallowed" else "passed")
     }
 
@@ -452,6 +477,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         if (!hotkeys.holding) return
         hotkeys.forgetHeld()
         watchJoystick()
+        useWaitingHotkeys()
     }
 
     /**
@@ -540,6 +566,20 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         }
     }
 
+    /**
+     * The hotkeys for the app in front ([HotkeyList.forApp]). While a button is held the change waits for its release, so
+     * a press never ends on another list than it started on.
+     */
+    private fun useHotkeysForApp() {
+        scopeWaiting = hotkeys.holding
+        if (!scopeWaiting) useHotkeys(HotkeyList.forApp(allHotkeys, lastAppPackage))
+    }
+
+    /** After a key, a timer or a lost release: the app's list once nothing is held any more. */
+    private fun useWaitingHotkeys() {
+        if (scopeWaiting) useHotkeysForApp()
+    }
+
     /** A new list builds a new recognizer; releases the old one still had to swallow carry over (a held Home's above all). */
     private fun useHotkeys(list: List<Hotkey>) {
         if (list == hotkeyList) return
@@ -622,6 +662,42 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
 
         hasSetOverride = false
     }
+
+    /** Refresh rate and the bottom screen, saved before the first change and put back exactly when no profile asks. */
+    private fun applyScreenRules(override: AppOverrideEntity, appOnTop: Boolean) {
+        val hz = AppRefreshRate.byId(override.refreshRate)?.hz
+        if (hz != null) {
+            if (savedRefreshRate == null) savedRefreshRate = RefreshRate.save(executor)
+            RefreshRate.apply(executor, hz)
+        } else {
+            restoreRefreshRate()
+        }
+        val mode = ScreenMode.forRule(BottomScreenRule.byId(override.bottomScreen), appOnTop)
+        if (mode != null) {
+            if (savedScreenMode == null) savedScreenMode = screenMode()
+            executor.executeAsRoot("settings put system ${ScreenMode.KEY} $mode")
+        } else {
+            restoreScreenMode()
+        }
+    }
+
+    private fun resetScreenRules() {
+        restoreRefreshRate()
+        restoreScreenMode()
+    }
+
+    private fun restoreRefreshRate() {
+        savedRefreshRate?.let { RefreshRate.restore(executor, it) }
+        savedRefreshRate = null
+    }
+
+    private fun restoreScreenMode() {
+        savedScreenMode?.let { executor.executeAsRoot("settings put system ${ScreenMode.KEY} $it") }
+        savedScreenMode = null
+    }
+
+    private fun screenMode(): Int = runCatching { Settings.System.getInt(contentResolver, ScreenMode.KEY, ScreenMode.BOTH_ON) }
+        .getOrDefault(ScreenMode.BOTH_ON)
 
     private fun applyChargeLimit(newValue: Boolean) {
         if (newValue && !chargeLimitEnabled) {
@@ -752,7 +828,14 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
             openAynDrawer = { scope.launch { AynHooks.openDrawer(executor) } },
         )
         getSystemService(InputManager::class.java).registerInputDeviceListener(inputDeviceListener, mainHandler)
-        scope.launch { prefs.hotkeyChanges().collect { list -> mainHandler.post { useHotkeys(list) } } }
+        scope.launch {
+            prefs.hotkeyChanges().collect { list ->
+                mainHandler.post {
+                    allHotkeys = list
+                    useHotkeysForApp()
+                }
+            }
+        }
         scope.launch { prefs.hotkeyOffAppsChanges().collect { apps -> hotkeysOffIn = apps } }
         registerReceiver(
             screenReceiver,

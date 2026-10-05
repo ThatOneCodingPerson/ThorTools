@@ -26,6 +26,9 @@ class ChargeMonitor @Inject constructor(
     private val notifier: ChargeAlertNotifier,
 ) {
     private val detector = FlapDetector()
+
+    /** SELinux keeps the app out of the voltage file on the Thor; once a direct read failed, PServer reads it. */
+    private var directReadDenied = false
     private var thread: HandlerThread? = null
     private var handler: Handler? = null
 
@@ -96,9 +99,9 @@ class ChargeMonitor @Inject constructor(
     }
 
     private fun readInputVoltage(): Long? {
-        val node = File(USB_VOLTAGE_NODE)
-        val raw = runCatching { node.readText() }.getOrNull()
-            ?: executor.getStringValue(USB_VOLTAGE_NODE, "")
+        val direct = if (directReadDenied) null else runCatching { File(USB_VOLTAGE_NODE).readText() }.getOrNull()
+        if (direct == null) directReadDenied = true
+        val raw = direct ?: executor.getStringValue(USB_VOLTAGE_NODE, "")
         return raw.trim().toLongOrNull()
     }
 

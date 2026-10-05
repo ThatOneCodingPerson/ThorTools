@@ -3,16 +3,23 @@ package io.github.thatonecodingperson.thortools.diagnostics
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.thatonecodingperson.thortools.R
+import io.github.thatonecodingperson.thortools.coexist.OdinToolsDetector
 import io.github.thatonecodingperson.thortools.tools.ShellExecutor
 import io.github.thatonecodingperson.thortools.ui.composables.SubScreen
 import io.github.thatonecodingperson.thortools.ui.composables.TriggerPreference
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -21,7 +28,19 @@ import java.util.Locale
 import javax.inject.Inject
 
 @HiltViewModel
-class SetupViewModel @Inject constructor(@ApplicationContext private val context: Context, private val shell: ShellExecutor) : ViewModel() {
+class SetupViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val shell: ShellExecutor,
+    private val odinTools: OdinToolsDetector,
+) : ViewModel() {
+
+    /** The coexistence page only means something while OdinTools is installed. */
+    private val _odinToolsInstalled = MutableStateFlow(false)
+    val odinToolsInstalled: StateFlow<Boolean> = _odinToolsInstalled.asStateFlow()
+
+    fun refresh() {
+        _odinToolsInstalled.value = odinTools.isInstalled()
+    }
 
     /** A root logcat dump takes a while, so it runs off the main thread and says where the file went. */
     fun dumpLogToFile() {
@@ -40,24 +59,35 @@ class SetupViewModel @Inject constructor(@ApplicationContext private val context
 @Composable
 fun SetupScreen(
     viewModel: SetupViewModel = hiltViewModel(),
+    onWizard: () -> Unit,
     onPermissions: () -> Unit,
     onCoexistence: () -> Unit,
     onDiagnostics: () -> Unit,
     onBack: () -> Unit,
 ) {
+    val odinToolsInstalled by viewModel.odinToolsInstalled.collectAsState()
+    LaunchedEffect(Unit) { viewModel.refresh() }
     SubScreen(title = R.string.setupAndDiagnostics, onBack = onBack) {
+        TriggerPreference(
+            icon = R.drawable.ic_info,
+            title = R.string.wizardRunAgain,
+            description = R.string.wizardRunAgainDescription,
+            onClick = onWizard,
+        )
         TriggerPreference(
             icon = R.drawable.ic_info,
             title = R.string.permissionsTitle,
             description = R.string.permissionsDescription,
             onClick = onPermissions,
         )
-        TriggerPreference(
-            icon = R.drawable.ic_info,
-            title = R.string.coexistence,
-            description = R.string.coexistenceDescription,
-            onClick = onCoexistence,
-        )
+        if (odinToolsInstalled) {
+            TriggerPreference(
+                icon = R.drawable.ic_info,
+                title = R.string.coexistence,
+                description = R.string.coexistenceDescription,
+                onClick = onCoexistence,
+            )
+        }
         TriggerPreference(
             icon = R.drawable.ic_sliders,
             title = R.string.diagnostics,

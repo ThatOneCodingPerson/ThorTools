@@ -130,4 +130,11 @@ class LidPlanTest {
         assertEquals("-", InputGroup.encode(emptySet()))
         assertEquals(emptySet<InputGroup>(), InputGroup.decode("-"))
     }
+
+    @Test
+    fun `the main menu counts the lid actions that are on`() {
+        assertEquals(0, LidChoices().switchedOn)
+        assertEquals(3, LidChoices(wifiOff = true, muteTouch = true, backToSleep = true).switchedOn)
+        assertEquals(0, LidChoices(enabled = false, wifiOff = true).switchedOn)
+    }
 }

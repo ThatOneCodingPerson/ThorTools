@@ -53,7 +53,15 @@ fun AppPicker(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(stringResource(if (mode == AppPickerMode.OPEN_APP) R.string.hotkeyPickApp else R.string.hotkeysOffApps))
+                    Text(
+                        stringResource(
+                            when (mode) {
+                                AppPickerMode.OPEN_APP -> R.string.hotkeyPickApp
+                                AppPickerMode.HOTKEYS_OFF -> R.string.hotkeysOffApps
+                                AppPickerMode.HOTKEY_APPS -> R.string.hotkeyAppsTitle
+                            },
+                        ),
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.back)) }
@@ -62,9 +70,9 @@ fun AppPicker(
         },
     ) { padding ->
         Column(Modifier.padding(top = padding.calculateTopPadding()).fillMaxSize()) {
-            if (mode == AppPickerMode.HOTKEYS_OFF) {
+            if (mode != AppPickerMode.OPEN_APP) {
                 Text(
-                    text = stringResource(R.string.hotkeysOffAppsInfo),
+                    text = stringResource(if (mode == AppPickerMode.HOTKEYS_OFF) R.string.hotkeysOffAppsInfo else R.string.hotkeyAppsInfo),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp),
@@ -100,7 +108,7 @@ fun AppPicker(
                                 .weight(1f)
                                 .padding(horizontal = 16.dp),
                         )
-                        if (mode == AppPickerMode.HOTKEYS_OFF) {
+                        if (mode != AppPickerMode.OPEN_APP) {
                             Checkbox(checked = app.packageName in checked, onCheckedChange = { onPick(app.packageName) })
                         }
                     }

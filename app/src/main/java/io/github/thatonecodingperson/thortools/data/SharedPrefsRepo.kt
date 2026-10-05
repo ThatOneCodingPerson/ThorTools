@@ -31,6 +31,7 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
         defaultEnabled = overlap.defaultEnabled,
         stored = if (prefs.contains(overlap.prefKey)) prefs.getBoolean(overlap.prefKey, false) else null,
         odinToolsInstalled = odinTools.isInstalled(),
+        guardOnly = overlap.guardOnly,
     )
 
     fun setEnabled(overlap: Overlap, enabled: Boolean) = prefs.edit().putBoolean(overlap.prefKey, enabled).apply()
@@ -198,6 +199,11 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
         get() = prefs.getBoolean(KEY_PANEL_ONLY_AYN_CLOSES, true)
         set(value) = prefs.edit().putBoolean(KEY_PANEL_ONLY_AYN_CLOSES, value).apply()
 
+    /** The setup wizard was finished or skipped; it then only opens when asked for. */
+    var setupDone
+        get() = prefs.getBoolean(KEY_SETUP_DONE, false)
+        set(value) = prefs.edit().putBoolean(KEY_SETUP_DONE, value).apply()
+
     /** The lid sandbox's switches; all off by default. */
     var lidChoices: LidChoices
         get() = LidChoices(
@@ -355,6 +361,7 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
         private const val KEY_PANEL_CLOSE_APP = "panel_close_app_target"
         private const val KEY_PANEL_CLEAN_MEMORY = "panel_clean_memory"
         private const val KEY_PANEL_ONLY_AYN_CLOSES = "panel_only_ayn_closes"
+        private const val KEY_SETUP_DONE = "setup_done"
         private const val KEY_LID_ENABLED = "lid_enabled"
         private const val KEY_LID_POWER_SAVING = "lid_power_saving"
         private const val KEY_LID_CLOSE_BACKGROUND = "lid_close_background"

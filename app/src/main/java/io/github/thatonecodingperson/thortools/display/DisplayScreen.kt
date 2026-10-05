@@ -11,6 +11,7 @@ import io.github.thatonecodingperson.thortools.tools.DeviceType.ODIN2
 import io.github.thatonecodingperson.thortools.ui.composables.SaturationPreferenceDialog
 import io.github.thatonecodingperson.thortools.ui.composables.SettingsHeader
 import io.github.thatonecodingperson.thortools.ui.composables.SubScreen
+import io.github.thatonecodingperson.thortools.ui.composables.SwitchPreference
 import io.github.thatonecodingperson.thortools.ui.composables.SwitchableTriggerPreference
 import io.github.thatonecodingperson.thortools.ui.composables.TriggerPreference
 import io.github.thatonecodingperson.thortools.ui.composables.VibrationPreferenceDialog
@@ -57,6 +58,15 @@ fun DisplayScreen(viewModel: DisplayViewModel = hiltViewModel(), onThemes: () ->
             tag = R.string.tagOdinTools.takeIf { uiState.odinToolsInstalled },
             onClick = viewModel::saturationClicked,
         )
+        if (!uiState.odinToolsInstalled) {
+            SwitchPreference(
+                icon = R.drawable.ic_more_time,
+                title = R.string.keepAfterRestart,
+                description = R.string.saturationAtBootInfo,
+                state = uiState.saturationAtBoot,
+                onChange = viewModel::setSaturationAtBoot,
+            )
+        }
         if (uiState.deviceType == ODIN2) {
             SettingsHeader(R.string.haptics)
             SwitchableTriggerPreference(
@@ -68,6 +78,15 @@ fun DisplayScreen(viewModel: DisplayViewModel = hiltViewModel(), onThemes: () ->
                 tag = R.string.tagOdinTools.takeIf { uiState.odinToolsInstalled },
                 onChange = viewModel::updateVibrationPreference,
             )
+            if (!uiState.odinToolsInstalled) {
+                SwitchPreference(
+                    icon = R.drawable.ic_more_time,
+                    title = R.string.keepAfterRestart,
+                    description = R.string.vibrationAtBootInfo,
+                    state = uiState.vibrationAtBoot,
+                    onChange = viewModel::setVibrationAtBoot,
+                )
+            }
         }
     }
 }

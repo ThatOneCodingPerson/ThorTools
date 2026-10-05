@@ -38,6 +38,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -245,6 +246,27 @@ private fun ColumnScope.Summary(state: HotkeysUiModel, draft: HotkeyDraft, viewM
         }
     }
 
+    Label(stringResource(R.string.hotkeyWorksIn))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilterChip(
+            selected = draft.apps.isEmpty(),
+            onClick = viewModel::setDraftEverywhere,
+            label = { Text(stringResource(R.string.hotkeyEveryApp)) },
+        )
+        FilterChip(
+            selected = draft.apps.isNotEmpty(),
+            onClick = { viewModel.openPicker(AppPickerMode.HOTKEY_APPS) },
+            label = { Text(stringResource(R.string.hotkeyChosenApps)) },
+        )
+    }
+    if (draft.apps.isNotEmpty()) {
+        Text(
+            text = stringResource(R.string.hotkeyOnlyIn, appNames(draft.apps, state)),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        TextButton(onClick = { viewModel.openPicker(AppPickerMode.HOTKEY_APPS) }) { Text(stringResource(R.string.hotkeyChangeApps)) }
+    }
+
     Text(stringResource(R.string.hotkeySwitches), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
     SwitchRow(
         title = stringResource(R.string.hotkeyShowText),
@@ -335,6 +357,13 @@ private fun Advice(state: HotkeysUiModel, draft: HotkeyDraft, viewModel: Hotkeys
     }
     state.draftConflict()?.let { other ->
         NoteCard(stringResource(R.string.hotkeyReplaces, stringResource(other.action.label)), warning = true)
+    }
+    state.draftShadows()?.let { other ->
+        NoteCard(stringResource(R.string.hotkeyShadows, stringResource(other.action.label)))
+    }
+    val offHere = draft.apps.filter { it in state.offApps }.toSet()
+    if (offHere.isNotEmpty() && button != PadButton.AYN) {
+        NoteCard(stringResource(R.string.hotkeyAppOff, appNames(offHere, state)), caution = true)
     }
     if (second != null && !Hotkey.goodComboFirst(button)) {
         NoteCard(stringResource(R.string.hotkeyComboFirstCaution, stringResource(button.label)), caution = true)

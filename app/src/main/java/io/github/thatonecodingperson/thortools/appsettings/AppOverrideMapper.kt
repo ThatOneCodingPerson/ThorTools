@@ -6,6 +6,8 @@ import android.content.pm.PackageManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.thatonecodingperson.thortools.R
 import io.github.thatonecodingperson.thortools.data.AppOverrideEntity
+import io.github.thatonecodingperson.thortools.models.AppRefreshRate
+import io.github.thatonecodingperson.thortools.models.BottomScreenRule
 import io.github.thatonecodingperson.thortools.models.ControllerStyle
 import io.github.thatonecodingperson.thortools.models.FanMode
 import io.github.thatonecodingperson.thortools.models.L2R2Style
@@ -39,16 +41,20 @@ class AppOverrideMapper @Inject constructor(@ApplicationContext private val cont
         val l2R2Style = L2R2Style.getById(app.l2R2Style)
         val perfMode = PerfMode.getById(app.perfMode)
         val fanMode = FanMode.getById(app.fanMode)
+        val refreshRate = AppRefreshRate.byId(app.refreshRate)
+        val bottomScreen = BottomScreenRule.byId(app.bottomScreen)
 
         return AppUiModel(
             packageName = app.packageName,
             appName = context.packageManager.getApplicationLabel(appInfo).toString(),
             appIcon = context.packageManager.getApplicationIcon(appInfo),
-            subtitle = getSubtitle(controllerStyle, l2R2Style, perfMode, fanMode),
+            subtitle = getSubtitle(controllerStyle, l2R2Style, perfMode, fanMode, refreshRate, bottomScreen),
             controllerStyle = controllerStyle,
             l2r2Style = l2R2Style,
             perfMode = perfMode,
             fanMode = fanMode,
+            refreshRate = refreshRate,
+            bottomScreen = bottomScreen,
         )
     }
 
@@ -63,31 +69,49 @@ class AppOverrideMapper @Inject constructor(@ApplicationContext private val cont
         )
     }
 
-    private fun getSubtitle(controllerStyle: ControllerStyle, l2R2Style: L2R2Style, perfMode: PerfMode, fanMode: FanMode): String? =
-        buildString {
-            if (controllerStyle != ControllerStyle.Unknown) {
-                append(context.getString(R.string.controllerStyle))
-                append(": ")
-                append(context.getString(controllerStyle.textRes))
-                append(" | ")
-            }
-            if (l2R2Style != L2R2Style.Unknown) {
-                append(context.getString(R.string.l2r2mode))
-                append(": ")
-                append(context.getString(l2R2Style.textRes))
-                append(" | ")
-            }
-            if (perfMode != PerfMode.Unknown) {
-                append(context.getString(R.string.perfMode))
-                append(": ")
-                append(context.getString(perfMode.textRes))
-                append(" | ")
-            }
-            if (fanMode != FanMode.Unknown) {
-                append(context.getString(R.string.fanMode))
-                append(": ")
-                append(context.getString(fanMode.textRes))
-                append(" | ")
-            }
-        }.trimEnd(' ', '|').ifEmpty { null }
+    private fun getSubtitle(
+        controllerStyle: ControllerStyle,
+        l2R2Style: L2R2Style,
+        perfMode: PerfMode,
+        fanMode: FanMode,
+        refreshRate: AppRefreshRate?,
+        bottomScreen: BottomScreenRule?,
+    ): String? = buildString {
+        if (controllerStyle != ControllerStyle.Unknown) {
+            append(context.getString(R.string.controllerStyle))
+            append(": ")
+            append(context.getString(controllerStyle.textRes))
+            append(" | ")
+        }
+        if (l2R2Style != L2R2Style.Unknown) {
+            append(context.getString(R.string.l2r2mode))
+            append(": ")
+            append(context.getString(l2R2Style.textRes))
+            append(" | ")
+        }
+        if (perfMode != PerfMode.Unknown) {
+            append(context.getString(R.string.perfMode))
+            append(": ")
+            append(context.getString(perfMode.textRes))
+            append(" | ")
+        }
+        if (fanMode != FanMode.Unknown) {
+            append(context.getString(R.string.fanMode))
+            append(": ")
+            append(context.getString(fanMode.textRes))
+            append(" | ")
+        }
+        if (refreshRate != null) {
+            append(context.getString(R.string.profileRefreshRate))
+            append(": ")
+            append(context.getString(refreshRate.textRes))
+            append(" | ")
+        }
+        if (bottomScreen != null) {
+            append(context.getString(R.string.profileBottomScreen))
+            append(": ")
+            append(context.getString(bottomScreen.textRes))
+            append(" | ")
+        }
+    }.trimEnd(' ', '|').ifEmpty { null }
 }

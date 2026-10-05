@@ -95,7 +95,7 @@ fun HotkeysScreen(viewModel: HotkeysViewModel = hiltViewModel(), onBack: () -> U
             mode = picker,
             apps = uiState.apps,
             loaded = uiState.appsLoaded,
-            checked = uiState.offApps,
+            checked = if (picker == AppPickerMode.HOTKEY_APPS) draft?.apps.orEmpty() else uiState.offApps,
             onPick = viewModel::pickApp,
             onClose = viewModel::closePicker,
         )
@@ -306,9 +306,21 @@ private fun ActionLabel(hotkey: Hotkey, state: HotkeysUiModel, modifier: Modifie
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
             )
+            if (hotkey.apps.isNotEmpty()) {
+                Text(
+                    text = stringResource(R.string.hotkeyOnlyIn, appNames(hotkey.apps, state)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
+
+/** The apps' names as the launcher shows them, in order; a package that isn't installed shows as it is. */
+fun appNames(apps: Set<String>, state: HotkeysUiModel): String = apps.map { state.app(it)?.name ?: it }.sorted().joinToString(", ")
 
 /** One profile's ready-made hotkeys, each with Add or Replace; the profiles are tabs (users can't make their own). */
 private fun LazyListScope.suggestions(state: HotkeysUiModel, viewModel: HotkeysViewModel) {

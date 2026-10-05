@@ -58,37 +58,54 @@ class PermissionsViewModel @Inject constructor(
     fun fix(check: AccessCheck) {
         if (_uiState.value.report.state(check) != AccessState.MISSING) return
         viewModelScope.launch {
-            val open = withContext(Dispatchers.IO) {
-                when (check) {
-                    AccessCheck.ROOT -> null
-                    AccessCheck.ACCESSIBILITY -> {
-                        settings.applyRequiredSettings()
-                        delay(SERVICE_START_MS)
-                        SystemScreen.ACCESSIBILITY.takeUnless { status.connected }
-                    }
-                    AccessCheck.NOTIFICATIONS -> when {
-                        settings.grantNotifications() -> null
-                        settings.notificationPermissionGranted() -> SystemScreen.NOTIFICATION_SETTINGS
-                        else -> SystemScreen.NOTIFICATION_PERMISSION
-                    }
-                    AccessCheck.BATTERY -> {
-                        settings.exemptFromBatteryOptimisation()
-                        SystemScreen.BATTERY.takeUnless { settings.isBatteryExempt() }
-                    }
-                    AccessCheck.BACKGROUND_LIST -> {
-                        settings.addSelfToWhitelist()
-                        null
-                    }
-                    AccessCheck.INPUT_HELPER -> {
-                        status.rawInput?.start()
-                        delay(HELPER_START_MS)
-                        null
-                    }
-                }
+            val open = withContext(Dispatchers.IO) { fixNow(check) }
+            status.onAccessChanged?.invoke()
+            _uiState.update { it.copy(open = open) }
+            refresh()
+        }
+    }
+
+    /** Every missing one in turn, until one needs an Android screen (that one opens; the rest wait for the next tap). */
+    fun fixAll() {
+        viewModelScope.launch {
+            val missing = withContext(Dispatchers.IO) { checker.full() }.let { report ->
+                AccessCheck.entries.filter { report.state(it) == AccessState.MISSING }
+            }
+            var open: SystemScreen? = null
+            for (check in missing) {
+                open = withContext(Dispatchers.IO) { fixNow(check) }
+                if (open != null) break
             }
             status.onAccessChanged?.invoke()
             _uiState.update { it.copy(open = open) }
             refresh()
+        }
+    }
+
+    private suspend fun fixNow(check: AccessCheck): SystemScreen? = when (check) {
+        AccessCheck.ROOT -> null
+        AccessCheck.ACCESSIBILITY -> {
+            settings.applyRequiredSettings()
+            delay(SERVICE_START_MS)
+            SystemScreen.ACCESSIBILITY.takeUnless { status.connected }
+        }
+        AccessCheck.NOTIFICATIONS -> when {
+            settings.grantNotifications() -> null
+            settings.notificationPermissionGranted() -> SystemScreen.NOTIFICATION_SETTINGS
+            else -> SystemScreen.NOTIFICATION_PERMISSION
+        }
+        AccessCheck.BATTERY -> {
+            settings.exemptFromBatteryOptimisation()
+            SystemScreen.BATTERY.takeUnless { settings.isBatteryExempt() }
+        }
+        AccessCheck.BACKGROUND_LIST -> {
+            settings.addSelfToWhitelist()
+            null
+        }
+        AccessCheck.INPUT_HELPER -> {
+            status.rawInput?.start()
+            delay(HELPER_START_MS)
+            null
         }
     }
 
@@ -141,10 +158,17 @@ private val texts = mapOf(
 @Composable
 fun PermissionsScreen(viewModel: PermissionsViewModel = hiltViewModel(), onBack: () -> Unit) {
     val uiState by viewModel.uiState.collectAsState()
+    LaunchedEffect(Unit) { viewModel.refresh() }
+    SystemScreenLauncher(viewModel)
+    SubScreen(title = R.string.permissionsTitle, onBack = onBack) { AccessList(uiState.report, viewModel::fix) }
+}
+
+/** Opens the Android screen a fix asked for, when root couldn't do it. */
+@Composable
+fun SystemScreenLauncher(viewModel: PermissionsViewModel) {
+    val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { viewModel.refresh() }
-
-    LaunchedEffect(Unit) { viewModel.refresh() }
 
     LaunchedEffect(uiState.open) {
         val target = uiState.open ?: return@LaunchedEffect
@@ -160,31 +184,33 @@ fun PermissionsScreen(viewModel: PermissionsViewModel = hiltViewModel(), onBack:
         }
         viewModel.systemScreenOpened()
     }
+}
 
-    SubScreen(title = R.string.permissionsTitle, onBack = onBack) {
-        AccessCheck.entries.forEach { check ->
-            val text = texts.getValue(check)
-            val state = uiState.report.state(check)
-            TriggerPreference(
-                icon = R.drawable.ic_info,
-                title = stringResource(text.title),
-                description = stringResource(
-                    when (state) {
-                        AccessState.OK -> text.ok
-                        AccessState.MISSING -> text.missing
-                        AccessState.NOT_NEEDED -> text.notNeeded
-                        AccessState.UNKNOWN -> R.string.accessChecking
-                    },
-                ),
-                tag = stringResource(
-                    when (state) {
-                        AccessState.OK -> R.string.tagOk
-                        AccessState.MISSING -> R.string.tagFix
-                        AccessState.NOT_NEEDED -> R.string.tagNotNeeded
-                        AccessState.UNKNOWN -> R.string.tagChecking
-                    },
-                ),
-            ) { viewModel.fix(check) }
-        }
+/** Every check with its state; a tap on one that is missing fixes it. */
+@Composable
+fun AccessList(report: AccessReport, onFix: (AccessCheck) -> Unit) {
+    AccessCheck.entries.forEach { check ->
+        val text = texts.getValue(check)
+        val state = report.state(check)
+        TriggerPreference(
+            icon = R.drawable.ic_info,
+            title = stringResource(text.title),
+            description = stringResource(
+                when (state) {
+                    AccessState.OK -> text.ok
+                    AccessState.MISSING -> text.missing
+                    AccessState.NOT_NEEDED -> text.notNeeded
+                    AccessState.UNKNOWN -> R.string.accessChecking
+                },
+            ),
+            tag = stringResource(
+                when (state) {
+                    AccessState.OK -> R.string.tagOk
+                    AccessState.MISSING -> R.string.tagFix
+                    AccessState.NOT_NEEDED -> R.string.tagNotNeeded
+                    AccessState.UNKNOWN -> R.string.tagChecking
+                },
+            ),
+        ) { onFix(check) }
     }
 }

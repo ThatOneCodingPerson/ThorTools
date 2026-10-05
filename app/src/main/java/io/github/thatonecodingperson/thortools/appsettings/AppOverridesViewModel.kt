@@ -4,8 +4,13 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import io.github.thatonecodingperson.thortools.coexist.OdinToolsDetector
+import io.github.thatonecodingperson.thortools.coexist.Overlap
 import io.github.thatonecodingperson.thortools.data.AppOverrideDao
 import io.github.thatonecodingperson.thortools.data.AppOverrideEntity
+import io.github.thatonecodingperson.thortools.data.SharedPrefsRepo
+import io.github.thatonecodingperson.thortools.models.AppRefreshRate
+import io.github.thatonecodingperson.thortools.models.BottomScreenRule
 import io.github.thatonecodingperson.thortools.models.ControllerStyle
 import io.github.thatonecodingperson.thortools.models.FanMode
 import io.github.thatonecodingperson.thortools.models.FanMode.Companion.getDisabledFanModes
@@ -26,6 +31,8 @@ class AppOverridesViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val appOverrideDao: AppOverrideDao,
     private val appOverrideMapper: AppOverrideMapper,
+    private val prefs: SharedPrefsRepo,
+    private val odinTools: OdinToolsDetector,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AppOverridesUiModel())
@@ -36,6 +43,8 @@ class AppOverridesViewModel @Inject constructor(
     private var initialL2R2Style = NoChange.KEY
     private var initialPerfMode = NoChange.KEY
     private var initialFanMode = NoChange.KEY
+    private var initialRefreshRate = NoChange.KEY
+    private var initialBottomScreen = NoChange.KEY
 
     init {
         viewModelScope.launch {
@@ -50,6 +59,8 @@ class AppOverridesViewModel @Inject constructor(
                 initialL2R2Style = app.l2R2Style ?: NoChange.KEY
                 initialPerfMode = app.perfMode ?: NoChange.KEY
                 initialFanMode = app.fanMode ?: NoChange.KEY
+                initialRefreshRate = app.refreshRate ?: NoChange.KEY
+                initialBottomScreen = app.bottomScreen ?: NoChange.KEY
 
                 appOverrideMapper.mapAppOverride(app)
             }
@@ -59,6 +70,7 @@ class AppOverridesViewModel @Inject constructor(
                     app = uiModel,
                     isNewApp = app == null,
                     disabledFanModeKeys = getDisabledFanModes(initialPerfMode),
+                    leftToOdinTools = odinTools.isInstalled() && !prefs.isEnabled(Overlap.PER_APP_CONTROLS),
                 )
             }
         }
@@ -74,6 +86,8 @@ class AppOverridesViewModel @Inject constructor(
                         l2R2Style = _uiState.value.app?.l2r2Style?.id,
                         perfMode = _uiState.value.app?.perfMode?.id,
                         fanMode = _uiState.value.app?.fanMode?.id,
+                        refreshRate = _uiState.value.app?.refreshRate?.id,
+                        bottomScreen = _uiState.value.app?.bottomScreen?.id,
                     ),
                 )
             }
@@ -158,16 +172,38 @@ class AppOverridesViewModel @Inject constructor(
         }
     }
 
+    fun refreshRateSelected(key: String) {
+        _uiState.update {
+            it.copy(
+                app = it.app?.copy(refreshRate = AppRefreshRate.byId(key)),
+                hasUnsavedChanges = hasUnsavedChanges(refreshRate = key),
+            )
+        }
+    }
+
+    fun bottomScreenSelected(key: String) {
+        _uiState.update {
+            it.copy(
+                app = it.app?.copy(bottomScreen = BottomScreenRule.byId(key)),
+                hasUnsavedChanges = hasUnsavedChanges(bottomScreen = key),
+            )
+        }
+    }
+
     private fun hasUnsavedChanges(
         controllerStyle: String? = null,
         l2R2Style: String? = null,
         perfMode: String? = null,
         fanMode: String? = null,
+        refreshRate: String? = null,
+        bottomScreen: String? = null,
     ): Boolean = listOf(
         (controllerStyle ?: _uiState.value.app?.controllerStyle?.id) != initialControllerStyle,
         (l2R2Style ?: _uiState.value.app?.l2r2Style?.id) != initialL2R2Style,
         (perfMode ?: _uiState.value.app?.perfMode?.id) != initialPerfMode,
         (fanMode ?: _uiState.value.app?.fanMode?.id) != initialFanMode,
+        (refreshRate ?: _uiState.value.app?.refreshRate?.id ?: NoChange.KEY) != initialRefreshRate,
+        (bottomScreen ?: _uiState.value.app?.bottomScreen?.id ?: NoChange.KEY) != initialBottomScreen,
     ).any { it }
 
     companion object {

@@ -42,6 +42,14 @@ data class LidChoices(
             InputGroup.TOUCH.takeIf { muteTouch },
         )
 
+    /** How many actions happen when the lid closes (none while [enabled] is off). */
+    val switchedOn: Int
+        get() = if (!enabled) {
+            0
+        } else {
+            listOf(powerSaving, closeBackground, pauseMedia, wifiOff, bluetoothOff, airplane, backToSleep).count { it } + mutes.size
+        }
+
     /** Anything at all happens when the lid closes. */
     val active: Boolean
         get() = enabled &&

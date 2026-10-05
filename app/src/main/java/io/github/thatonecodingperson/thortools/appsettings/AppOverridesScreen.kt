@@ -34,6 +34,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
 import io.github.thatonecodingperson.thortools.R
+import io.github.thatonecodingperson.thortools.hotkeys.NoteCard
+import io.github.thatonecodingperson.thortools.models.AppRefreshRate
+import io.github.thatonecodingperson.thortools.models.BottomScreenRule
 import io.github.thatonecodingperson.thortools.models.ControllerStyle
 import io.github.thatonecodingperson.thortools.models.ControllerStyle.Disconnect
 import io.github.thatonecodingperson.thortools.models.ControllerStyle.Odin
@@ -147,6 +150,12 @@ fun AppOverridesScreen(viewModel: AppOverridesViewModel = hiltViewModel(), navig
                     .weight(0.7f)
                     .verticalScroll(rememberScrollState()),
             ) {
+                if (uiState.leftToOdinTools) {
+                    NoteCard(
+                        stringResource(R.string.profileLeftToOdinTools),
+                        modifier = Modifier.padding(bottom = 16.dp),
+                    )
+                }
                 OverrideSpinnerRow(
                     label = R.string.controllerStyle,
                     spinnerItems = listOf(
@@ -218,6 +227,30 @@ fun AppOverridesScreen(viewModel: AppOverridesViewModel = hiltViewModel(), navig
                         )
                     }
                 }
+                Text(
+                    text = stringResource(R.string.profileThorToolsOwn),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+                )
+                OverrideSpinnerRow(
+                    label = R.string.profileRefreshRate,
+                    spinnerItems = listOf(NoChange.KEY to stringResource(id = NoChange.textRes)) +
+                        AppRefreshRate.entries.map { it.id to stringResource(it.textRes) },
+                    initialSelection = uiState.app?.refreshRate?.id ?: NoChange.KEY,
+                    onSelectionChanged = { viewModel.refreshRateSelected(it) },
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+                ModeInfo(R.string.profileRefreshRateInfo.takeIf { uiState.app?.refreshRate != null })
+                OverrideSpinnerRow(
+                    label = R.string.profileBottomScreen,
+                    spinnerItems = listOf(NoChange.KEY to stringResource(id = NoChange.textRes)) +
+                        BottomScreenRule.entries.map { it.id to stringResource(it.textRes) },
+                    initialSelection = uiState.app?.bottomScreen?.id ?: NoChange.KEY,
+                    onSelectionChanged = { viewModel.bottomScreenSelected(it) },
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+                ModeInfo(uiState.app?.bottomScreen?.infoRes)
             }
         }
     }
