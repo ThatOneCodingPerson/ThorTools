@@ -8,6 +8,21 @@ import kotlin.math.roundToInt
 /** The colours a user picks for their own theme; [ThemeBuilder.build] works out the rest. */
 data class ThemeBasics(val background: Long, val cards: Long, val text: Long, val accent: Long, val cornerDp: Int)
 
+/** The four colours of [ThemeBasics], for picking one to change. */
+enum class ThemeColor { BACKGROUND, CARDS, TEXT, ACCENT }
+
+/**
+ * A colour being picked, as hue 0..360 and saturation and lightness 0..1. Kept like this rather than as the colour,
+ * so the hue survives while saturation is at zero.
+ */
+data class HslColor(val hue: Float, val saturation: Float, val lightness: Float) {
+    val color: Long get() = ThemeBuilder.fromHsl(hue, saturation, lightness)
+
+    companion object {
+        fun of(color: Long): HslColor = ThemeBuilder.toHsl(color).let { HslColor(it[0], it[1], it[2]) }
+    }
+}
+
 /**
  * Builds a full [ThorPalette] from four colours, checks readability, and holds the colour maths
  * the theme editor needs. Colours are opaque ARGB longs, like everywhere in [ThorPalette].
@@ -15,11 +30,16 @@ data class ThemeBasics(val background: Long, val cards: Long, val text: Long, va
 object ThemeBuilder {
     const val MAX_CORNER_DP = 28
 
-    /** Ready-made choices in the colour picker: greys, dark backgrounds, then accents around the colour wheel. */
+    /**
+     * Ready-made choices in the colour picker: greys, dark backgrounds, light backgrounds, deep accents, then light
+     * accents around the colour wheel.
+     */
     val SWATCHES: List<Long> = listOf(
         0xFF000000, 0xFF111111, 0xFF1E1E1E, 0xFF2B2B2B, 0xFF6B6B6B, 0xFFBDBDBD, 0xFFE6E9F2, 0xFFFFFFFF,
-        0xFF0F1115, 0xFF0E1A20, 0xFF1A1210, 0xFF0F1712, 0xFF2F5BD3, 0xFF00838F, 0xFFC2185B, 0xFF2E7D32,
-        0xFF7AA2F7, 0xFF6FD3E8, 0xFF7FD69B, 0xFFFFD166, 0xFFFFA45C, 0xFFFF6B6B, 0xFFF0629A, 0xFFB48EF5,
+        0xFF0F1115, 0xFF0E1A20, 0xFF060C18, 0xFF14111C, 0xFF1A1217, 0xFF1A1210, 0xFF0F1712, 0xFF0F380F,
+        0xFFE9F5EF, 0xFFF3ECE0, 0xFF2F5BD3, 0xFF00838F, 0xFF0E7A54, 0xFF2E7D32, 0xFFB4532A, 0xFFC2185B,
+        0xFF7AA2F7, 0xFF6FD3E8, 0xFF2DD4BF, 0xFF7FD69B, 0xFF9BBC0F, 0xFFFFD166, 0xFFFFB000, 0xFFFFA45C,
+        0xFFFF6B6B, 0xFFF0629A, 0xFFFF4FD8, 0xFFF48FB1, 0xFFB79CED, 0xFFB48EF5,
     )
 
     enum class Issue { TEXT_ON_BACKGROUND, TEXT_ON_CARDS, ACCENT_ON_CARDS }
@@ -72,6 +92,42 @@ object ThemeBuilder {
         if (ThorThemes.contrast(palette.onSurface, palette.background) < READABLE) add(Issue.TEXT_ON_BACKGROUND)
         if (ThorThemes.contrast(palette.onSurface, palette.surface) < READABLE) add(Issue.TEXT_ON_CARDS)
         if (ThorThemes.contrast(palette.primary, palette.surface) < VISIBLE) add(Issue.ACCENT_ON_CARDS)
+    }
+
+    /** The readability issues [color] takes part in, so the editor can show them next to it. */
+    fun issuesFor(palette: ThorPalette, color: ThemeColor): List<Issue> {
+        val involved = when (color) {
+            ThemeColor.BACKGROUND -> setOf(Issue.TEXT_ON_BACKGROUND)
+            ThemeColor.CARDS -> setOf(Issue.TEXT_ON_CARDS, Issue.ACCENT_ON_CARDS)
+            ThemeColor.TEXT -> setOf(Issue.TEXT_ON_BACKGROUND, Issue.TEXT_ON_CARDS)
+            ThemeColor.ACCENT -> setOf(Issue.ACCENT_ON_CARDS)
+        }
+        return issues(palette).filter { it in involved }
+    }
+
+    /** The contrast that matters most for [color]: text on it, or for text and the accent, on what they sit on. */
+    fun keyContrast(palette: ThorPalette, color: ThemeColor): Double = when (color) {
+        ThemeColor.BACKGROUND -> ThorThemes.contrast(palette.onSurface, palette.background)
+        ThemeColor.CARDS -> ThorThemes.contrast(palette.onSurface, palette.surface)
+        ThemeColor.TEXT -> min(
+            ThorThemes.contrast(palette.onSurface, palette.background),
+            ThorThemes.contrast(palette.onSurface, palette.surface),
+        )
+        ThemeColor.ACCENT -> ThorThemes.contrast(palette.primary, palette.surface)
+    }
+
+    fun colorOf(basics: ThemeBasics, color: ThemeColor): Long = when (color) {
+        ThemeColor.BACKGROUND -> basics.background
+        ThemeColor.CARDS -> basics.cards
+        ThemeColor.TEXT -> basics.text
+        ThemeColor.ACCENT -> basics.accent
+    }
+
+    fun withColor(basics: ThemeBasics, color: ThemeColor, value: Long): ThemeBasics = when (color) {
+        ThemeColor.BACKGROUND -> basics.copy(background = value)
+        ThemeColor.CARDS -> basics.copy(cards = value)
+        ThemeColor.TEXT -> basics.copy(text = value)
+        ThemeColor.ACCENT -> basics.copy(accent = value)
     }
 
     /** [amount] 0 gives [from], 1 gives [to], channel by channel. */

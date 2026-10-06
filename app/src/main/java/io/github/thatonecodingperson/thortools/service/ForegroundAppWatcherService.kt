@@ -70,6 +70,7 @@ import io.github.thatonecodingperson.thortools.models.L2R2Style
 import io.github.thatonecodingperson.thortools.models.PerfMode
 import io.github.thatonecodingperson.thortools.models.RefreshRate
 import io.github.thatonecodingperson.thortools.models.ScreenMode
+import io.github.thatonecodingperson.thortools.oled.OledGuard
 import io.github.thatonecodingperson.thortools.panel.CloseReason
 import io.github.thatonecodingperson.thortools.panel.FocusMover
 import io.github.thatonecodingperson.thortools.panel.FrontApp
@@ -208,6 +209,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
     private lateinit var controllerLock: ControllerLock
     private lateinit var lidController: LidController
     private lateinit var ledController: LedController
+    private lateinit var oledGuard: OledGuard
     private val actionHost = object : ActionHost {
         override val foregroundPackage: String? get() = lastAppPackage
 
@@ -274,10 +276,13 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
 
         override fun helperCommand(name: String, vararg args: String, onResult: (Boolean, String) -> Unit): Boolean =
             rawInput.command(name, *args, onResult = onResult)
+
+        override fun refreshScreens() = oledGuard.refreshNow()
     }
     private val rawInputListener = object : RawInputClient.Listener {
         override fun onConnected() {
             if (::ledController.isInitialized) ledController.onHelperConnected()
+            if (::oledGuard.isInitialized) oledGuard.onHelperConnected()
         }
 
         override fun onTouch(screen: Screen) {
@@ -286,6 +291,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
             if (hotkeys.usesMotion || quickPanel.isOpen) focusedDisplay = screenFocus.displayId(screen)
             quickPanel.controllerOn(screenFocus.displayId(screen))
             controllerLock.onTouch(screen)
+            if (::oledGuard.isInitialized) oledGuard.onTouch(screen)
         }
 
         override fun onLift(screen: Screen) = controllerLock.onLift(screen)
@@ -295,6 +301,12 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         }
 
         override fun onLid(closed: Boolean) = lidController.onLid(closed)
+
+        override fun onPicture(displayId: Int, still: Boolean) {
+            if (::oledGuard.isInitialized) oledGuard.onPicture(displayId, still)
+        }
+
+        override fun onAreas(displayId: Int, percent: Int) = status.setOledAreas(displayId, percent)
     }
 
     // AYN re-creates its pad on a layout switch (also per game) and on sleep; a key held on the old one is never released.
@@ -312,6 +324,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
             val on = intent.action == Intent.ACTION_SCREEN_ON
             rawInput.setScreenOn(on)
             lidController.onScreen(on)
+            if (::oledGuard.isInitialized) oledGuard.onScreen(on)
             if (!on) {
                 quickPanel.close(CloseReason.SCREEN_OFF, returnFocus = false)
                 forgetHeld()
@@ -429,6 +442,10 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
         status.keysSeen++
+        // A press of the Thor's own buttons brings back a screen OLED Safety covered.
+        if (::oledGuard.isInitialized && event.action == KeyEvent.ACTION_DOWN && event.deviceId != KeyCharacterMap.VIRTUAL_KEYBOARD) {
+            oledGuard.onButton()
+        }
         val (consume, note) = decideKey(event)
         serviceKeyLog.add(KeyLogEntry.of(event, note))
         return consume
@@ -955,6 +972,17 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
             helper = { name, args, onResult -> rawInput.command(name, *args.toTypedArray(), onResult = onResult) },
         )
         ledController.start()
+        oledGuard = OledGuard(
+            service = this,
+            executor = executor,
+            prefs = prefs,
+            scope = scope,
+            bottomDisplay = { screenFocus.bottomDisplayId() },
+            helperRunning = { rawInput.connected },
+            toHelper = { name, args, onResult -> rawInput.command(name, *args.toTypedArray(), onResult = onResult) },
+        )
+        oledGuard.start()
+        status.refreshScreens = { mainHandler.post { oledGuard.refreshNow() } }
         scope.launch { prefs.ledLookChanges().collect { look -> ledController.setChosen(look) } }
         val packageFilter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
@@ -996,6 +1024,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
             rawInput.stop()
             lidController.stop()
             if (::ledController.isInitialized) ledController.stop()
+            if (::oledGuard.isInitialized) oledGuard.stop()
             unregisterReceiver(screenReceiver)
             unregisterReceiver(odinToolsPackageReceiver)
         }

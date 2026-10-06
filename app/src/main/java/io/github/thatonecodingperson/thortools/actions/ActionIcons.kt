@@ -8,6 +8,7 @@ import androidx.compose.material.icons.rounded.Air
 import androidx.compose.material.icons.rounded.Animation
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.BlurLinear
 import androidx.compose.material.icons.rounded.BrightnessHigh
 import androidx.compose.material.icons.rounded.BrightnessLow
 import androidx.compose.material.icons.rounded.Cancel
@@ -50,6 +51,7 @@ val ThorAction.icon: ImageVector
         ThorAction.TOGGLE_CONTROLLER_LOCK, ThorAction.LOCK_CONTROLLER_BOTTOM -> Icons.Rounded.Lock
         ThorAction.LOCK_CONTROLLER_HERE -> Icons.Rounded.PushPin
         ThorAction.SWAP_SCREENS -> Icons.Rounded.SwapVert
+        ThorAction.REFRESH_SCREENS -> Icons.Rounded.BlurLinear
         ThorAction.TOGGLE_BOTTOM_SCREEN -> Icons.Rounded.Splitscreen
         ThorAction.CLOSE_OTHER_SCREEN_APP -> Icons.Rounded.CancelPresentation
         ThorAction.HOME_TOP, ThorAction.HOME_BOTTOM, ThorAction.HOME_BOTH, ThorAction.HOME -> Icons.Rounded.Home

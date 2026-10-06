@@ -83,6 +83,9 @@ interface ActionHost {
 
     /** Runs a root input helper command; false when the helper isn't connected. */
     fun helperCommand(name: String, vararg args: String, onResult: (Boolean, String) -> Unit): Boolean
+
+    /** OLED Safety's refresh sweep on its chosen screens. */
+    fun refreshScreens()
 }
 
 /** Performs [ThorAction]s for the accessibility service. Root calls run on [scope], never on the key event thread. */
@@ -159,6 +162,7 @@ class ActionRunner(
             ThorAction.QUIETER -> volume(AudioManager.ADJUST_LOWER, action, say)
             ThorAction.CLOSE_APP -> CloseAppArg.decode(call.arg)?.let { closeAppOn(it, say) } ?: scope.launch { runPrivileged(call, say) }
             ThorAction.CLEAR_BACKGROUND -> closeBackground(call.alsoCleanMemory, say)
+            ThorAction.REFRESH_SCREENS -> host.refreshScreens()
             else -> scope.launch { runPrivileged(call, say) }
         }
     }

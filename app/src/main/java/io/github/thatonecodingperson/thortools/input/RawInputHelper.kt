@@ -3,6 +3,7 @@ package io.github.thatonecodingperson.thortools.input
 import android.net.LocalSocket
 import android.net.LocalSocketAddress
 import io.github.thatonecodingperson.thortools.leds.LightWriter
+import io.github.thatonecodingperson.thortools.oled.OledEngine
 import java.io.File
 import java.io.FileInputStream
 import java.io.OutputStream
@@ -26,6 +27,7 @@ object RawInputHelper {
     private const val SW_LID = 0
     private const val EVENT_SIZE = 24
     private const val TOUCH_REPORT_GAP_MS = 300L
+    private const val QUIT_LIMIT_MS = 2_000L
 
     // The pad as its raw events leave it, and the directions while the app watches (null: not watching).
     private val padLock = Any()
@@ -52,6 +54,8 @@ object RawInputHelper {
         output = socket.outputStream
         val input = socket.inputStream.bufferedReader()
         if (input.readLine() != "hello") exitProcess(4)
+        OledEngine.report = { displayId, still -> send(HelperMessage.Picture(displayId, still)) }
+        OledEngine.reportAreas = { displayId, percent -> send(HelperMessage.Areas(displayId, percent)) }
 
         startReader("top", { nodes -> nodes.firstOrNull { it.name == "fts_ts" } }) { _, stream -> readTouch(stream, Screen.TOP) }
         startReader("bottom", { nodes -> nodes.firstOrNull { it.name == "fts_ts_3" } }) { _, stream -> readTouch(stream, Screen.BOTTOM) }
@@ -62,14 +66,16 @@ object RawInputHelper {
         while (true) {
             val line = input.readLine()
             when {
-                line == null || line == "bye" -> exitProcess(0)
+                line == null || line == "bye" -> quit()
                 line == "screen on" -> {
                     screenOn = true
                     LightWriter.screen(true)
+                    OledEngine.screen(true)
                 }
                 line == "screen off" -> {
                     screenOn = false
                     LightWriter.screen(false)
+                    OledEngine.screen(false)
                 }
                 line == "pad on" -> watchPad(true)
                 line == "pad off" -> watchPad(false)
@@ -84,6 +90,15 @@ object RawInputHelper {
                     ).execute { runCommand(line) }
             }
         }
+    }
+
+    /** Exits, even if cleaning up hangs: a helper that stays would keep its layers on the screens. */
+    private fun quit(): Nothing {
+        Thread {
+            Thread.sleep(QUIT_LIMIT_MS)
+            Runtime.getRuntime().halt(0)
+        }.apply { isDaemon = true }.start()
+        exitProcess(0)
     }
 
     /** `c <id> <name> <args...>`, answered with a result line for the same id. */
@@ -116,7 +131,7 @@ object RawInputHelper {
                 output.write(line.toByteArray())
                 output.flush()
             } catch (_: Exception) {
-                exitProcess(0)
+                quit()
             }
         }
     }

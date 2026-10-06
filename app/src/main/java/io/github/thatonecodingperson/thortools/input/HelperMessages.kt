@@ -60,6 +60,12 @@ sealed interface HelperMessage {
     /** The lid closed or opened (`hall_switch`, `SW_LID`). */
     data class Lid(val closed: Boolean) : HelperMessage
 
+    /** The picture of display [displayId] went still, or started moving again (OLED Safety's watch). */
+    data class Picture(val displayId: Int, val still: Boolean) : HelperMessage
+
+    /** The share of display [displayId] protected as still areas now, in percent (OLED Safety). */
+    data class Areas(val displayId: Int, val percent: Int) : HelperMessage
+
     companion object {
         fun parse(line: String): HelperMessage? {
             val trimmed = line.trim()
@@ -75,6 +81,12 @@ sealed interface HelperMessage {
                     "0" -> Lid(closed = false)
                     else -> null
                 }
+                "p" -> parsePicture(trimmed.split(' '))
+                "a" -> trimmed.split(' ').let { words ->
+                    val id = words.getOrNull(1)?.toIntOrNull()
+                    val percent = words.getOrNull(2)?.toIntOrNull()
+                    if (id != null && percent != null) Areas(id, percent.coerceIn(0, 100)) else null
+                }
                 else -> null
             }
         }
@@ -84,6 +96,15 @@ sealed interface HelperMessage {
             return when (parts.getOrNull(2)) {
                 "1" -> Direction(button, down = true)
                 "0" -> Direction(button, down = false)
+                else -> null
+            }
+        }
+
+        private fun parsePicture(parts: List<String>): Picture? {
+            val id = parts.getOrNull(1)?.toIntOrNull() ?: return null
+            return when (parts.getOrNull(2)) {
+                "1" -> Picture(id, still = true)
+                "0" -> Picture(id, still = false)
                 else -> null
             }
         }
@@ -106,6 +127,8 @@ sealed interface HelperMessage {
             is Result -> "r ${message.id} ${if (message.ok) 1 else 0} ${message.text.replace('\n', ' ')}"
             is Direction -> "d ${message.button.id} ${if (message.down) 1 else 0}"
             is Lid -> "l ${if (message.closed) 1 else 0}"
+            is Picture -> "p ${message.displayId} ${if (message.still) 1 else 0}"
+            is Areas -> "a ${message.displayId} ${message.percent}"
         }
     }
 }

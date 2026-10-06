@@ -1,6 +1,8 @@
 package io.github.thatonecodingperson.thortools.extras
 
+import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Brightness4
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.WbIridescent
@@ -14,6 +16,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import io.github.thatonecodingperson.thortools.R
 import io.github.thatonecodingperson.thortools.hotkeys.NoteCard
 import io.github.thatonecodingperson.thortools.leds.modeName
+import io.github.thatonecodingperson.thortools.oled.OledPart
 import io.github.thatonecodingperson.thortools.ui.composables.CardColumns
 import io.github.thatonecodingperson.thortools.ui.composables.ChoiceCard
 import io.github.thatonecodingperson.thortools.ui.composables.LinkCard
@@ -21,7 +24,13 @@ import io.github.thatonecodingperson.thortools.ui.composables.SubTopAppBar
 
 /** The extras that don't belong to another section: the stick lights, Wii profiles for Dolphin, where the keyboard appears. */
 @Composable
-fun ExtraToolsScreen(viewModel: ExtraToolsViewModel = hiltViewModel(), onLeds: () -> Unit, onWii: () -> Unit, onBack: () -> Unit) {
+fun ExtraToolsScreen(
+    viewModel: ExtraToolsViewModel = hiltViewModel(),
+    onLeds: () -> Unit,
+    onWii: () -> Unit,
+    onOled: () -> Unit,
+    onBack: () -> Unit,
+) {
     val state by viewModel.uiState.collectAsState()
     LaunchedEffect(Unit) { viewModel.refresh() }
     Scaffold(topBar = { SubTopAppBar(title = R.string.extraTools, onBack = onBack) }) { padding ->
@@ -41,6 +50,18 @@ fun ExtraToolsScreen(viewModel: ExtraToolsViewModel = hiltViewModel(), onLeds: (
                     info = stringResource(R.string.wiiTitleInfo),
                     onClick = onWii,
                 )
+                val oledParts = state.oled.activeParts
+                LinkCard(
+                    icon = Icons.Rounded.Brightness4,
+                    title = stringResource(R.string.oledTitle),
+                    info = if (oledParts.isEmpty()) {
+                        stringResource(R.string.oledTitleInfo)
+                    } else {
+                        stringResource(R.string.oledActive, oledParts.map { stringResource(oledPartLabel(it)) }.joinToString(", "))
+                    },
+                    value = stringResource(if (oledParts.isEmpty()) R.string.oledOff else R.string.oledOn),
+                    onClick = onOled,
+                )
             },
             right = {
                 ChoiceCard(
@@ -55,4 +76,12 @@ fun ExtraToolsScreen(viewModel: ExtraToolsViewModel = hiltViewModel(), onLeds: (
             },
         )
     }
+}
+
+@StringRes
+private fun oledPartLabel(part: OledPart): Int = when (part) {
+    OledPart.SHIFTER -> R.string.oledPartShifter
+    OledPart.STILL_AREAS -> R.string.oledPartAreas
+    OledPart.REFRESHER -> R.string.oledPartRefresher
+    OledPart.IDLE -> R.string.oledPartIdle
 }

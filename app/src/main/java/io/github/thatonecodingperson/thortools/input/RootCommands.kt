@@ -5,6 +5,7 @@ import android.app.ActivityManager
 import android.app.ActivityOptions
 import android.hardware.input.InputManager
 import android.os.IBinder
+import android.os.Parcel
 import android.os.SystemClock
 import android.view.InputEvent
 import android.view.KeyEvent
@@ -12,6 +13,8 @@ import io.github.thatonecodingperson.thortools.leds.LedFrame
 import io.github.thatonecodingperson.thortools.leds.LedLook
 import io.github.thatonecodingperson.thortools.leds.LedPlan
 import io.github.thatonecodingperson.thortools.leds.LightWriter
+import io.github.thatonecodingperson.thortools.oled.AynProtection
+import io.github.thatonecodingperson.thortools.oled.OledEngine
 import io.github.thatonecodingperson.thortools.panel.PingParser
 import io.github.thatonecodingperson.thortools.panel.StatsSampler
 import java.io.File
@@ -57,7 +60,44 @@ internal object RootCommands {
         } else {
             LightWriter.start(LedLook.decode(args[0]), battery = args[1].toInt(), charging = args[2] == "1")
         }
+        "aynprotect" -> aynProtect(args.map(String::toInt))
+        "aynrefresh" -> aynRefresh()
+        "oledconfig" -> OledEngine.configure(args.getOrNull(0).orEmpty())
+        "oledstop" -> OledEngine.stop()
+        "oledshot" -> OledEngine.shot(args[0].toInt(), args[1].toInt(), args[2].toInt())
         else -> error("unknown command $name")
+    }
+
+    /**
+     * Hands AYN's OLED protection its five values the way AYN's settings app does: a window manager call that the
+     * system answers with nothing but its own work (its answer means nothing).
+     */
+    private fun aynProtect(values: List<Int>): String {
+        require(values.size == 5) { "five values" }
+        call(AynProtection.WINDOW_SERVICE, AynProtection.WINDOW_TOKEN, AynProtection.SET_VALUES) { data -> values.forEach(data::writeInt) }
+        return "ok"
+    }
+
+    /** Shows AYN's refresher on both screens now, through AYN's settings app. */
+    private fun aynRefresh(): String {
+        call(AynProtection.SETTINGS_SERVICE, AynProtection.SETTINGS_TOKEN, AynProtection.SHOW_REFRESHER) {}
+        return "ok"
+    }
+
+    private fun call(service: String, token: String, code: Int, write: (Parcel) -> Unit) {
+        val binder = checkNotNull(
+            Class.forName("android.os.ServiceManager").getMethod("getService", String::class.java).invoke(null, service) as IBinder?,
+        ) { "$service unavailable" }
+        val data = Parcel.obtain()
+        val reply = Parcel.obtain()
+        try {
+            data.writeInterfaceToken(token)
+            write(data)
+            binder.transact(code, data, reply, 0)
+        } finally {
+            data.recycle()
+            reply.recycle()
+        }
     }
 
     // The same reader the app uses, for the files SELinux keeps from apps.

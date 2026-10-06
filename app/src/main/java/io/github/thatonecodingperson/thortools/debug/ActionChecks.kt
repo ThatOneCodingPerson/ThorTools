@@ -171,6 +171,7 @@ object ActionChecks {
         ActionCheck(ThorAction.NOTIFICATIONS, Probe.WINDOWS, Expect.Asked, kind = CheckKind.WATCH, restore = Restore.LEAVE_SYSTEM_VIEW),
         ActionCheck(ThorAction.QUICK_SETTINGS, Probe.WINDOWS, Expect.Asked, kind = CheckKind.WATCH, restore = Restore.LEAVE_SYSTEM_VIEW),
         ActionCheck(ThorAction.SCREENSHOT, Probe.SCREENSHOT, Expect.Changed, restore = Restore.DELETE_SCREENSHOT),
+        ActionCheck(ThorAction.REFRESH_SCREENS, Probe.WINDOWS, Expect.Asked, kind = CheckKind.WATCH, restore = Restore.NONE),
         ActionCheck(ThorAction.LOCK_SCREEN, Probe.SCREEN, Expect.Is("off"), kind = CheckKind.RISKY, restore = Restore.NONE),
         ActionCheck(
             ThorAction.CLOSE_APP,

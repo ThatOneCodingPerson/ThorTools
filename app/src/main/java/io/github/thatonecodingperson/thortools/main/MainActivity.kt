@@ -17,9 +17,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import dagger.hilt.android.AndroidEntryPoint
 import io.github.thatonecodingperson.thortools.appsettings.AppOverrideListScreen
 import io.github.thatonecodingperson.thortools.appsettings.AppOverridesScreen
@@ -42,6 +44,8 @@ import io.github.thatonecodingperson.thortools.hotkeys.toPadSample
 import io.github.thatonecodingperson.thortools.input.PadDirections
 import io.github.thatonecodingperson.thortools.leds.LedScreen
 import io.github.thatonecodingperson.thortools.lid.LidScreen
+import io.github.thatonecodingperson.thortools.oled.AynScreen
+import io.github.thatonecodingperson.thortools.oled.OledScreen
 import io.github.thatonecodingperson.thortools.panel.PanelEditorScreen
 import io.github.thatonecodingperson.thortools.panel.PanelSettingsScreen
 import io.github.thatonecodingperson.thortools.service.ServiceStatus
@@ -164,9 +168,22 @@ class MainActivity : ComponentActivity() {
                             DisplayScreen(onThemes = { navController.navigate(Routes.THEMES) }, onBack = back)
                         }
                         composable(Routes.THEMES) {
-                            ThemesScreen(onEdit = { navController.navigate(Routes.themeEdit(it)) }, onBack = back)
+                            ThemesScreen(
+                                onEdit = { navController.navigate(Routes.themeEdit(it)) },
+                                onCopy = { navController.navigate(Routes.themeCopy(it)) },
+                                onBack = back,
+                            )
                         }
-                        composable(Routes.THEME_EDIT) {
+                        composable(
+                            Routes.THEME_EDIT,
+                            arguments = listOf(
+                                navArgument("from") {
+                                    type = NavType.StringType
+                                    nullable = true
+                                    defaultValue = null
+                                },
+                            ),
+                        ) {
                             ThemeEditorScreen(navigateBack = back)
                         }
                         composable(Routes.SETUP_WIZARD) {
@@ -206,8 +223,15 @@ class MainActivity : ComponentActivity() {
                             ExtraToolsScreen(
                                 onLeds = { navController.navigate(Routes.LEDS) },
                                 onWii = { navController.navigate(Routes.WII) },
+                                onOled = { navController.navigate(Routes.OLED) },
                                 onBack = back,
                             )
+                        }
+                        composable(Routes.OLED) {
+                            OledScreen(onAyn = { navController.navigate(Routes.OLED_AYN) }, onBack = back)
+                        }
+                        composable(Routes.OLED_AYN) {
+                            AynScreen(onBack = back)
                         }
                         composable(Routes.WII) {
                             WiiBuilderScreen(onBack = back)

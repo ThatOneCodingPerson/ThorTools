@@ -113,10 +113,58 @@ object ThorThemes {
             tileOn = 0xFF2B5A3A, tileOff = 0xFF203026, dimAmount = 0.5f, cornerDp = 16,
         ),
         ThorPalette(
+            id = "sakura", name = "Sakura", label = R.string.themeSakura, isDark = true,
+            background = 0xFF1A1217, surface = 0xFF251A21, surfaceVariant = 0xFF3A2F36,
+            primary = 0xFFF48FB1, onPrimary = 0xFF000000, onSurface = 0xFFF7E7EF,
+            tileOn = 0xFF6D4353, tileOff = 0xFF3A2F36, dimAmount = 0.55f, cornerDp = 22,
+        ),
+        ThorPalette(
+            id = "abyss", name = "Abyss", label = R.string.themeAbyss, isDark = true,
+            background = 0xFF060C18, surface = 0xFF0D1628, surfaceVariant = 0xFF222B3D,
+            primary = 0xFF2DD4BF, onPrimary = 0xFF000000, onSurface = 0xFFE1EAF7,
+            tileOn = 0xFF18595D, tileOff = 0xFF222B3D, dimAmount = 0.6f, cornerDp = 16,
+        ),
+        ThorPalette(
+            id = "lavender", name = "Lavender", label = R.string.themeLavender, isDark = true,
+            background = 0xFF14111C, surface = 0xFF1E1829, surfaceVariant = 0xFF332D3E,
+            primary = 0xFFB79CED, onPrimary = 0xFF000000, onSurface = 0xFFEDE7F6,
+            tileOn = 0xFF54466E, tileOff = 0xFF332D3E, dimAmount = 0.55f, cornerDp = 20,
+        ),
+        ThorPalette(
+            id = "neon", name = "Neon", label = R.string.themeNeon, isDark = true,
+            background = 0xFF0A0911, surface = 0xFF15131F, surfaceVariant = 0xFF2B2935,
+            primary = 0xFFFF4FD8, onPrimary = 0xFF000000, onSurface = 0xFFF3F0FF,
+            tileOn = 0xFF672860, tileOff = 0xFF2B2935, dimAmount = 0.6f, cornerDp = 12,
+        ),
+        ThorPalette(
+            id = "dotmatrix", name = "Dot Matrix", label = R.string.themeDotMatrix, isDark = true,
+            background = 0xFF0F380F, surface = 0xFF1A461A, surfaceVariant = 0xFF2D5628,
+            primary = 0xFF9BBC0F, onPrimary = 0xFF000000, onSurface = 0xFFD6E8A8,
+            tileOn = 0xFF3A6417, tileOff = 0xFF2D5628, dimAmount = 0.5f, cornerDp = 4,
+        ),
+        ThorPalette(
+            id = "amber", name = "Amber", label = R.string.themeAmber, isDark = true,
+            background = 0xFF0A0700, surface = 0xFF161006, surfaceVariant = 0xFF2D2210,
+            primary = 0xFFFFB000, onPrimary = 0xFF000000, onSurface = 0xFFFFC266,
+            tileOn = 0xFF684804, tileOff = 0xFF2D2210, dimAmount = 0.6f, cornerDp = 6,
+        ),
+        ThorPalette(
             id = "daylight", name = "Daylight", label = R.string.themeDaylight, isDark = false,
             background = 0xFFF6F7FB, surface = 0xFFFFFFFF, surfaceVariant = 0xFFE6E9F2,
             primary = 0xFF2F5BD3, onPrimary = 0xFFFFFFFF, onSurface = 0xFF161A22,
             tileOn = 0xFFC9D6FA, tileOff = 0xFFE6E9F2, dimAmount = 0.35f, cornerDp = 16, chart = ThorPalette.LIGHT_CHART,
+        ),
+        ThorPalette(
+            id = "mint", name = "Mint", label = R.string.themeMint, isDark = false,
+            background = 0xFFE9F5EF, surface = 0xFFFFFFFF, surfaceVariant = 0xFFE7E9E8,
+            primary = 0xFF0E7A54, onPrimary = 0xFFFFFFFF, onSurface = 0xFF13241B,
+            tileOn = 0xFFABD0C3, tileOff = 0xFFE7E9E8, dimAmount = 0.35f, cornerDp = 18, chart = ThorPalette.LIGHT_CHART,
+        ),
+        ThorPalette(
+            id = "sand", name = "Sand", label = R.string.themeSand, isDark = false,
+            background = 0xFFF3ECE0, surface = 0xFFFFFBF5, surfaceVariant = 0xFFEAE5DF,
+            primary = 0xFFB4532A, onPrimary = 0xFFFFFFFF, onSurface = 0xFF2B2119,
+            tileOn = 0xFFE5C0AE, tileOff = 0xFFEAE5DF, dimAmount = 0.35f, cornerDp = 14, chart = ThorPalette.LIGHT_CHART,
         ),
     )
 

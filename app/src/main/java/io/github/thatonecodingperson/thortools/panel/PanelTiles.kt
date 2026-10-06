@@ -94,6 +94,7 @@ object PanelTiles {
         ThorAction.HOME_TOP -> R.string.panelTileHomeTop
         ThorAction.HOME_BOTTOM -> R.string.panelTileHomeBottom
         ThorAction.HOME_BOTH -> R.string.panelTileHomeBoth
+        ThorAction.REFRESH_SCREENS -> R.string.panelTileRefreshScreens
         ThorAction.BACK -> R.string.actionBack
         ThorAction.HOME -> R.string.actionHome
         ThorAction.RECENTS -> R.string.panelTileRecents

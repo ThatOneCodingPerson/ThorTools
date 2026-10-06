@@ -2,16 +2,19 @@ package io.github.thatonecodingperson.thortools.display
 
 import android.content.Context
 import androidx.annotation.StringRes
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -19,15 +22,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Button
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.SavedStateHandle
@@ -53,8 +58,11 @@ import io.github.thatonecodingperson.thortools.panel.panelSizeDp
 import io.github.thatonecodingperson.thortools.panel.samplePanelState
 import io.github.thatonecodingperson.thortools.ui.composables.DeleteConfirmDialog
 import io.github.thatonecodingperson.thortools.ui.composables.SubTopAppBar
+import io.github.thatonecodingperson.thortools.ui.theme.HslColor
 import io.github.thatonecodingperson.thortools.ui.theme.ThemeBasics
 import io.github.thatonecodingperson.thortools.ui.theme.ThemeBuilder
+import io.github.thatonecodingperson.thortools.ui.theme.ThemeColor
+import io.github.thatonecodingperson.thortools.ui.theme.ThorPalette
 import io.github.thatonecodingperson.thortools.ui.theme.ThorThemes
 import io.github.thatonecodingperson.thortools.ui.theme.ThorToolsTheme
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -62,42 +70,33 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import javax.inject.Inject
-
-/** The four colours a user theme is made of. */
-enum class ColorSlot(@StringRes val label: Int, @StringRes val description: Int) {
-    BACKGROUND(R.string.colorBackground, R.string.colorBackgroundInfo),
-    CARDS(R.string.colorCards, R.string.colorCardsInfo),
-    TEXT(R.string.colorText, R.string.colorTextInfo),
-    ACCENT(R.string.colorAccent, R.string.colorAccentInfo),
-}
+import kotlin.math.roundToInt
 
 data class ThemeEditorUiModel(
     val isNew: Boolean = true,
     val name: String = "",
     val basics: ThemeBasics = ThemeBuilder.basics(ThorThemes.default),
-    val editing: ColorSlot? = null,
+    /** The colour the controls change, and its hue, saturation and lightness and hex text as being edited. */
+    val picking: ThemeColor = ThemeColor.BACKGROUND,
+    val hsl: HslColor = HslColor.of(ThemeBuilder.colorOf(basics, picking)),
+    val hexText: String = ThemeBuilder.toHex(ThemeBuilder.colorOf(basics, picking)),
     val showDeleteConfirm: Boolean = false,
     val navigateBack: Boolean = false,
     val previewWidthDp: Int = 620,
     val previewHeightDp: Int = 540,
 ) {
     val palette get() = ThemeBuilder.build(PREVIEW_ID, name, basics)
-    val issues get() = ThemeBuilder.issues(palette)
     val canSave get() = name.isNotBlank()
-
-    fun colorOf(slot: ColorSlot): Long = when (slot) {
-        ColorSlot.BACKGROUND -> basics.background
-        ColorSlot.CARDS -> basics.cards
-        ColorSlot.TEXT -> basics.text
-        ColorSlot.ACCENT -> basics.accent
-    }
 
     private companion object {
         const val PREVIEW_ID = "preview"
     }
 }
 
-/** Creates or edits a user theme. "new" starts from the theme in use; saving also switches to the theme. */
+/**
+ * Creates or edits a user theme. "new" starts from the theme in use, or with `from` from that theme (a copy); saving
+ * also switches to the theme. Every change shows in the preview at once.
+ */
 @HiltViewModel
 class ThemeEditorViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
@@ -106,13 +105,8 @@ class ThemeEditorViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val existing = savedStateHandle.get<String>("id")?.let { id -> prefs.customPalettes.find { it.id == id } }
-    private val _uiState = MutableStateFlow(
-        ThemeEditorUiModel(
-            isNew = existing == null,
-            name = existing?.name ?: context.getString(R.string.themeNewName),
-            basics = ThemeBuilder.basics(existing ?: prefs.palette() ?: ThorThemes.default),
-        ),
-    )
+    private val source = savedStateHandle.get<String>("from")?.let { ThorThemes.resolve(it, prefs.customPalettes) }
+    private val _uiState = MutableStateFlow(start(context))
     val uiState: StateFlow<ThemeEditorUiModel> = _uiState.asStateFlow()
 
     init {
@@ -120,24 +114,36 @@ class ThemeEditorViewModel @Inject constructor(
         _uiState.update { it.copy(previewWidthDp = width, previewHeightDp = height) }
     }
 
-    fun nameChanged(name: String) = _uiState.update { it.copy(name = name.replace('\n', ' ')) }
-
-    fun colorClicked(slot: ColorSlot) = _uiState.update { it.copy(editing = slot) }
-
-    fun colorDismissed() = _uiState.update { it.copy(editing = null) }
-
-    fun colorPicked(color: Long) = _uiState.update { state ->
-        val basics = when (state.editing) {
-            ColorSlot.BACKGROUND -> state.basics.copy(background = color)
-            ColorSlot.CARDS -> state.basics.copy(cards = color)
-            ColorSlot.TEXT -> state.basics.copy(text = color)
-            ColorSlot.ACCENT -> state.basics.copy(accent = color)
-            null -> state.basics
+    private fun start(context: Context): ThemeEditorUiModel {
+        val name = when {
+            existing != null -> existing.name
+            source != null -> context.getString(R.string.themeCopyName, source.label?.let(context::getString) ?: source.name)
+            else -> context.getString(R.string.themeNewName)
         }
-        state.copy(basics = basics, editing = null)
+        val from = existing ?: source ?: prefs.palette() ?: ThorThemes.default
+        return ThemeEditorUiModel(isNew = existing == null, name = name, basics = ThemeBuilder.basics(from))
     }
 
-    fun cornerChanged(corner: Float) = _uiState.update { it.copy(basics = it.basics.copy(cornerDp = corner.toInt())) }
+    fun nameChanged(name: String) = _uiState.update { it.copy(name = name.replace('\n', ' ')) }
+
+    /** Which of the four colours the controls change from now on. */
+    fun pick(color: ThemeColor) = _uiState.update { state ->
+        val value = ThemeBuilder.colorOf(state.basics, color)
+        state.copy(picking = color, hsl = HslColor.of(value), hexText = ThemeBuilder.toHex(value))
+    }
+
+    fun hslChanged(hsl: HslColor) = _uiState.update { state ->
+        val value = hsl.color
+        state.copy(hsl = hsl, hexText = ThemeBuilder.toHex(value), basics = ThemeBuilder.withColor(state.basics, state.picking, value))
+    }
+
+    /** Typed hex: kept as typed, and used as soon as it is a whole colour. */
+    fun hexChanged(text: String) = _uiState.update { state ->
+        val value = ThemeBuilder.parseHex(text) ?: return@update state.copy(hexText = text)
+        state.copy(hexText = text, hsl = HslColor.of(value), basics = ThemeBuilder.withColor(state.basics, state.picking, value))
+    }
+
+    fun cornerChanged(corner: Float) = _uiState.update { it.copy(basics = it.basics.copy(cornerDp = corner.roundToInt())) }
 
     fun saveClicked() {
         val state = _uiState.value
@@ -158,6 +164,10 @@ class ThemeEditorViewModel @Inject constructor(
     }
 }
 
+/**
+ * The theme editor: the live preview on one side and the colours on the other, all on screen at once. On a narrow
+ * screen the preview stays at the top while the rest scrolls under it.
+ */
 @Composable
 fun ThemeEditorScreen(viewModel: ThemeEditorViewModel = hiltViewModel(), navigateBack: () -> Unit) {
     val uiState by viewModel.uiState.collectAsState()
@@ -166,87 +176,195 @@ fun ThemeEditorScreen(viewModel: ThemeEditorViewModel = hiltViewModel(), navigat
         if (uiState.navigateBack) navigateBack()
     }
 
-    uiState.editing?.let { slot ->
-        ColorPickerDialog(
-            title = stringResource(slot.label),
-            initial = uiState.colorOf(slot),
-            onPick = viewModel::colorPicked,
-            onDismiss = viewModel::colorDismissed,
-        )
-    }
-
     if (uiState.showDeleteConfirm) {
         DeleteConfirmDialog(onDelete = viewModel::deleteConfirmed, onDismiss = viewModel::deleteDismissed)
     }
 
     val title = if (uiState.isNew) R.string.themeCreate else R.string.themeEdit
-    Scaffold(topBar = { SubTopAppBar(title = title, onBack = navigateBack) }) { contentPadding ->
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier
+    Scaffold(
+        topBar = {
+            SubTopAppBar(title = title, onBack = navigateBack) {
+                if (!uiState.isNew) {
+                    IconButton(onClick = viewModel::deleteClicked) {
+                        Icon(
+                            Icons.Rounded.Delete,
+                            contentDescription = stringResource(R.string.themeDelete),
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+                Button(onClick = viewModel::saveClicked, enabled = uiState.canSave, modifier = Modifier.padding(end = 8.dp)) {
+                    Text(stringResource(R.string.themeSaveAndUse))
+                }
+            }
+        },
+    ) { contentPadding ->
+        BoxWithConstraints(
+            Modifier
                 .fillMaxSize()
                 .padding(contentPadding)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
-            ThemePreview(
-                uiState = uiState,
-                modifier = Modifier
-                    .weight(PREVIEW_WEIGHT)
-                    .fillMaxHeight(),
-            )
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier
-                    .weight(1f - PREVIEW_WEIGHT)
-                    .fillMaxHeight()
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                OutlinedTextField(
-                    value = uiState.name,
-                    onValueChange = viewModel::nameChanged,
-                    label = { Text(stringResource(R.string.themeName)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                ColorSlot.entries.forEach { slot ->
-                    ColorRow(slot, uiState.colorOf(slot)) { viewModel.colorClicked(slot) }
-                }
-                Text(text = stringResource(R.string.themeCorners, uiState.basics.cornerDp), style = MaterialTheme.typography.bodyMedium)
-                Slider(
-                    value = uiState.basics.cornerDp.toFloat(),
-                    onValueChange = viewModel::cornerChanged,
-                    valueRange = 0f..ThemeBuilder.MAX_CORNER_DP.toFloat(),
-                    steps = ThemeBuilder.MAX_CORNER_DP / CORNER_STEP - 1,
-                )
-                uiState.issues.forEach { issue ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Rounded.Warning,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Text(
-                            text = stringResource(issueText(issue)),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
+            if (maxWidth >= TWO_PANES_WIDTH) {
+                Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.fillMaxSize()) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .weight(PREVIEW_WEIGHT)
+                            .fillMaxHeight(),
+                    ) {
+                        NameField(uiState.name, viewModel::nameChanged)
+                        ThemePreview(uiState, withAppRow = true, modifier = Modifier.weight(1f).fillMaxWidth())
+                        CornerRow(uiState.basics.cornerDp, viewModel::cornerChanged)
                     }
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .weight(1f - PREVIEW_WEIGHT)
+                            .fillMaxHeight()
+                            .verticalScroll(rememberScrollState()),
+                    ) { ColorPicking(uiState, viewModel) }
                 }
-                Button(onClick = viewModel::saveClicked, enabled = uiState.canSave, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.themeSaveAndUse))
-                }
-                FilledTonalButton(onClick = navigateBack, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.cancel))
-                }
-                if (!uiState.isNew) {
-                    OutlinedButton(onClick = viewModel::deleteClicked, modifier = Modifier.fillMaxWidth()) {
-                        Text(text = stringResource(R.string.themeDelete), color = MaterialTheme.colorScheme.error)
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxSize()) {
+                    ThemePreview(uiState, withAppRow = false, modifier = Modifier.fillMaxWidth().height(NARROW_PREVIEW_HEIGHT))
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        NameField(uiState.name, viewModel::nameChanged)
+                        ColorPicking(uiState, viewModel)
+                        CornerRow(uiState.basics.cornerDp, viewModel::cornerChanged)
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun NameField(name: String, onChange: (String) -> Unit) = OutlinedTextField(
+    value = name,
+    onValueChange = onChange,
+    label = { Text(stringResource(R.string.themeName)) },
+    singleLine = true,
+    modifier = Modifier.fillMaxWidth(),
+)
+
+@Composable
+private fun CornerRow(cornerDp: Int, onChange: (Float) -> Unit) = SliderRow(
+    label = R.string.themeCornersLabel,
+    value = cornerDp.toFloat(),
+    range = 0f..ThemeBuilder.MAX_CORNER_DP.toFloat(),
+    valueText = stringResource(R.string.themeCornerValue, cornerDp),
+    steps = ThemeBuilder.MAX_CORNER_DP / CORNER_STEP - 1,
+    onChange = onChange,
+)
+
+/** The four colours as tiles to choose from, what the chosen one is for, and the controls for it. */
+@Composable
+private fun ColorPicking(uiState: ThemeEditorUiModel, viewModel: ThemeEditorViewModel) {
+    val palette = uiState.palette
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        ThemeColor.entries.forEach { color ->
+            ColorTile(
+                color = color,
+                value = ThemeBuilder.colorOf(uiState.basics, color),
+                chosen = color == uiState.picking,
+                warning = ThemeBuilder.issuesFor(palette, color).isNotEmpty(),
+                modifier = Modifier.weight(1f),
+            ) { viewModel.pick(color) }
+        }
+    }
+    Text(
+        text = stringResource(description(uiState.picking)),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    ColorControls(hsl = uiState.hsl, hexText = uiState.hexText, onHsl = viewModel::hslChanged, onHex = viewModel::hexChanged) {
+        Readability(palette, uiState.picking, Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun ColorTile(color: ThemeColor, value: Long, chosen: Boolean, warning: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = if (chosen) colors.secondaryContainer else colors.surfaceContainer,
+        border = BorderStroke(if (chosen) 2.dp else 1.dp, if (chosen) colors.primary else colors.outlineVariant),
+        modifier = modifier,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp)) {
+            Box(contentAlignment = Alignment.TopEnd) {
+                Box(
+                    Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(Color(value))
+                        .border(1.dp, colors.outline, CircleShape),
+                )
+                if (warning) {
+                    Icon(
+                        Icons.Rounded.Warning,
+                        contentDescription = stringResource(R.string.themeHardToRead),
+                        tint = colors.error,
+                        modifier = Modifier
+                            .size(14.dp)
+                            .offset(x = 6.dp, y = (-4).dp),
+                    )
+                }
+            }
+            Text(
+                text = stringResource(label(color)),
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/** Whether the chosen colour keeps things readable, with the contrast that matters most for it. */
+@Composable
+private fun Readability(palette: ThorPalette, color: ThemeColor, modifier: Modifier) {
+    val issues = ThemeBuilder.issuesFor(palette, color)
+    val readable = issues.isEmpty()
+    val colors = MaterialTheme.colorScheme
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = modifier) {
+        Icon(
+            if (readable) Icons.Rounded.CheckCircle else Icons.Rounded.Warning,
+            contentDescription = null,
+            tint = if (readable) colors.primary else colors.error,
+            modifier = Modifier.size(18.dp),
+        )
+        val ratio = "%.1f".format(ThemeBuilder.keyContrast(palette, color))
+        val problems = issues.map { stringResource(issueText(it)) }
+        Text(
+            text = if (readable) stringResource(R.string.themeEasyToRead, ratio) else problems.joinToString(" "),
+            style = MaterialTheme.typography.bodySmall,
+            color = if (readable) colors.onSurfaceVariant else colors.error,
+        )
+    }
+}
+
+@StringRes
+private fun label(color: ThemeColor): Int = when (color) {
+    ThemeColor.BACKGROUND -> R.string.colorBackground
+    ThemeColor.CARDS -> R.string.colorCards
+    ThemeColor.TEXT -> R.string.colorText
+    ThemeColor.ACCENT -> R.string.colorAccent
+}
+
+@StringRes
+private fun description(color: ThemeColor): Int = when (color) {
+    ThemeColor.BACKGROUND -> R.string.colorBackgroundInfo
+    ThemeColor.CARDS -> R.string.colorCardsInfo
+    ThemeColor.TEXT -> R.string.colorTextInfo
+    ThemeColor.ACCENT -> R.string.colorAccentInfo
 }
 
 @StringRes
@@ -256,43 +374,9 @@ private fun issueText(issue: ThemeBuilder.Issue): Int = when (issue) {
     ThemeBuilder.Issue.ACCENT_ON_CARDS -> R.string.themeIssueAccentOnCards
 }
 
+/** The panel's first page drawn in the theme being edited, and (with [withAppRow]) how a row of the app looks. */
 @Composable
-private fun ColorRow(slot: ColorSlot, color: Long, onClick: () -> Unit) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(vertical = 6.dp, horizontal = 4.dp),
-    ) {
-        Box(
-            Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(Color(color))
-                .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
-        )
-        Column(Modifier.weight(1f)) {
-            Text(text = stringResource(slot.label))
-            Text(
-                text = stringResource(slot.description),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Text(
-            text = ThemeBuilder.toHex(color),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-/** The panel's first page and a few app rows, drawn in the theme being edited. */
-@Composable
-private fun ThemePreview(uiState: ThemeEditorUiModel, modifier: Modifier) {
+private fun ThemePreview(uiState: ThemeEditorUiModel, withAppRow: Boolean, modifier: Modifier) {
     ThorToolsTheme(uiState.palette) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = modifier) {
             PanelPreview(
@@ -305,36 +389,40 @@ private fun ThemePreview(uiState: ThemeEditorUiModel, modifier: Modifier) {
                     .weight(1f)
                     .fillMaxWidth(),
             )
-            Column(
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.background)
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
-                    .padding(12.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.themePreviewHeader),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(text = stringResource(R.string.themePreviewRow), color = MaterialTheme.colorScheme.onBackground)
-                        Text(
-                            text = stringResource(R.string.themePreviewRowInfo),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Switch(checked = true, onCheckedChange = null)
-                }
-                Button(onClick = {}) { Text(stringResource(R.string.themePreviewButton)) }
-            }
+            if (withAppRow) AppRowSample()
         }
     }
 }
 
-private const val PREVIEW_WEIGHT = 0.5f
+@Composable
+private fun AppRowSample() {
+    val shape = RoundedCornerShape(12.dp)
+    val colors = MaterialTheme.colorScheme
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(colors.background)
+            .border(1.dp, colors.outlineVariant, shape)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(text = stringResource(R.string.themePreviewHeader), style = MaterialTheme.typography.labelMedium, color = colors.primary)
+            Text(
+                text = stringResource(R.string.themePreviewRow),
+                color = colors.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Switch(checked = true, onCheckedChange = null)
+        Button(onClick = {}) { Text(stringResource(R.string.themePreviewButton)) }
+    }
+}
+
+private const val PREVIEW_WEIGHT = 0.45f
 private const val CORNER_STEP = 2
+private val TWO_PANES_WIDTH = 720.dp
+private val NARROW_PREVIEW_HEIGHT = 150.dp

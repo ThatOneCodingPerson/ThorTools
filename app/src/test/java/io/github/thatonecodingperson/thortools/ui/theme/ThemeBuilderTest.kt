@@ -81,4 +81,67 @@ class ThemeBuilderTest {
         assertEquals(0xFFFFFFFF, ThemeBuilder.mix(0xFF000000, 0xFFFFFFFF, 1f))
         assertEquals(0xFF808080, ThemeBuilder.mix(0xFF000000, 0xFFFFFFFF, 0.5f))
     }
+
+    @Test
+    fun `each of the four colours is read and replaced on its own`() {
+        val values = mapOf(
+            ThemeColor.BACKGROUND to night.background,
+            ThemeColor.CARDS to night.cards,
+            ThemeColor.TEXT to night.text,
+            ThemeColor.ACCENT to night.accent,
+        )
+        values.forEach { (color, value) -> assertEquals(value, ThemeBuilder.colorOf(night, color)) }
+        ThemeColor.entries.forEach { color ->
+            val changed = ThemeBuilder.withColor(night, color, 0xFF123456)
+            assertEquals(0xFF123456, ThemeBuilder.colorOf(changed, color))
+            (ThemeColor.entries - color).forEach { other -> assertEquals(values[other], ThemeBuilder.colorOf(changed, other)) }
+            assertEquals(night.cornerDp, changed.cornerDp)
+        }
+    }
+
+    @Test
+    fun `each colour shows only the readability issues it takes part in`() {
+        val grey = ThemeBuilder.build("g", "G", night.copy(text = 0xFF2A2F35, accent = 0xFF1C2229))
+        assertEquals(listOf(ThemeBuilder.Issue.TEXT_ON_BACKGROUND), ThemeBuilder.issuesFor(grey, ThemeColor.BACKGROUND))
+        assertEquals(
+            listOf(ThemeBuilder.Issue.TEXT_ON_CARDS, ThemeBuilder.Issue.ACCENT_ON_CARDS),
+            ThemeBuilder.issuesFor(grey, ThemeColor.CARDS),
+        )
+        assertEquals(
+            listOf(ThemeBuilder.Issue.TEXT_ON_BACKGROUND, ThemeBuilder.Issue.TEXT_ON_CARDS),
+            ThemeBuilder.issuesFor(grey, ThemeColor.TEXT),
+        )
+        assertEquals(listOf(ThemeBuilder.Issue.ACCENT_ON_CARDS), ThemeBuilder.issuesFor(grey, ThemeColor.ACCENT))
+        val fine = ThemeBuilder.build("f", "F", night)
+        ThemeColor.entries.forEach { assertEquals(emptyList<ThemeBuilder.Issue>(), ThemeBuilder.issuesFor(fine, it)) }
+    }
+
+    @Test
+    fun `the contrast shown for each colour is the one that matters for it`() {
+        val palette = ThemeBuilder.build("k", "K", night)
+        assertEquals(ThorThemes.contrast(night.text, night.background), ThemeBuilder.keyContrast(palette, ThemeColor.BACKGROUND), 0.0)
+        assertEquals(ThorThemes.contrast(night.text, night.cards), ThemeBuilder.keyContrast(palette, ThemeColor.CARDS), 0.0)
+        val worst = minOf(ThorThemes.contrast(night.text, night.background), ThorThemes.contrast(night.text, night.cards))
+        assertEquals(worst, ThemeBuilder.keyContrast(palette, ThemeColor.TEXT), 0.0)
+        assertEquals(ThorThemes.contrast(night.accent, night.cards), ThemeBuilder.keyContrast(palette, ThemeColor.ACCENT), 0.0)
+    }
+
+    @Test
+    fun `a picked colour keeps its hue while it has no saturation`() {
+        val red = HslColor(hue = 0f, saturation = 1f, lightness = 0.5f)
+        assertEquals(0xFFFF0000, red.color)
+        val grey = red.copy(saturation = 0f)
+        assertEquals(0xFF808080, grey.color)
+        assertEquals(0f, grey.hue, 0f)
+        assertEquals(0xFF00FF00, grey.copy(hue = 120f, saturation = 1f).color)
+    }
+
+    @Test
+    fun `a copy of any built-in theme starts from its own colours`() {
+        ThorThemes.builtIn.forEach { palette ->
+            val copy = ThemeBuilder.build("custom_copy", "Copy", ThemeBuilder.basics(palette))
+            assertEquals(ThemeBuilder.basics(palette), ThemeBuilder.basics(copy))
+            assertEquals(palette.isDark, copy.isDark)
+        }
+    }
 }

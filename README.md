@@ -132,6 +132,12 @@ each other. Without OdinTools you won't see any of this: Thor Tools has every Od
   the Thor. Save goes straight into Dolphin's profile folder (through AYN's system service, or through Dolphin's own
   folder access, given once), with a copy in Downloads and the folder path as a fallback
 - **Where the keyboard appears**: always on the bottom screen, on the top screen, or on the screen you type on
+- **OLED Safety (Beta)**: burn-in protection for both screens, each on its own. A pixel shifter that moves a screen a
+  pixel at a time, all the time or only while its picture stays still (in games too, and an animated home screen on the
+  other screen doesn't stop it); a refresher (sweep, noise, colours or a negative of the screen) that can run by itself
+  on a screen that has stayed still, or from a hotkey or the quick panel; dim or black out a screen nobody has touched
+  for a while; still areas (Pre-Beta: a game's HUD or a logo dimmed, or only its pixels moved, while the rest of the
+  game plays); and AYN's own shifter and refresher, set from here
 
 ### From OdinTools (all in the OdinTools features menu)
 - Controller and L2/R2 style for external displays
@@ -141,8 +147,9 @@ each other. Without OdinTools you won't see any of this: Thor Tools has every Od
 
 ### Look and setup
 - A main menu that shows how everything stands at a glance, with shortcuts to the pages you use most
-- Themes: Midnight, Graphite, Glacier, Ember, Forest, Daylight, Android's own colours or one you make yourself, for
-  the app and the panel
+- Themes for the app and the panel: Midnight, Graphite, Glacier, Ember, Forest, Sakura, Abyss, Lavender, Neon, Dot
+  Matrix, Amber, Daylight, Mint, Sand or Android's own colours. Make your own, or copy any theme and change it, with a
+  live preview beside the colours
 - A guided setup on first start (access, hotkeys, the quick panel, a theme), and again any time from Setup &
   diagnostics
 - Permissions & access: every permission Thor Tools relies on, with its real state and a one-tap fix

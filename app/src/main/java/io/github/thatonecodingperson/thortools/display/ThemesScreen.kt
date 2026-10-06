@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material3.Icon
@@ -35,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -72,10 +74,18 @@ class ThemesViewModel @Inject constructor(private val prefs: SharedPrefsRepo) : 
     }
 }
 
-/** Every theme as a small preview card: your own first (with "Create a theme"), then the built-in ones. */
+/**
+ * Every theme as a small preview card: your own first (with "Create a theme"), then the built-in ones. Each but System
+ * colours can be copied into a new theme of your own ([onCopy]).
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ThemesScreen(viewModel: ThemesViewModel = hiltViewModel(), onEdit: (id: String) -> Unit, onBack: () -> Unit) {
+fun ThemesScreen(
+    viewModel: ThemesViewModel = hiltViewModel(),
+    onEdit: (id: String) -> Unit,
+    onCopy: (id: String) -> Unit,
+    onBack: () -> Unit,
+) {
     val uiState by viewModel.uiState.collectAsState()
     LaunchedEffect(Unit) { viewModel.refresh() }
 
@@ -95,6 +105,7 @@ fun ThemesScreen(viewModel: ThemesViewModel = hiltViewModel(), onEdit: (id: Stri
                     name = palette.name,
                     selected = palette.id == uiState.themeId,
                     onEdit = { onEdit(palette.id) },
+                    onCopy = { onCopy(palette.id) },
                 ) { viewModel.select(palette.id) }
             }
         }
@@ -105,6 +116,7 @@ fun ThemesScreen(viewModel: ThemesViewModel = hiltViewModel(), onEdit: (id: Stri
                     palette = palette,
                     name = palette.label?.let { stringResource(it) } ?: palette.name,
                     selected = palette.id == uiState.themeId,
+                    onCopy = { onCopy(palette.id) },
                 ) { viewModel.select(palette.id) }
             }
             SystemCard(selected = uiState.themeId == ThorThemes.SYSTEM) { viewModel.select(ThorThemes.SYSTEM) }
@@ -126,9 +138,16 @@ private fun CardFlow(content: @Composable () -> Unit) {
 
 /** A miniature of the theme: background, a card with text, a switched-on tile, an accent button. */
 @Composable
-private fun ThemeCard(palette: ThorPalette, name: String, selected: Boolean, onEdit: (() -> Unit)? = null, onClick: () -> Unit) {
+private fun ThemeCard(
+    palette: ThorPalette,
+    name: String,
+    selected: Boolean,
+    onEdit: (() -> Unit)? = null,
+    onCopy: () -> Unit,
+    onClick: () -> Unit,
+) {
     val corner = RoundedCornerShape((palette.cornerDp / 2).dp + 4.dp)
-    CardFrame(selected = selected, name = name, onEdit = onEdit, onClick = onClick) {
+    CardFrame(selected = selected, name = name, onEdit = onEdit, onCopy = onCopy, onClick = onClick) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -212,6 +231,7 @@ private fun CardFrame(
     selected: Boolean,
     name: String,
     onEdit: (() -> Unit)? = null,
+    onCopy: (() -> Unit)? = null,
     onClick: () -> Unit,
     preview: @Composable () -> Unit,
 ) {
@@ -251,12 +271,19 @@ private fun CardFrame(
                     .weight(1f)
                     .padding(vertical = 12.dp),
             )
-            if (onEdit != null) {
-                IconButton(onClick = onEdit) { Icon(Icons.Rounded.Edit, contentDescription = stringResource(R.string.themeEdit)) }
-            }
+            if (onCopy != null) CardAction(Icons.Rounded.ContentCopy, stringResource(R.string.themeCopy), onCopy)
+            if (onEdit != null) CardAction(Icons.Rounded.Edit, stringResource(R.string.themeEdit), onEdit)
         }
     }
 }
 
-private val CARD_WIDTH = 176.dp
+@Composable
+private fun CardAction(icon: ImageVector, description: String, onClick: () -> Unit) {
+    IconButton(onClick = onClick, modifier = Modifier.size(ACTION_SIZE)) {
+        Icon(icon, contentDescription = description, modifier = Modifier.size(20.dp))
+    }
+}
+
+private val CARD_WIDTH = 192.dp
+private val ACTION_SIZE = 36.dp
 private val PREVIEW_HEIGHT = 96.dp

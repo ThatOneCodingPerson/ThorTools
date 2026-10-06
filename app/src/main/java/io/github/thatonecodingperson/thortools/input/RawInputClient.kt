@@ -33,6 +33,12 @@ class RawInputClient(private val context: Context, private val executor: ShellEx
 
         /** The helper connected (again); work that needs it can start. */
         fun onConnected() {}
+
+        /** OLED Safety's watch: the picture of display [displayId] went still or moves again. */
+        fun onPicture(displayId: Int, still: Boolean) {}
+
+        /** OLED Safety's still areas: the share of display [displayId] protected now, in percent. */
+        fun onAreas(displayId: Int, percent: Int) {}
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -135,9 +141,11 @@ class RawInputClient(private val context: Context, private val executor: ShellEx
 
     private fun startHelper(socketName: String) {
         val script = File(context.cacheDir, "input-helper-${SystemClock.elapsedRealtime()}.sh")
-        // PServer reaps its shell as soon as it returns, which would kill a child that hasn't been reparented yet.
+        // PServer reaps its shell as soon as it returns, which would kill a child that hasn't been reparented yet. A helper
+        // left over from before (an update, a crash) would keep its layers on the screens, so it goes first.
         script.writeText(
-            "CLASSPATH=${context.applicationInfo.sourceDir} app_process /system/bin ${RawInputHelper::class.java.name} " +
+            "pkill -9 -f ${RawInputHelper::class.java.name}\n" +
+                "CLASSPATH=${context.applicationInfo.sourceDir} app_process /system/bin ${RawInputHelper::class.java.name} " +
                 "$socketName ${context.applicationInfo.uid} > /dev/null 2>&1 &\nsleep 1\n",
         )
         script.setReadable(true, false)
@@ -176,6 +184,8 @@ class RawInputClient(private val context: Context, private val executor: ShellEx
                     is HelperMessage.Lift -> mainHandler.post { listener.onLift(message.screen) }
                     is HelperMessage.Direction -> mainHandler.post { listener.onDirection(message.button, message.down) }
                     is HelperMessage.Lid -> mainHandler.post { listener.onLid(message.closed) }
+                    is HelperMessage.Picture -> mainHandler.post { listener.onPicture(message.displayId, message.still) }
+                    is HelperMessage.Areas -> mainHandler.post { listener.onAreas(message.displayId, message.percent) }
                     is HelperMessage.Status ->
                         devices =
                             (devices.filterNot { it.startsWith(message.text.substringBefore(' ')) } + message.text)

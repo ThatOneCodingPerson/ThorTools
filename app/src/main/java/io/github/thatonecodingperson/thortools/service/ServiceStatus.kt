@@ -2,6 +2,10 @@ package io.github.thatonecodingperson.thortools.service
 
 import io.github.thatonecodingperson.thortools.hotkeys.PadButton
 import io.github.thatonecodingperson.thortools.input.RawInputClient
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -23,8 +27,19 @@ class ServiceStatus @Inject constructor() {
         owner = null
         rawInput = null
         toggleQuickPanel = null
+        refreshScreens = null
         onAccessChanged = null
         chargeSwitches = null
+        _oledAreas.value = emptyMap()
+    }
+
+    private val _oledAreas = MutableStateFlow<Map<Int, Int>>(emptyMap())
+
+    /** OLED Safety's still areas: the share of each display protected now, in percent, by display id. */
+    val oledAreas: StateFlow<Map<Int, Int>> = _oledAreas.asStateFlow()
+
+    internal fun setOledAreas(displayId: Int, percent: Int) {
+        _oledAreas.update { if (percent > 0) it + (displayId to percent) else it - displayId }
     }
 
     @Volatile
@@ -43,6 +58,11 @@ class ServiceStatus @Inject constructor() {
     /** Opens or closes the quick panel from the app's settings; null while the service isn't running. */
     @Volatile
     var toggleQuickPanel: (() -> Unit)? = null
+        internal set
+
+    /** Runs OLED Safety's refresh sweep with its saved screens and length; null while the service isn't running. */
+    @Volatile
+    var refreshScreens: (() -> Unit)? = null
         internal set
 
     /**

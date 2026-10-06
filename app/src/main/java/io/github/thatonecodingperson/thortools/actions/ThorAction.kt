@@ -77,6 +77,7 @@ enum class ThorAction(
     HOME_TOP("home_top", R.string.actionHomeTop, R.string.actionHomeTopInfo, ActionCategory.SCREENS),
     HOME_BOTTOM("home_bottom", R.string.actionHomeBottom, R.string.actionHomeBottomInfo, ActionCategory.SCREENS),
     HOME_BOTH("home_both", R.string.actionHomeBoth, R.string.actionHomeBothInfo, ActionCategory.SCREENS),
+    REFRESH_SCREENS("screens_refresh", R.string.actionRefreshScreens, R.string.actionRefreshScreensInfo, ActionCategory.SCREENS),
     BACK("system_back", R.string.actionBack, R.string.actionBackInfo, ActionCategory.SYSTEM),
     HOME("system_home", R.string.actionHome, R.string.actionHomeInfo, ActionCategory.SYSTEM),
     RECENTS("system_recents", R.string.actionRecents, R.string.actionRecentsInfo, ActionCategory.SYSTEM),

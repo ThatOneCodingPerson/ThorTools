@@ -18,6 +18,7 @@ import io.github.thatonecodingperson.thortools.lid.OldLidChanges
 import io.github.thatonecodingperson.thortools.lid.WaitUnit
 import io.github.thatonecodingperson.thortools.models.ControllerStyle
 import io.github.thatonecodingperson.thortools.models.L2R2Style
+import io.github.thatonecodingperson.thortools.oled.OledChoices
 import io.github.thatonecodingperson.thortools.panel.PanelLayout
 import io.github.thatonecodingperson.thortools.ui.theme.ThorPalette
 import io.github.thatonecodingperson.thortools.ui.theme.ThorThemes
@@ -218,6 +219,25 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
         }
         prefs.registerOnSharedPreferenceChangeListener(listener)
         trySend(ledLook)
+        awaitClose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
+    /** OLED Safety's own protection: idle screens and the refresh sweep. */
+    var oledChoices: OledChoices
+        get() = OledChoices.decode(prefs.getString(KEY_OLED_CHOICES, null))
+        set(value) = prefs.edit().putString(KEY_OLED_CHOICES, value.encode()).apply()
+
+    /** AYN's OLED values as the user chose them, kept while Thor Tools' shifter has AYN's switched off; null otherwise. */
+    var oledAynSaved: String?
+        get() = prefs.getString(KEY_OLED_AYN_SAVED, null)
+        set(value) = prefs.edit().putString(KEY_OLED_AYN_SAVED, value).apply()
+
+    fun oledChoicesChanges(): Flow<OledChoices> = callbackFlow {
+        val listener = OnSharedPreferenceChangeListener { _, key ->
+            if (key == KEY_OLED_CHOICES || key == null) trySend(oledChoices)
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        trySend(oledChoices)
         awaitClose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 
@@ -448,6 +468,8 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
             "lid_not_while_media", "lid_mute_buttons", "lid_mute_controller", "lid_mute_touch", "lid_keep_buttons_for",
         )
         private const val KEY_LID_SESSION = "lid_session"
+        private const val KEY_OLED_CHOICES = "oled_choices"
+        private const val KEY_OLED_AYN_SAVED = "oled_ayn_saved"
         private const val KEY_LID_LAST = "lid_last_result"
         private const val KEY_CUSTOM_PALETTES = "custom_palettes"
         private const val KEY_HOTKEYS = "hotkey_list"
