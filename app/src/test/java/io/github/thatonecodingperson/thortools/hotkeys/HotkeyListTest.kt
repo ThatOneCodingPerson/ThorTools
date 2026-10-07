@@ -164,6 +164,8 @@ class HotkeyListTest {
         assertTrue(MotionWatch.endsWatch(ThorAction.OPEN_QUICK_PANEL))
         assertTrue(MotionWatch.endsWatch(ThorAction.LAUNCH_APP))
         assertEquals(false, MotionWatch.endsWatch(ThorAction.BRIGHTER))
+        // Switching desktop controls moves nothing, so a stick can still be flicked for the next combo.
+        assertEquals(false, MotionWatch.endsWatch(ThorAction.TOGGLE_DESKTOP))
         assertEquals(false, MotionWatch.endsWatch(ThorAction.CYCLE_PERFORMANCE))
         assertEquals(false, MotionWatch.endsWatch(ThorAction.SCREENSHOT))
     }

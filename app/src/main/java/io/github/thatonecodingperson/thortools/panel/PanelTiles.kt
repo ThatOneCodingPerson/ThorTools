@@ -29,6 +29,7 @@ object PanelTiles {
         ThorAction.TOGGLE_BOTTOM_SCREEN,
         ThorAction.TOGGLE_STAY_AWAKE,
         ThorAction.TOGGLE_AYN_MOUSE,
+        ThorAction.TOGGLE_DESKTOP,
         ThorAction.TOGGLE_CONTROLLER_LOCK,
         ThorAction.LOCK_CONTROLLER_BOTTOM,
         ThorAction.LOCK_CONTROLLER_HERE,
@@ -83,6 +84,7 @@ object PanelTiles {
         ThorAction.CYCLE_CONTROLLER_STYLE -> R.string.panelTileStyle
         ThorAction.CYCLE_L2R2 -> R.string.panelTileL2r2
         ThorAction.TOGGLE_AYN_MOUSE -> R.string.panelTileMouse
+        ThorAction.TOGGLE_DESKTOP -> R.string.panelTileDesktop
         ThorAction.CONTROLLER_TO_TOP -> R.string.panelTileToTop
         ThorAction.CONTROLLER_TO_BOTTOM -> R.string.panelTileToBottom
         ThorAction.TOGGLE_CONTROLLER_LOCK -> R.string.panelTileLock

@@ -5,6 +5,8 @@ import io.github.thatonecodingperson.thortools.hotkeys.HotkeyRecognizer.Effect.G
 import io.github.thatonecodingperson.thortools.hotkeys.HotkeyRecognizer.Effect.Run
 import io.github.thatonecodingperson.thortools.hotkeys.HotkeyRecognizer.Step
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HotkeyRecognizerTest {
@@ -255,5 +257,28 @@ class HotkeyRecognizerTest {
     fun `AYN waits longer before its hold when it starts combos`() {
         val keys = HotkeyRecognizer(HotkeyList.defaults + hotkey(PadButton.AYN, PressKind.TAP, second = PadButton.B))
         assertEquals(Step(consume = true, timerAt = 1000), keys.down(PadButton.AYN, 0))
+    }
+
+    @Test
+    fun `combo first buttons are known, and holding one shows while it is down`() {
+        val homeR3 = hotkey(PadButton.HOME, PressKind.DOUBLE, second = PadButton.R3, action = ThorAction.SWAP_SCREENS)
+        val keys = HotkeyRecognizer(listOf(homeR3, hotkey(PadButton.L1, PressKind.TAP, second = PadButton.R1)))
+        assertTrue(keys.startsCombos(PadButton.HOME))
+        assertTrue(keys.startsCombos(PadButton.L1))
+        assertFalse(keys.startsCombos(PadButton.R3))
+        assertFalse(keys.startsCombos(PadButton.A))
+        assertFalse(keys.holding)
+        keys.down(PadButton.HOME, 0)
+        assertTrue(keys.holding)
+        // A combo's second button is the hotkeys' alone: swallowed, so desktop controls never get it.
+        val steps =
+            listOf(keys.down(PadButton.R3, 100), keys.up(PadButton.R3, 150), keys.down(PadButton.R3, 250), keys.up(PadButton.R3, 300))
+        assertTrue(steps.all { it.consume })
+        assertEquals(listOf(Run(homeR3)), steps.flatMap { it.effects })
+        keys.up(PadButton.HOME, 400)
+        assertFalse(keys.holding)
+        // A game button that starts a combo goes on to the app (and so to desktop controls), held all the same.
+        assertFalse(keys.down(PadButton.L1, 500).consume)
+        assertTrue(keys.holding)
     }
 }

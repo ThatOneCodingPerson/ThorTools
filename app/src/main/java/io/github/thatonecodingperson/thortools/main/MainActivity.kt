@@ -33,6 +33,7 @@ import io.github.thatonecodingperson.thortools.controller.ControllerModesScreen
 import io.github.thatonecodingperson.thortools.controller.ControllerScreen
 import io.github.thatonecodingperson.thortools.data.SharedPrefsRepo
 import io.github.thatonecodingperson.thortools.debug.DebugScreen
+import io.github.thatonecodingperson.thortools.desktop.DesktopScreen
 import io.github.thatonecodingperson.thortools.diagnostics.DiagnosticsScreen
 import io.github.thatonecodingperson.thortools.diagnostics.SetupScreen
 import io.github.thatonecodingperson.thortools.display.DisplayScreen
@@ -48,6 +49,7 @@ import io.github.thatonecodingperson.thortools.oled.AynScreen
 import io.github.thatonecodingperson.thortools.oled.OledScreen
 import io.github.thatonecodingperson.thortools.panel.PanelEditorScreen
 import io.github.thatonecodingperson.thortools.panel.PanelSettingsScreen
+import io.github.thatonecodingperson.thortools.retroarch.RetroArchScreen
 import io.github.thatonecodingperson.thortools.service.ServiceStatus
 import io.github.thatonecodingperson.thortools.setup.FirstRun
 import io.github.thatonecodingperson.thortools.setup.PermissionsScreen
@@ -140,8 +142,12 @@ class MainActivity : ComponentActivity() {
                             ControllerScreen(
                                 onModes = { navController.navigate(Routes.CONTROLLER_MODES) },
                                 onHotkeys = { navController.navigate(Routes.HOTKEYS) },
+                                onDesktop = { navController.navigate(Routes.DESKTOP) },
                                 onBack = back,
                             )
+                        }
+                        composable(Routes.DESKTOP) {
+                            DesktopScreen(onBack = back)
                         }
                         composable(Routes.HOTKEYS) {
                             HotkeysScreen(onBack = back)
@@ -223,6 +229,7 @@ class MainActivity : ComponentActivity() {
                             ExtraToolsScreen(
                                 onLeds = { navController.navigate(Routes.LEDS) },
                                 onWii = { navController.navigate(Routes.WII) },
+                                onRetroArch = { navController.navigate(Routes.RETROARCH) },
                                 onOled = { navController.navigate(Routes.OLED) },
                                 onBack = back,
                             )
@@ -235,6 +242,9 @@ class MainActivity : ComponentActivity() {
                         }
                         composable(Routes.WII) {
                             WiiBuilderScreen(onBack = back)
+                        }
+                        composable(Routes.RETROARCH) {
+                            RetroArchScreen(onBack = back)
                         }
                         composable(Routes.LEDS) {
                             LedScreen(onProfiles = { navController.navigate(Routes.OVERRIDE_LIST) }, onBack = back)

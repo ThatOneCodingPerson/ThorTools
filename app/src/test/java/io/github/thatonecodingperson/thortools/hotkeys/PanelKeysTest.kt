@@ -130,6 +130,7 @@ class PanelKeysTest {
             ThorAction.BRIGHTER,
             ThorAction.QUIETER,
             ThorAction.TOGGLE_STAY_AWAKE,
+            ThorAction.TOGGLE_DESKTOP,
             ThorAction.CLEAR_BACKGROUND,
             ThorAction.OPEN_QUICK_PANEL,
         ).forEach { action ->

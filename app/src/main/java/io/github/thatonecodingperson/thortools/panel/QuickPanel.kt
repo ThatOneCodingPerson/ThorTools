@@ -76,6 +76,7 @@ class QuickPanel(
         scope = scope,
         helper = helper,
         stayAwakeOn = stayAwakeOn,
+        desktopOn = { prefs.desktopEnabled },
         bottomDisplay = { screenFocus.bottomDisplayId() },
         lockedTo = lockedTo,
         frontApp = frontApp,
@@ -119,6 +120,9 @@ class QuickPanel(
 
     val isOpen: Boolean get() = root != null
 
+    /** Called after the panel opened or closed. Main thread. */
+    var onOpenChanged: (() -> Unit)? = null
+
     /** Open and holding the controller (Panel takes the controller), so the pad's buttons work the panel. */
     val hasController: Boolean get() = isOpen && tookController && controllerHere
 
@@ -155,6 +159,7 @@ class QuickPanel(
         openedAt = SystemClock.uptimeMillis()
         model.refresh()
         model.start()
+        onOpenChanged?.invoke()
     }
 
     /**
@@ -189,6 +194,7 @@ class QuickPanel(
     private fun removeWindow(): Closed? {
         val view = root ?: return null
         root = null
+        onOpenChanged?.invoke()
         model.stop()
         runCatching { windowManager?.removeViewImmediate(view) }
         windowManager = null

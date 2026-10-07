@@ -8,6 +8,9 @@ import io.github.thatonecodingperson.thortools.charging.Sensitivity
 import io.github.thatonecodingperson.thortools.coexist.CoexistencePolicy
 import io.github.thatonecodingperson.thortools.coexist.OdinToolsDetector
 import io.github.thatonecodingperson.thortools.coexist.Overlap
+import io.github.thatonecodingperson.thortools.desktop.DesktopApps
+import io.github.thatonecodingperson.thortools.desktop.DesktopLayout
+import io.github.thatonecodingperson.thortools.desktop.DesktopSettings
 import io.github.thatonecodingperson.thortools.hotkeys.Hotkey
 import io.github.thatonecodingperson.thortools.hotkeys.HotkeyList
 import io.github.thatonecodingperson.thortools.leds.LedLook
@@ -256,6 +259,58 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
 
     fun setWiiName(setup: String, name: String?) = prefs.edit().putString(KEY_WII_NAME + setup, name).apply()
 
+    /** Desktop controls: AYN's mouse mode switched for the app on the screen that has the controller. */
+    var desktopEnabled: Boolean
+        get() = prefs.getBoolean(KEY_DESKTOP_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(KEY_DESKTOP_ENABLED, value).apply()
+
+    /** Where desktop controls work. */
+    var desktopApps: DesktopApps
+        get() = DesktopApps(packages(KEY_DESKTOP_ONLY_IN), packages(KEY_DESKTOP_NEVER_IN))
+        set(value) = prefs.edit()
+            .putString(KEY_DESKTOP_ONLY_IN, value.onlyIn.sorted().joinToString("\n"))
+            .putString(KEY_DESKTOP_NEVER_IN, value.neverIn.sorted().joinToString("\n"))
+            .apply()
+
+    /** What each button and stick does in desktop controls, and how the pointer and the wheel feel. */
+    var desktopLayout: DesktopLayout
+        get() = DesktopLayout.decode(prefs.getString(KEY_DESKTOP_LAYOUT, null))
+        set(value) = prefs.edit().putString(KEY_DESKTOP_LAYOUT, value.encode()).apply()
+
+    val desktopSettings: DesktopSettings get() = DesktopSettings(desktopEnabled, desktopApps, desktopLayout)
+
+    /** Desktop controls' switch, app lists and layout, now and after each change. */
+    fun desktopChanges(): Flow<DesktopSettings> = callbackFlow {
+        val listener = OnSharedPreferenceChangeListener { _, key ->
+            if (key in DESKTOP_KEYS || key == null) trySend(desktopSettings)
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        trySend(desktopSettings)
+        awaitClose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
+    private fun packages(key: String): Set<String> = prefs.getString(key, null)?.lines()?.filter { it.isNotBlank() }?.toSet().orEmpty()
+
+    /** The controller style (its id) RetroArch's hotkeys were last set in, since the face buttons' codes follow it. */
+    var retroArchHotkeyStyle: String?
+        get() = prefs.getString(KEY_RETROARCH_HOTKEY_STYLE, null)
+        set(value) = prefs.edit().putString(KEY_RETROARCH_HOTKEY_STYLE, value).apply()
+
+    /** The folders the user keeps BIOS files in, as paths (root reads them, so no folder access is kept). */
+    var retroArchBiosFolders: List<String>
+        get() = prefs.getString(KEY_RETROARCH_BIOS_FOLDERS, null)?.lines()?.filter { it.isNotBlank() }.orEmpty()
+        set(value) = prefs.edit().putString(KEY_RETROARCH_BIOS_FOLDERS, value.joinToString("\n")).apply()
+
+    /** The folders the user keeps ROMs in, as paths (root reads them, so no folder access is kept). */
+    var retroArchRomFolders: List<String>
+        get() = prefs.getString(KEY_RETROARCH_ROM_FOLDERS, null)?.lines()?.filter { it.isNotBlank() }.orEmpty()
+        set(value) = prefs.edit().putString(KEY_RETROARCH_ROM_FOLDERS, value.joinToString("\n")).apply()
+
+    /** Where RetroArch cheats come from: libretro-database per game ("github", the default) or the whole pack ("pack"). */
+    var retroArchCheatSource: String?
+        get() = prefs.getString(KEY_RETROARCH_CHEAT_SOURCE, null)
+        set(value) = prefs.edit().putString(KEY_RETROARCH_CHEAT_SOURCE, value).apply()
+
     /** AYN's own light settings from before Thor Tools first changed them; null while they are AYN's again. */
     var ledAynSaved: String?
         get() = prefs.getString(KEY_LED_AYN_SAVED, null)
@@ -454,6 +509,15 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
         private const val KEY_WII_MAPPING = "wii_mapping_"
         private const val KEY_WII_NAME = "wii_name_"
         private const val KEY_WII_SUGGESTIONS = "wii_suggestions"
+        private const val KEY_RETROARCH_HOTKEY_STYLE = "retroarch_hotkey_style"
+        private const val KEY_RETROARCH_BIOS_FOLDERS = "retroarch_bios_folders"
+        private const val KEY_RETROARCH_ROM_FOLDERS = "retroarch_rom_folders"
+        private const val KEY_RETROARCH_CHEAT_SOURCE = "retroarch_cheat_source"
+        private const val KEY_DESKTOP_ENABLED = "desktop_enabled"
+        private const val KEY_DESKTOP_ONLY_IN = "desktop_only_in"
+        private const val KEY_DESKTOP_NEVER_IN = "desktop_never_in"
+        private const val KEY_DESKTOP_LAYOUT = "desktop_layout"
+        private val DESKTOP_KEYS = setOf(KEY_DESKTOP_ENABLED, KEY_DESKTOP_ONLY_IN, KEY_DESKTOP_NEVER_IN, KEY_DESKTOP_LAYOUT)
         private const val KEY_LED_AYN_SAVED = "led_ayn_saved"
         private const val KEY_DEBUG_REPORT_FILE = "debug_report_file"
         private const val KEY_LID_WIFI_OFF = "lid_wifi_off"

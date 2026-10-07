@@ -141,6 +141,7 @@ class PanelLayoutTest {
         assertNull(PanelTiles.leaveDelayMs(ThorAction.LOUDER.id))
         assertEquals(PanelTiles.Look.MODE, PanelTiles.look(ThorAction.TOGGLE_REFRESH_RATE.id))
         assertEquals(PanelTiles.Look.SWITCH, PanelTiles.look(ThorAction.TOGGLE_STAY_AWAKE.id))
+        assertEquals(PanelTiles.Look.SWITCH, PanelTiles.look(ThorAction.TOGGLE_DESKTOP.id))
         assertEquals(PanelTiles.Look.ACTION, PanelTiles.look(PanelTiles.THOR_TOOLS))
     }
 }

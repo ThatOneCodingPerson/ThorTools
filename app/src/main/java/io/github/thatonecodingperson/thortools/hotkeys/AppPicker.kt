@@ -36,13 +36,47 @@ import com.google.accompanist.drawablepainter.rememberDrawablePainter
 import io.github.thatonecodingperson.thortools.R
 
 /** Every app with a launcher icon: pick one to open with a hotkey, or tick the apps where hotkeys are off. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppPicker(
     mode: AppPickerMode,
     apps: List<LaunchableApp>,
     loaded: Boolean,
     checked: Set<String>,
+    onPick: (String) -> Unit,
+    onClose: () -> Unit,
+) = AppPicker(
+    title = stringResource(
+        when (mode) {
+            AppPickerMode.OPEN_APP -> R.string.hotkeyPickApp
+            AppPickerMode.HOTKEYS_OFF -> R.string.hotkeysOffApps
+            AppPickerMode.HOTKEY_APPS -> R.string.hotkeyAppsTitle
+        },
+    ),
+    info = when (mode) {
+        AppPickerMode.OPEN_APP -> null
+        AppPickerMode.HOTKEYS_OFF -> stringResource(R.string.hotkeysOffAppsInfo)
+        AppPickerMode.HOTKEY_APPS -> stringResource(R.string.hotkeyAppsInfo)
+    },
+    apps = apps,
+    loaded = loaded,
+    checked = checked.takeIf { mode != AppPickerMode.OPEN_APP },
+    onPick = onPick,
+    onClose = onClose,
+)
+
+/**
+ * Every app with a launcher icon, to pick one or, with [checked], to tick several. An app in [blocked] can't be ticked
+ * and shows why under its name.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AppPicker(
+    title: String,
+    info: String?,
+    apps: List<LaunchableApp>,
+    loaded: Boolean,
+    checked: Set<String>?,
+    blocked: Map<String, String> = emptyMap(),
     onPick: (String) -> Unit,
     onClose: () -> Unit,
 ) {
@@ -52,17 +86,7 @@ fun AppPicker(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text(
-                        stringResource(
-                            when (mode) {
-                                AppPickerMode.OPEN_APP -> R.string.hotkeyPickApp
-                                AppPickerMode.HOTKEYS_OFF -> R.string.hotkeysOffApps
-                                AppPickerMode.HOTKEY_APPS -> R.string.hotkeyAppsTitle
-                            },
-                        ),
-                    )
-                },
+                title = { Text(title) },
                 navigationIcon = {
                     IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.back)) }
                 },
@@ -70,14 +94,9 @@ fun AppPicker(
         },
     ) { padding ->
         Column(Modifier.padding(top = padding.calculateTopPadding()).fillMaxSize()) {
-            if (mode != AppPickerMode.OPEN_APP) {
+            if (info != null) {
                 Text(
-                    text = stringResource(
-                        when (mode) {
-                            AppPickerMode.HOTKEYS_OFF -> R.string.hotkeysOffAppsInfo
-                            else -> R.string.hotkeyAppsInfo
-                        },
-                    ),
+                    text = info,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp),
@@ -98,23 +117,35 @@ fun AppPicker(
             }
             LazyColumn(contentPadding = PaddingValues(bottom = 16.dp), modifier = Modifier.weight(1f)) {
                 items(shown, key = { it.packageName }) { app ->
+                    val reason = blocked[app.packageName]
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onPick(app.packageName) }
+                            .clickable(enabled = reason == null) { onPick(app.packageName) }
                             .padding(horizontal = 16.dp, vertical = 8.dp),
                     ) {
                         Image(painter = rememberDrawablePainter(app.icon), contentDescription = null, modifier = Modifier.size(36.dp))
-                        Text(
-                            text = app.name,
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier
+                        Column(
+                            Modifier
                                 .weight(1f)
                                 .padding(horizontal = 16.dp),
-                        )
-                        if (mode != AppPickerMode.OPEN_APP) {
-                            Checkbox(checked = app.packageName in checked, onCheckedChange = { onPick(app.packageName) })
+                        ) {
+                            Text(text = app.name, style = MaterialTheme.typography.bodyLarge)
+                            if (reason != null) {
+                                Text(
+                                    text = reason,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        if (checked != null) {
+                            Checkbox(
+                                checked = app.packageName in checked,
+                                enabled = reason == null,
+                                onCheckedChange = { onPick(app.packageName) },
+                            )
                         }
                     }
                 }

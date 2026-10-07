@@ -10,6 +10,8 @@ object ThorPad {
     const val ABS_Y = 1
     const val ABS_Z = 2
     const val ABS_RZ = 5
+    const val ABS_GAS = 9
+    const val ABS_BRAKE = 10
     const val ABS_HAT0X = 16
     const val ABS_HAT0Y = 17
 
@@ -18,6 +20,9 @@ object ThorPad {
      * device has (AYN re-emits an external pad as 2020:0111 under that pad's own name). It has sticks and a D-pad, which
      * leaves out AYN's virtual mouse.
      */
+    /** The pad in its Xbox style, where the face buttons arrive by position. */
+    fun isXboxStyle(node: InputNode): Boolean = node.product == PRODUCT_XBOX_LAYOUT
+
     fun pick(nodes: List<InputNode>): InputNode? {
         val foreignNames = nodes.filter { it.vendor != VENDOR }.map { it.name }.toSet()
         return nodes.firstOrNull { node ->
@@ -54,9 +59,13 @@ class RawPad {
         leftY = stick(ThorPad.ABS_Y),
         rightX = stick(ThorPad.ABS_Z),
         rightY = stick(ThorPad.ABS_RZ),
+        leftTrigger = trigger(ThorPad.ABS_BRAKE),
+        rightTrigger = trigger(ThorPad.ABS_GAS),
     )
 
     private fun stick(code: Int): Float = (values[code] / STICK_MAX).coerceIn(-1f, 1f)
+
+    private fun trigger(code: Int): Float = (values[code] / STICK_MAX).coerceIn(0f, 1f)
 
     private companion object {
         const val STICK_MAX = 32767f

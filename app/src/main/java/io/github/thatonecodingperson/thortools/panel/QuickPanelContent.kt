@@ -578,6 +578,7 @@ private fun switchOn(action: ThorAction?, state: PanelUiState): Boolean = when (
     ThorAction.TOGGLE_BOTTOM_SCREEN -> state.bottomScreenOn
     ThorAction.TOGGLE_STAY_AWAKE -> state.stayAwake
     ThorAction.TOGGLE_AYN_MOUSE -> state.aynMouse
+    ThorAction.TOGGLE_DESKTOP -> state.desktop
     ThorAction.TOGGLE_CONTROLLER_LOCK -> state.lockedTo == Screen.TOP
     ThorAction.LOCK_CONTROLLER_BOTTOM -> state.lockedTo == Screen.BOTTOM
     ThorAction.LOCK_CONTROLLER_HERE -> state.lockedTo != null

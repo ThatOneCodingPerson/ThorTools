@@ -22,7 +22,7 @@ object MotionWatch {
      * the screens, or AYN re-creates its pad. Levels, performance, screenshots and swipes keep it, so a stick can be
      * flicked again and again while the first button stays held.
      */
-    fun endsWatch(action: ThorAction): Boolean = action.category == ActionCategory.CONTROLLER ||
+    fun endsWatch(action: ThorAction): Boolean = (action.category == ActionCategory.CONTROLLER && action != ThorAction.TOGGLE_DESKTOP) ||
         action.category == ActionCategory.SCREENS ||
         action.category == ActionCategory.APPS ||
         action in endingSystemActions

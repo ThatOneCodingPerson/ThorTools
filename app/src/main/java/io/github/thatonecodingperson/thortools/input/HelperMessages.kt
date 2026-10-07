@@ -66,6 +66,18 @@ sealed interface HelperMessage {
     /** The share of display [displayId] protected as still areas now, in percent (OLED Safety). */
     data class Areas(val displayId: Int, val percent: Int) : HelperMessage
 
+    /** Desktop controls were switched off ([paused]) or on again by holding Start. */
+    data class DesktopPaused(val paused: Boolean) : HelperMessage
+
+    /** A button with the Keyboard job was pressed in desktop controls. */
+    data object DesktopKeyboard : HelperMessage
+
+    /** Desktop controls' devices are up and following the pad ([on]), or not (off, or the uinput tool failed). */
+    data class DesktopReady(val on: Boolean) : HelperMessage
+
+    /** Something went wrong in desktop controls, for the app's log. */
+    data class DesktopProblem(val text: String) : HelperMessage
+
     companion object {
         fun parse(line: String): HelperMessage? {
             val trimmed = line.trim()
@@ -82,6 +94,18 @@ sealed interface HelperMessage {
                     else -> null
                 }
                 "p" -> parsePicture(trimmed.split(' '))
+                "dp" -> when (parts.getOrNull(1)) {
+                    "1" -> DesktopPaused(paused = true)
+                    "0" -> DesktopPaused(paused = false)
+                    else -> null
+                }
+                "dk" -> DesktopKeyboard
+                "dr" -> when (parts.getOrNull(1)) {
+                    "1" -> DesktopReady(on = true)
+                    "0" -> DesktopReady(on = false)
+                    else -> null
+                }
+                "de" -> DesktopProblem(trimmed.substringAfter(' ', ""))
                 "a" -> trimmed.split(' ').let { words ->
                     val id = words.getOrNull(1)?.toIntOrNull()
                     val percent = words.getOrNull(2)?.toIntOrNull()
@@ -129,6 +153,10 @@ sealed interface HelperMessage {
             is Lid -> "l ${if (message.closed) 1 else 0}"
             is Picture -> "p ${message.displayId} ${if (message.still) 1 else 0}"
             is Areas -> "a ${message.displayId} ${message.percent}"
+            is DesktopPaused -> "dp ${if (message.paused) 1 else 0}"
+            DesktopKeyboard -> "dk"
+            is DesktopReady -> "dr ${if (message.on) 1 else 0}"
+            is DesktopProblem -> "de ${message.text.replace('\n', ' ')}"
         }
     }
 }

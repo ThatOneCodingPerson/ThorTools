@@ -9,8 +9,8 @@ import android.os.storage.StorageManager
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import io.github.thatonecodingperson.thortools.tools.RootFiles
 import io.github.thatonecodingperson.thortools.tools.ShellExecutor
-import java.io.File
 import javax.inject.Inject
 
 /** Dolphin on this device, as far as the builder needs it. */
@@ -36,6 +36,7 @@ sealed class DolphinState {
 class DolphinFiles @Inject constructor(
     @ApplicationContext private val context: Context,
     private val executor: ShellExecutor,
+    private val rootFiles: RootFiles,
     private val access: DolphinAccess,
 ) {
     fun find(): DolphinState {
@@ -122,35 +123,14 @@ class DolphinFiles @Inject constructor(
     }
 
     fun save(userDir: String, fileName: String, ini: String): DolphinSave {
-        val staged = File(File(context.cacheDir, STAGING).apply { mkdirs() }, "$fileName$INI")
-        runCatching {
-            staged.writeText(ini)
-            staged.setReadable(true, false)
-            staged.parentFile?.setExecutable(true, false)
-        }.onFailure { return DolphinSave.Failed(SaveRoute.ROOT, it.message ?: "staging") }
         val config = "$userDir/$CONFIG"
-        val profileDir = "$config/Profiles"
         val wiimoteDir = "$userDir/$PROFILES"
         val target = "$wiimoteDir/$fileName$INI"
-        val script = listOf(
-            "owner=\$(stat -c %u:%g '$config') || exit 1",
-            "mkdir -p '$wiimoteDir' || exit 1",
-            "cp '${staged.absolutePath}' '$target' || exit 1",
-            "chown \"\$owner\" '$profileDir' '$wiimoteDir' '$target'",
-            "chmod 2770 '$profileDir' '$wiimoteDir'",
-            "chmod ${RootSaveCheck.FILE_MODE} '$target'",
-            "cmp -s '${staged.absolutePath}' '$target' && same=${RootSaveCheck.SAME} || same=${RootSaveCheck.DIFFERS}",
-            "echo \"\$owner \$(stat -c '%u:%g %a %s' '$target') \$same\"",
-        ).joinToString("\n")
-        val result = executor.script(script)
-        staged.delete()
-        val line = result.getOrNull()?.trim()
-            ?: return DolphinSave.Failed(SaveRoute.ROOT, result.exceptionOrNull()?.message ?: "PServer")
-        return if (RootSaveCheck.passes(line, ini.toByteArray().size)) {
-            DolphinSave.Saved(SaveRoute.ROOT, listed = false)
-        } else {
-            DolphinSave.Failed(SaveRoute.ROOT, line)
-        }
+        return rootFiles.write(target, ini.toByteArray(), ownerOf = config, makeDirs = listOf("$config/Profiles", wiimoteDir))
+            .fold(
+                onSuccess = { DolphinSave.Saved(SaveRoute.ROOT, listed = false) },
+                onFailure = { DolphinSave.Failed(SaveRoute.ROOT, it.message ?: "PServer") },
+            )
     }
 
     /** A copy in Download/Thor Tools, replacing an older copy of the same name. True when it was written. */
@@ -223,7 +203,6 @@ class DolphinFiles @Inject constructor(
         private const val DOCUMENT_ROOT = "root"
         private val FILES_APPS = listOf("com.android.documentsui", "com.google.android.documentsui")
         private const val INI = ".ini"
-        private const val STAGING = "wii"
 
         /** Where a profile goes inside Dolphin's folder, for the guide. */
         const val PROFILE_FOLDER = PROFILES

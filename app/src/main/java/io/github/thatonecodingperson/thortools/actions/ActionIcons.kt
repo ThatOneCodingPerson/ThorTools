@@ -15,6 +15,7 @@ import androidx.compose.material.icons.rounded.Cancel
 import androidx.compose.material.icons.rounded.CancelPresentation
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.Dashboard
+import androidx.compose.material.icons.rounded.DesktopWindows
 import androidx.compose.material.icons.rounded.East
 import androidx.compose.material.icons.rounded.Gamepad
 import androidx.compose.material.icons.rounded.Home
@@ -46,6 +47,7 @@ val ThorAction.icon: ImageVector
         ThorAction.CYCLE_CONTROLLER_STYLE -> Icons.Rounded.Gamepad
         ThorAction.CYCLE_L2R2 -> Icons.Rounded.Tune
         ThorAction.TOGGLE_AYN_MOUSE -> Icons.Rounded.Mouse
+        ThorAction.TOGGLE_DESKTOP -> Icons.Rounded.DesktopWindows
         ThorAction.CONTROLLER_TO_TOP -> Icons.Rounded.VerticalAlignTop
         ThorAction.CONTROLLER_TO_BOTTOM -> Icons.Rounded.VerticalAlignBottom
         ThorAction.TOGGLE_CONTROLLER_LOCK, ThorAction.LOCK_CONTROLLER_BOTTOM -> Icons.Rounded.Lock

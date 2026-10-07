@@ -45,6 +45,8 @@ class ActionChecker(
     private val panelOpen: () -> Boolean,
     private val closePanel: () -> Unit,
     private val stayAwakeOn: () -> Boolean,
+    private val desktopOn: () -> Boolean,
+    private val setDesktopOn: (Boolean) -> Unit,
     private val helperConnected: () -> Boolean,
 ) : CheckRunner {
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -240,6 +242,7 @@ class ActionChecker(
         Probe.CONTROLLER -> if (host.controllerDisplayId() == Display.DEFAULT_DISPLAY) ActionChecks.TOP else ActionChecks.BOTTOM
         Probe.LOCK -> host.lockedTo?.name?.lowercase() ?: ActionChecks.NONE
         Probe.STAY_AWAKE -> if (onMainResult { stayAwakeOn() }) "on" else "off"
+        Probe.DESKTOP -> if (onMainResult { desktopOn() }) "on" else "off"
         Probe.PANEL -> if (onMainResult { panelOpen() }) "open" else "closed"
         Probe.BRIGHTNESS -> helper("getbrightness", displays().joinToString(","))
         Probe.VOLUME -> audio.getStreamVolume(AudioManager.STREAM_MUSIC).toString()
@@ -277,6 +280,7 @@ class ActionChecker(
                 )?.let { moveController(it) }
             Probe.LOCK -> setLock(Screen.entries.find { it.name.lowercase() == value })
             Probe.STAY_AWAKE -> if (read(Probe.STAY_AWAKE) != value) onMain { host.toggleStayAwake() }
+            Probe.DESKTOP -> onMain { setDesktopOn(value == "on") }
             Probe.BRIGHTNESS -> displays().zip(value.split(',')).forEach { (display, level) -> helper("setbrightness", "$display", level) }
             Probe.VOLUME -> value.toIntOrNull()?.let { audio.setStreamVolume(AudioManager.STREAM_MUSIC, it, 0) }
             else -> Unit

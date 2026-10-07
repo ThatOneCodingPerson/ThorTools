@@ -6,6 +6,7 @@ import android.net.LocalSocket
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import io.github.thatonecodingperson.thortools.hotkeys.PadButton
 import io.github.thatonecodingperson.thortools.tools.ShellExecutor
 import java.io.File
@@ -39,6 +40,12 @@ class RawInputClient(private val context: Context, private val executor: ShellEx
 
         /** OLED Safety's still areas: the share of display [displayId] protected now, in percent. */
         fun onAreas(displayId: Int, percent: Int) {}
+
+        fun onDesktopPaused(paused: Boolean) {}
+
+        fun onDesktopKeyboard() {}
+
+        fun onDesktopReady(on: Boolean) {}
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -108,6 +115,9 @@ class RawInputClient(private val context: Context, private val executor: ShellEx
     /** While on, the helper reports the pad's D-pad directions and stick flicks as they change. */
     fun watchPad(on: Boolean) = sendLine(if (on) "pad on" else "pad off")
 
+    /** Desktop controls: `config <layout>`, `on`, `off` or `stop`. */
+    fun desktop(line: String) = sendLine("desktop $line")
+
     /** Single flight, at most one launch every few seconds and a few per minute, so a helper that can't start won't loop. */
     @Synchronized
     private fun launch() {
@@ -142,10 +152,13 @@ class RawInputClient(private val context: Context, private val executor: ShellEx
     private fun startHelper(socketName: String) {
         val script = File(context.cacheDir, "input-helper-${SystemClock.elapsedRealtime()}.sh")
         // PServer reaps its shell as soon as it returns, which would kill a child that hasn't been reparented yet. A helper
-        // left over from before (an update, a crash) would keep its layers on the screens, so it goes first.
+        // left over from before (an update, a crash) would keep its layers on the screens, so it goes first: found by a
+        // pattern only a helper's own command line matches, never this shell (`pkill -f` with the bare class name can
+        // kill the shell itself, and then no helper starts at all).
+        val helper = RawInputHelper::class.java.name
         script.writeText(
-            "pkill -9 -f ${RawInputHelper::class.java.name}\n" +
-                "CLASSPATH=${context.applicationInfo.sourceDir} app_process /system/bin ${RawInputHelper::class.java.name} " +
+            "for p in \$(pgrep -f '^app_process /system/bin $helper '); do [ \"\$p\" = \"\$\$\" ] || kill -9 \"\$p\"; done\n" +
+                "CLASSPATH=${context.applicationInfo.sourceDir} app_process /system/bin $helper " +
                 "$socketName ${context.applicationInfo.uid} > /dev/null 2>&1 &\nsleep 1\n",
         )
         script.setReadable(true, false)
@@ -171,11 +184,16 @@ class RawInputClient(private val context: Context, private val executor: ShellEx
             scheduleRelaunch()
             return
         }
+        // The helper must hear "hello" first: a command another thread sends sooner would make it quit.
+        runCatching {
+            synchronized(client) {
+                client.outputStream.write("hello\n${if (screenOn) "screen on" else "screen off"}\n".toByteArray())
+                client.outputStream.flush()
+            }
+        }
         socket = client
         devices = emptyList()
         state = "connected"
-        sendLine("hello")
-        sendLine(if (screenOn) "screen on" else "screen off")
         mainHandler.post { listener.onConnected() }
         try {
             client.inputStream.bufferedReader().forEachLine { line ->
@@ -186,6 +204,10 @@ class RawInputClient(private val context: Context, private val executor: ShellEx
                     is HelperMessage.Lid -> mainHandler.post { listener.onLid(message.closed) }
                     is HelperMessage.Picture -> mainHandler.post { listener.onPicture(message.displayId, message.still) }
                     is HelperMessage.Areas -> mainHandler.post { listener.onAreas(message.displayId, message.percent) }
+                    is HelperMessage.DesktopPaused -> mainHandler.post { listener.onDesktopPaused(message.paused) }
+                    HelperMessage.DesktopKeyboard -> mainHandler.post { listener.onDesktopKeyboard() }
+                    is HelperMessage.DesktopReady -> mainHandler.post { listener.onDesktopReady(message.on) }
+                    is HelperMessage.DesktopProblem -> Log.w(TAG, "desktop controls: ${message.text}")
                     is HelperMessage.Status ->
                         devices =
                             (devices.filterNot { it.startsWith(message.text.substringBefore(' ')) } + message.text)
@@ -231,6 +253,7 @@ class RawInputClient(private val context: Context, private val executor: ShellEx
     }
 
     private companion object {
+        const val TAG = "RawInputClient"
         const val PAD_SLOT = "pad "
         const val LAUNCH_DEBOUNCE_MS = 3000L
         const val RELAUNCH_DELAY_MS = 3200L

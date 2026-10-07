@@ -44,23 +44,3 @@ sealed class SaveEnd {
 
     data class ByHand(val detail: String?) : SaveEnd()
 }
-
-/**
- * The one line the root save prints: the owner of Dolphin's Config folder, then the new file's owner, mode and size,
- * then whether its bytes match the staged copy.
- */
-object RootSaveCheck {
-    const val SAME = "same"
-    const val DIFFERS = "differs"
-
-    fun passes(line: String?, size: Int): Boolean {
-        val parts = line?.trim()?.split(' ') ?: return false
-        return parts.size == 5 &&
-            parts[0] == parts[1] &&
-            parts[2] == FILE_MODE &&
-            parts[3] == size.toString() &&
-            parts[4] == SAME
-    }
-
-    const val FILE_MODE = "660"
-}

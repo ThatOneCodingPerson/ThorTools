@@ -255,6 +255,7 @@ data class PanelLayout(val pages: List<PanelPage>) {
                         ThorAction.HOME_BOTTOM,
                         ThorAction.CLOSE_OTHER_SCREEN_APP,
                         ThorAction.TOGGLE_AYN_MOUSE,
+                        ThorAction.TOGGLE_DESKTOP,
                         ThorAction.CLEAR_BACKGROUND,
                     ).map { it.id },
                     columns = 3,

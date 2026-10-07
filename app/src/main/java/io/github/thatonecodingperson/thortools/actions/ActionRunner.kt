@@ -145,6 +145,12 @@ class ActionRunner(
                 val here = if (host.controllerDisplayId() == Display.DEFAULT_DISPLAY) Screen.TOP else Screen.BOTTOM
                 lock(LockPolicy.toggledHere(host.lockedTo, here), say)
             }
+            ThorAction.TOGGLE_DESKTOP -> {
+                // The service follows the switch; where the controller is decides whether they are on right now.
+                val on = !prefs.desktopEnabled
+                prefs.desktopEnabled = on
+                say.done(if (on) R.string.actionResultDesktopOn else R.string.actionResultDesktopOff)
+            }
             ThorAction.TOGGLE_STAY_AWAKE -> say.done(
                 if (host.toggleStayAwake()) R.string.actionResultStayAwakeOn else R.string.actionResultStayAwakeOff,
             )

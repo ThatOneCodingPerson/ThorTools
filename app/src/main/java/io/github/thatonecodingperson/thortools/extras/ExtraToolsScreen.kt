@@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Brightness4
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.SportsEsports
+import androidx.compose.material.icons.rounded.VideogameAsset
 import androidx.compose.material.icons.rounded.WbIridescent
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -22,12 +23,16 @@ import io.github.thatonecodingperson.thortools.ui.composables.ChoiceCard
 import io.github.thatonecodingperson.thortools.ui.composables.LinkCard
 import io.github.thatonecodingperson.thortools.ui.composables.SubTopAppBar
 
-/** The extras that don't belong to another section: the stick lights, Wii profiles for Dolphin, where the keyboard appears. */
+/**
+ * The extras that don't belong to another section: the stick lights, Wii profiles for Dolphin, the RetroArch assistant,
+ * OLED Safety, where the keyboard appears.
+ */
 @Composable
 fun ExtraToolsScreen(
     viewModel: ExtraToolsViewModel = hiltViewModel(),
     onLeds: () -> Unit,
     onWii: () -> Unit,
+    onRetroArch: () -> Unit,
     onOled: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -49,6 +54,12 @@ fun ExtraToolsScreen(
                     title = stringResource(R.string.wiiTitle),
                     info = stringResource(R.string.wiiTitleInfo),
                     onClick = onWii,
+                )
+                LinkCard(
+                    icon = Icons.Rounded.VideogameAsset,
+                    title = stringResource(R.string.raTitle),
+                    info = stringResource(R.string.raTitleInfo),
+                    onClick = onRetroArch,
                 )
                 val oledParts = state.oled.activeParts
                 LinkCard(

@@ -36,6 +36,14 @@ its AYN button and its lid. It also runs on the Odin 2.
     <td align="center">Every OdinTools setting, built in</td>
   </tr>
   <tr>
+    <td valign="top"><img src="screenshots/desktop-controls.png" alt="Desktop controls"></td>
+    <td valign="top"><img src="screenshots/retroarch.png" alt="The RetroArch assistant"></td>
+  </tr>
+  <tr>
+    <td align="center">Desktop controls: the controller as a mouse and keyboard</td>
+    <td align="center">The RetroArch assistant: menu look, speeds, hotkeys, BIOS files and cheats</td>
+  </tr>
+  <tr>
     <td valign="top"><img src="screenshots/wii-profiles.png" alt="The Wii profile builder for Dolphin"></td>
     <td valign="top"><img src="screenshots/stick-lights.png" alt="Stick lights"></td>
   </tr>
@@ -48,7 +56,7 @@ its AYN button and its lid. It also runs on the Odin 2.
     <td valign="top"><img src="screenshots/setup.png" alt="The guided setup"></td>
   </tr>
   <tr>
-    <td align="center">Extra tools: stick lights, Wii profiles and where the keyboard appears</td>
+    <td align="center">Extra tools: stick lights, Wii profiles, the RetroArch assistant and OLED Safety</td>
     <td align="center">A guided setup on first start</td>
   </tr>
 </table>
@@ -97,6 +105,17 @@ each other. Without OdinTools you won't see any of this: Thor Tools has every Od
   chosen apps (it takes the place of the usual one there) or turn hotkeys off per app; a hotkey can show what it did
   on screen, and a controller move can also lock the controller there
 
+### Desktop controls
+- The controller as a mouse and keyboard in browsers and other apps, like a Steam Controller in desktop mode: a
+  pointer on one stick, scrolling on the other, clicks on the triggers and keys on the buttons, on the top screen
+- Every button's job can be changed (mouse buttons, Enter, Escape, Tab, arrows, Ctrl, Alt and more, Back, Home,
+  Recent apps, the on-screen keyboard, or left to the app), with presets, pointer and scroll speed, acceleration,
+  dead zone, a slow-down button and the trigger point
+- Only in the apps you choose, never in the ones you block (your emulators and games); hold Start to switch them off
+  and on, or use the "Desktop controls on/off" hotkey action or quick panel tile
+- Hotkeys come first: a button a hotkey uses does the hotkey, and while you hold a button that starts hotkeys the
+  pointer waits
+
 ### Two screens
 - Swap the apps between the screens, close the other screen's app, Home on the screen you're using or on both
 - Move the controller to the top or bottom screen, and lock it there
@@ -131,6 +150,11 @@ each other. Without OdinTools you won't see any of this: Thor Tools has every Od
   from a ready-made layout. Profiles work in both of AYN's controller styles and both L2/R2 modes and rumble through
   the Thor. Save goes straight into Dolphin's profile folder (through AYN's system service, or through Dolphin's own
   folder access, given once), with a copy in Downloads and the folder path as a fallback
+- **RetroArch assistant**: RetroArch's menu look, fast-forward and slow-motion speeds and its controller hotkeys in
+  plain words, changed in RetroArch's own settings file for you (with an undo). A BIOS finder copies the right BIOS
+  files from your download folder into RetroArch's BIOS folder, checked by their contents. Cheats: Thor Tools finds
+  your games, matches each one to libretro's cheat database (downloaded per game or as one pack) and adds the cheats
+  you tick where RetroArch loads them by itself
 - **Where the keyboard appears**: always on the bottom screen, on the top screen, or on the screen you type on
 - **OLED Safety (Beta)**: burn-in protection for both screens, each on its own. A pixel shifter that moves a screen a
   pixel at a time, all the time or only while its picture stays still (in games too, and an animated home screen on the
@@ -193,6 +217,9 @@ updates must be signed with the same key.
 
 Based on [OdinTools](https://github.com/langerhans/OdinTools) © 2024 Maximilian Keller (langerhans), MIT licensed.
 Thor Tools changes and additions are also MIT. See [LICENSE](LICENSE).
+
+Cheats come from [libretro-database](https://github.com/libretro/libretro-database) (CC BY-SA 4.0), downloaded onto
+the Thor when you ask for them; none are included in the app.
 
 The Wii profile builder's suggested layouts follow RetroPup's
 [AYN Thor Ultimate Wii Setup Guide (2026)](https://www.youtube.com/watch?v=my5XRGNShqA). Thanks, RetroPup!

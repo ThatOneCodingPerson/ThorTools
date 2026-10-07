@@ -27,6 +27,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -265,6 +266,32 @@ fun CardSwitchRow(
             if (info != null) Text(info, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(checked = checked, enabled = enabled, onCheckedChange = onChange)
+    }
+}
+
+/** Something to tick that belongs to the card's setting, as a row under a thin line, the box where a switch row has its switch. */
+@Composable
+fun CardCheckRow(title: String, checked: Boolean, info: String? = null, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    CardDivider()
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, role = Role.Checkbox) { onChange(!checked) }
+            .heightIn(min = ROW_MIN_HEIGHT)
+            .padding(horizontal = CARD_PADDING_H, vertical = ROW_PADDING_V),
+    ) {
+        RowStart(null, enabled)
+        Column(Modifier.weight(1f).padding(end = ICON_GAP)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (enabled) colors.onSurface else colors.onSurface.copy(alpha = DISABLED_ALPHA),
+            )
+            if (info != null) Text(info, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+        }
+        Checkbox(checked = checked, enabled = enabled, onCheckedChange = onChange)
     }
 }
 

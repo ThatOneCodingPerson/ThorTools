@@ -25,6 +25,7 @@ enum class Probe {
     /** `top`, `bottom` or `none`. */
     LOCK,
     STAY_AWAKE,
+    DESKTOP,
     PANEL,
 
     /** `top,bottom` brightness, 0 to 1. */
@@ -130,6 +131,7 @@ object ActionChecks {
         ActionCheck(ThorAction.CYCLE_CONTROLLER_STYLE, Probe.CONTROLLER_STYLE, Expect.Changed),
         ActionCheck(ThorAction.CYCLE_L2R2, Probe.L2R2, Expect.Changed),
         ActionCheck(ThorAction.TOGGLE_AYN_MOUSE, Probe.AYN_MOUSE, Expect.Changed),
+        ActionCheck(ThorAction.TOGGLE_DESKTOP, Probe.DESKTOP, Expect.Changed),
         ActionCheck(ThorAction.CONTROLLER_TO_TOP, Probe.CONTROLLER, Expect.Is(TOP), setup = Setup.CONTROLLER_ELSEWHERE),
         ActionCheck(ThorAction.CONTROLLER_TO_BOTTOM, Probe.CONTROLLER, Expect.Is(BOTTOM), setup = Setup.CONTROLLER_ELSEWHERE),
         ActionCheck(ThorAction.TOGGLE_CONTROLLER_LOCK, Probe.LOCK, Expect.Changed),

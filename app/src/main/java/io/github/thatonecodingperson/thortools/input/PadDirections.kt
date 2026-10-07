@@ -12,6 +12,8 @@ data class PadSample(
     val leftY: Float = 0f,
     val rightX: Float = 0f,
     val rightY: Float = 0f,
+    val leftTrigger: Float = 0f,
+    val rightTrigger: Float = 0f,
 )
 
 /**

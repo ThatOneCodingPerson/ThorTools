@@ -33,6 +33,7 @@ enum class ThorAction(
     ),
     CYCLE_L2R2("controller_cycle_l2r2", R.string.actionCycleL2r2, R.string.actionCycleL2r2Info, ActionCategory.CONTROLLER),
     TOGGLE_AYN_MOUSE("controller_ayn_mouse", R.string.actionAynMouse, R.string.actionAynMouseInfo, ActionCategory.CONTROLLER),
+    TOGGLE_DESKTOP("controller_desktop", R.string.actionDesktop, R.string.actionDesktopInfo, ActionCategory.CONTROLLER),
     CONTROLLER_TO_TOP("focus_top", R.string.actionControllerToTop, R.string.actionControllerToTopInfo, ActionCategory.CONTROLLER),
     CONTROLLER_TO_BOTTOM(
         "focus_bottom",

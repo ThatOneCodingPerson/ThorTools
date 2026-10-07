@@ -62,6 +62,9 @@ class HotkeyRecognizer(hotkeys: List<Hotkey>, private val timing: Timing = Timin
 
     /** When the held button went down; tells one press from the next. */
     val heldSince: Long? get() = first?.downAt
+
+    /** [button] is the first button of some combo, so a press of it may still become a hotkey. */
+    fun startsCombos(button: PadButton): Boolean = button in comboFirsts
     private var taps: Taps? = null
     private var combo: ComboTaps? = null
     private val passedDown = mutableSetOf<PadButton>()

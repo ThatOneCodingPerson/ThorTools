@@ -15,12 +15,13 @@ import kotlin.system.exitProcess
 /**
  * Runs as root through `app_process` (started by [RawInputClient]): reports which screen was touched last and when
  * the last finger left it, the pad's D-pad directions and stick flicks while the app watches the pad, the lid opening
- * and closing, and runs the commands an app may not (see [RootCommands]). It never grabs, mutes or injects anything on
- * its own.
+ * and closing, and runs the commands an app may not (see [RootCommands]). It never grabs or mutes anything, and injects
+ * nothing on its own: only desktop controls, through their own devices, on the app's say ([DesktopEngine]).
  * Arguments: abstract socket name, the app's uid.
  */
 object RawInputHelper {
     private const val EV_SYN = 0
+    private const val EV_KEY = 1
     private const val EV_ABS = 3
     private const val EV_SW = 5
     private const val SYN_REPORT = 0
@@ -44,6 +45,9 @@ object RawInputHelper {
     // A ping can take a second; on its own thread it never holds up a brightness slider.
     private val slowCommands = Executors.newSingleThreadExecutor()
 
+    // Starting Android's uinput tool takes a moment; desktop controls' commands keep their order on their own thread.
+    private val desktopCommands = Executors.newSingleThreadExecutor()
+
     @JvmStatic
     fun main(args: Array<String>) {
         val socketName = args.getOrNull(0) ?: exitProcess(1)
@@ -56,6 +60,8 @@ object RawInputHelper {
         if (input.readLine() != "hello") exitProcess(4)
         OledEngine.report = { displayId, still -> send(HelperMessage.Picture(displayId, still)) }
         OledEngine.reportAreas = { displayId, percent -> send(HelperMessage.Areas(displayId, percent)) }
+        DesktopEngine.sample = { synchronized(padLock) { pad.sample() } }
+        DesktopEngine.report = ::send
 
         startReader("top", { nodes -> nodes.firstOrNull { it.name == "fts_ts" } }) { _, stream -> readTouch(stream, Screen.TOP) }
         startReader("bottom", { nodes -> nodes.firstOrNull { it.name == "fts_ts_3" } }) { _, stream -> readTouch(stream, Screen.BOTTOM) }
@@ -79,6 +85,7 @@ object RawInputHelper {
                 }
                 line == "pad on" -> watchPad(true)
                 line == "pad off" -> watchPad(false)
+                line.startsWith("desktop ") -> desktopCommands.execute { DesktopEngine.command(line.removePrefix("desktop ")) }
                 line.startsWith("c ") -> (
                     if (line.split(' ').getOrNull(2) ==
                         "ping"
@@ -98,6 +105,7 @@ object RawInputHelper {
             Thread.sleep(QUIT_LIMIT_MS)
             Runtime.getRuntime().halt(0)
         }.apply { isDaemon = true }.start()
+        runCatching { DesktopEngine.stop() }
         exitProcess(0)
     }
 
@@ -202,12 +210,18 @@ object RawInputHelper {
         padDirections = if (on) PadDirections().also { it.start(pad.sample()) } else null
     }
 
-    /** Follows the pad's axes all the time, so watching can start from how the pad is at that moment. */
+    /**
+     * Follows the pad's axes all the time, so watching can start from how the pad is at that moment, and tells desktop
+     * controls about its triggers' keys (which never waits on them). A key held down repeats (value 2); only presses and
+     * releases count.
+     */
     private fun readPad(stream: FileInputStream) {
         synchronized(padLock) { pad.reset() }
+        DesktopEngine.onPadReset()
         forEachEvent(stream) { type, code, value ->
             when {
                 type == EV_ABS -> synchronized(padLock) { pad.onAbs(code, value) }
+                type == EV_KEY && value != 2 -> DesktopEngine.onPadKey(code, value == 1)
                 type == EV_SYN && code == SYN_REPORT -> {
                     val changes = synchronized(padLock) { padDirections?.update(pad.sample()) }
                     changes?.forEach { send(HelperMessage.Direction(it.button, it.down)) }

@@ -16,7 +16,13 @@ import io.github.thatonecodingperson.thortools.ui.composables.SwitchPreference
 import io.github.thatonecodingperson.thortools.ui.composables.TriggerPreference
 
 @Composable
-fun ControllerScreen(viewModel: ControllerViewModel = hiltViewModel(), onModes: () -> Unit, onHotkeys: () -> Unit, onBack: () -> Unit) {
+fun ControllerScreen(
+    viewModel: ControllerViewModel = hiltViewModel(),
+    onModes: () -> Unit,
+    onHotkeys: () -> Unit,
+    onDesktop: () -> Unit,
+    onBack: () -> Unit,
+) {
     val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(Unit) { viewModel.refresh() }
@@ -41,6 +47,12 @@ fun ControllerScreen(viewModel: ControllerViewModel = hiltViewModel(), onModes: 
                 stringResource(uiState.l2r2StyleNow.textRes),
             ),
             onClick = onModes,
+        )
+        TriggerPreference(
+            icon = R.drawable.ic_mouse,
+            title = R.string.desktopTitle,
+            description = R.string.desktopDescription,
+            onClick = onDesktop,
         )
 
         SettingsHeader(R.string.buttons)

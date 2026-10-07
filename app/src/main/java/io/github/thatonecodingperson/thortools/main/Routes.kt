@@ -5,6 +5,7 @@ object Routes {
     const val CONTROLLER = "controller"
     const val HOTKEYS = "controller/hotkeys"
     const val CONTROLLER_MODES = "controller/modes"
+    const val DESKTOP = "controller/desktop"
     const val PROFILES = "profiles"
     const val CHARGING = "charging"
     const val LID = "charging/lid"
@@ -26,6 +27,7 @@ object Routes {
     const val EXTRAS = "extras"
     const val LEDS = "extras/leds"
     const val WII = "extras/wii"
+    const val RETROARCH = "extras/retroarch"
     const val OLED = "extras/oled"
     const val OLED_AYN = "extras/oled/ayn"
 

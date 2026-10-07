@@ -1,8 +1,6 @@
 package io.github.thatonecodingperson.thortools.wii
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SaveRouteTest {
@@ -34,17 +32,5 @@ class SaveRouteTest {
     fun `every failure is named`() {
         val failed = listOf(DolphinSave.Failed(SaveRoute.DOLPHIN_ACCESS, "gone"), DolphinSave.Failed(SaveRoute.ROOT, "PServer"))
         assertEquals(SaveEnd.ByHand("gone; PServer"), SaveRoute.settle(failed, canAskAccess = false))
-    }
-
-    @Test
-    fun `the root save passes only with Dolphin's owner, its mode, the full size and the same bytes`() {
-        assertTrue(RootSaveCheck.passes("10152:1078 10152:1078 660 2623 same", 2623))
-        assertTrue(RootSaveCheck.passes("  10152:1078 10152:1078 660 2623 same\n", 2623))
-        assertFalse(RootSaveCheck.passes("10152:1078 0:0 660 2623 same", 2623))
-        assertFalse(RootSaveCheck.passes("10152:1078 10152:1078 600 2623 same", 2623))
-        assertFalse(RootSaveCheck.passes("10152:1078 10152:1078 660 2622 same", 2623))
-        assertFalse(RootSaveCheck.passes("10152:1078 10152:1078 660 2623 differs", 2623))
-        assertFalse(RootSaveCheck.passes("10152:1078 10152:1078 660 2623", 2623))
-        assertFalse(RootSaveCheck.passes(null, 2623))
     }
 }

@@ -29,6 +29,7 @@ class ServiceStatus @Inject constructor() {
         toggleQuickPanel = null
         refreshScreens = null
         onAccessChanged = null
+        onRecorderChanged = null
         chargeSwitches = null
         _oledAreas.value = emptyMap()
     }
@@ -71,6 +72,15 @@ class ServiceStatus @Inject constructor() {
      */
     @Volatile
     var buttonRecorder: ((PadButton, Boolean) -> Unit)? = null
+        set(value) {
+            field = value
+            onRecorderChanged?.invoke()
+        }
+
+    /** Told when recording starts or stops, so desktop controls keep the sticks and triggers still meanwhile. */
+    @Volatile
+    var onRecorderChanged: (() -> Unit)? = null
+        internal set
 
     /** How often charging switched in the charging alert's window; null while the alert isn't watching. */
     @Volatile
