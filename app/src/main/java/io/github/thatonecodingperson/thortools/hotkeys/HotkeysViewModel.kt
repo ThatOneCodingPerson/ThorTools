@@ -34,6 +34,8 @@ enum class AppPickerMode { OPEN_APP, HOTKEYS_OFF, HOTKEY_APPS }
 
 data class HotkeysUiModel(
     val hotkeys: List<Hotkey> = emptyList(),
+    /** Only this action's hotkey is edited, for the screen that owns it; closing the editor leaves. */
+    val onlyAction: ThorAction? = null,
     val tab: HotkeyTab = HotkeyTab.Yours,
     val singlePressHome: Boolean = true,
     val offApps: Set<String> = emptySet(),
@@ -96,6 +98,15 @@ class HotkeysViewModel @Inject constructor(
     }
 
     fun selectTab(tab: HotkeyTab) = _uiState.update { it.copy(tab = tab) }
+
+    /** Opens [action]'s hotkey (its first one, or a new one) for the screen it is set on. */
+    fun editOnly(action: ThorAction) {
+        if (_uiState.value.onlyAction == action) return
+        val existing = prefs.hotkeys.firstOrNull { it.action == action }
+        _uiState.update {
+            it.copy(onlyAction = action, draft = existing?.let(HotkeyDraft::of) ?: HotkeyDraft(editing = null, action = action))
+        }
+    }
 
     /** Back closes the innermost thing that is open; false when nothing is. */
     fun back(): Boolean {

@@ -82,10 +82,18 @@ import io.github.thatonecodingperson.thortools.ui.composables.TriggerPreference
  * by category, options) and the chosen list on the right. The editor and the app picker take the whole screen.
  */
 @Composable
-fun HotkeysScreen(viewModel: HotkeysViewModel = hiltViewModel(), onBack: () -> Unit) {
+fun HotkeysScreen(viewModel: HotkeysViewModel = hiltViewModel(), onlyAction: ThorAction? = null, onBack: () -> Unit) {
     val uiState by viewModel.uiState.collectAsState()
 
-    LaunchedEffect(Unit) { viewModel.refresh() }
+    LaunchedEffect(Unit) {
+        viewModel.refresh()
+        onlyAction?.let(viewModel::editOnly)
+    }
+    // Opened for one action's hotkey: nothing but its editor, and done once that closes.
+    if (onlyAction != null && uiState.draft == null) {
+        if (uiState.onlyAction == onlyAction) LaunchedEffect(Unit) { onBack() }
+        return
+    }
     BackHandler(enabled = uiState.recording || uiState.picker != null || uiState.draft != null) { viewModel.back() }
 
     val draft = uiState.draft
@@ -118,14 +126,14 @@ private data class TabItem(val tab: HotkeyTab, val icon: ImageVector, val label:
 @Composable
 private fun HotkeyLists(state: HotkeysUiModel, viewModel: HotkeysViewModel, onBack: () -> Unit) {
     val tabs = listOf(
-        TabItem(HotkeyTab.Yours, Icons.Rounded.Keyboard, stringResource(R.string.hotkeysTabYours), state.hotkeys.size),
+        TabItem(HotkeyTab.Yours, Icons.Rounded.Keyboard, stringResource(R.string.hotkeysTabYours), HotkeyList.listed(state.hotkeys).size),
         TabItem(HotkeyTab.Suggested, Icons.Rounded.Lightbulb, stringResource(R.string.hotkeysTabSuggested), null),
     ) + ActionCategory.entries.map { category ->
         TabItem(
             HotkeyTab.Actions(category),
             category.tabIcon,
             stringResource(category.label),
-            state.hotkeys.count { it.action.category == category }.takeIf { it > 0 },
+            HotkeyList.listed(state.hotkeys).count { it.action.category == category }.takeIf { it > 0 },
         )
     } + TabItem(HotkeyTab.Options, Icons.Rounded.Settings, stringResource(R.string.hotkeysTabOptions), null)
 
@@ -218,7 +226,7 @@ private fun TabContent(state: HotkeysUiModel, viewModel: HotkeysViewModel, modif
 }
 
 private fun LazyListScope.yourHotkeys(state: HotkeysUiModel, viewModel: HotkeysViewModel) {
-    if (state.hotkeys.isEmpty()) {
+    if (HotkeyList.listed(state.hotkeys).isEmpty()) {
         item {
             EmptyHotkeys(
                 onSuggestions = { viewModel.selectTab(HotkeyTab.Suggested) },
@@ -227,7 +235,8 @@ private fun LazyListScope.yourHotkeys(state: HotkeysUiModel, viewModel: HotkeysV
         }
         return
     }
-    val sorted = state.hotkeys.sortedWith(compareBy({ it.button.ordinal }, { it.second?.ordinal ?: -1 }, { it.press.ordinal }))
+    val order = compareBy<Hotkey>({ it.button.ordinal }, { it.second?.ordinal ?: -1 }, { it.press.ordinal })
+    val sorted = HotkeyList.listed(state.hotkeys).sortedWith(order)
     sorted.groupBy { it.button }.forEach { (button, hotkeys) ->
         item(key = "head-${button.id}") { ListHeading(stringResource(button.label)) }
         items(hotkeys, key = { HotkeyList.encode(listOf(it)) }) { hotkey ->
@@ -393,7 +402,9 @@ private fun Credit() = CreditNote(
 
 private fun LazyListScope.actions(category: ActionCategory, state: HotkeysUiModel, viewModel: HotkeysViewModel) {
     item { ListHeading(stringResource(R.string.hotkeysActionsInfo)) }
-    items(ThorAction.entries.filter { it.category == category && !it.needsApp }, key = { it.id }) { action ->
+    if (category == ThorAction.TOGGLE_DESKTOP.category) item { ListHeading(stringResource(R.string.hotkeysDesktopElsewhere)) }
+    val shown = ThorAction.entries.filter { it.category == category && !it.needsApp && it !in HotkeyList.SET_ELSEWHERE }
+    items(shown, key = { it.id }) { action ->
         ActionCard(
             action = action,
             hotkeys = state.hotkeys.filter { it.action == action },

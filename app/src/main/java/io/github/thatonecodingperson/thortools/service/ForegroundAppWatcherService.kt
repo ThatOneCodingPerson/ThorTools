@@ -2,6 +2,7 @@ package io.github.thatonecodingperson.thortools.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -42,7 +43,9 @@ import io.github.thatonecodingperson.thortools.debug.ActionChecker
 import io.github.thatonecodingperson.thortools.debug.DebugSession
 import io.github.thatonecodingperson.thortools.debug.HotkeyEvent
 import io.github.thatonecodingperson.thortools.desktop.DesktopControl
+import io.github.thatonecodingperson.thortools.desktop.DesktopDecision
 import io.github.thatonecodingperson.thortools.desktop.DesktopMode
+import io.github.thatonecodingperson.thortools.desktop.DesktopSituation
 import io.github.thatonecodingperson.thortools.diagnostics.KeyLogEntry
 import io.github.thatonecodingperson.thortools.diagnostics.ServiceKeyLog
 import io.github.thatonecodingperson.thortools.hotkeys.Hotkey
@@ -193,6 +196,13 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
     private var heldFrom: Int? = null
     private val panelMotion = PanelMotion { button, down, time -> if (!padWatching) onDirection(button, down, time) }
     private val catcherDue = Runnable { watchJoystick() }
+
+    /** The press (its start) whose joystick watch ran out of time: a release lost on the way must not keep it on. */
+    private var motionWatchEnded: Long? = null
+    private val motionWatchCap = Runnable {
+        motionWatchEnded = hotkeys.heldSince
+        watchJoystick()
+    }
     private val focusReadAgain = Runnable { refreshFocusedDisplay() }
 
     /**
@@ -202,6 +212,9 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
     @Volatile
     private var focusedDisplay: Int? = null
     private val readingFocus = AtomicBoolean(false)
+
+    /** Counts what tells the service where the controller is (touches, moves); a read started before one is stale. */
+    private var focusStamp = 0
     private var lastFocusRead = 0L
     private lateinit var systemPress: SystemPress
 
@@ -219,6 +232,18 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
     private lateinit var oledGuard: OledGuard
     private lateinit var desktopMode: DesktopMode
     private val desktopCheck = Runnable { checkDesktop() }
+
+    /** The apps on the screens and whether the bottom screen is on, as the last desktop check found them. */
+    private var screenApps = emptyMap<Int, String>()
+
+    /** When a window change last told a screen's app (uptime ms), and which screen. */
+    private var lastScreenAppChange = 0L
+    private var lastScreenAppDisplay: Int? = null
+    private var bottomScreenOn = true
+
+    /** Counts desktop checks, so an app read that finishes after a newer check began is dropped. */
+    private var desktopCheckStamp = 0
+    private val desktopRetry = Runnable { updateDesktop() }
     private lateinit var desktopNote: FeedbackCue
 
     /** Input devices that are Thor Tools' own (desktop controls' mouse and keys), remembered after they are gone. */
@@ -226,6 +251,9 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
 
     /** Whether each input device is AYN's own pad, which desktop controls follow; cleared when devices change. */
     private val thorPads = mutableMapOf<Int, Boolean>()
+
+    /** Devices once found to be AYN's own pad, kept until they go away (so its going is known, the cache cleared or not). */
+    private val seenThorPads = mutableSetOf<Int>()
     private val actionHost = object : ActionHost {
         override val foregroundPackage: String? get() = lastAppPackage
 
@@ -248,6 +276,8 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
 
         override fun controllerDisplayId(): Int = screenFocus.displayId()
 
+        override fun focusedDisplayId(): Int? = focusedDisplay
+
         override fun goHome(displayId: Int?) {
             quickPanel.close(CloseReason.HOME, returnFocus = false)
             displayHome.goHome(displayId)
@@ -265,11 +295,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         override fun moveController(displayId: Int, onDone: (Boolean) -> Unit) {
             screenFocus.lastScreen = screenFocus.screenOf(displayId)
             focusMover.moveTo(displayId) { moved ->
-                if (moved) {
-                    focusedDisplay = displayId
-                    quickPanel.controllerOn(displayId)
-                    updateDesktop()
-                }
+                if (moved) controllerMoved(displayId)
                 onDone(moved)
             }
         }
@@ -307,10 +333,15 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         override fun onTouch(screen: Screen) {
             screenFocus.lastScreen = screen
             // A finger on a screen gives that screen the controller, an open panel's or not.
-            if (hotkeys.usesMotion || quickPanel.isOpen || desktopActive()) focusedDisplay = screenFocus.displayId(screen)
+            // With AYN's lock armed, a finger on the bottom screen leaves the controller on the top one.
+            val pinned = controllerLock.lockedTo == Screen.TOP && !quickPanel.isOpen && screen == Screen.BOTTOM
+            if ((hotkeys.usesMotion || quickPanel.isOpen || desktopActive()) && !pinned) {
+                focusStamp++
+                focusedDisplay = screenFocus.displayId(screen)
+            }
             quickPanel.controllerOn(screenFocus.displayId(screen))
             controllerLock.onTouch(screen)
-            updateDesktop()
+            checkDesktopNow()
             if (::oledGuard.isInitialized) oledGuard.onTouch(screen)
         }
 
@@ -328,10 +359,23 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
 
         override fun onDesktopKeyboard() = openKeyboard()
 
+        override fun onDesktopClicked() = controllerLock.keepBottom()
+
         override fun onDesktopReady(on: Boolean) {
-            if (::desktopMode.isInitialized) desktopMode.onReady(on)
+            if (!::desktopMode.isInitialized) return
+            // Its devices didn't come up: try again in a moment, a few times.
+            if (desktopMode.onReady(on)) mainHandler.postDelayed(desktopRetry, DESKTOP_RETRY_MS)
+            steerAynMouse()
             Log.d(KEYS_TAG, "desktop controls helper ${if (on) "ready" else "not ready"}")
         }
+
+        override fun onDisconnected() {
+            if (::desktopMode.isInitialized) desktopMode.helperGone()
+            // The pad watch belonged to the helper that went away; the next one starts without it.
+            padWatching = false
+        }
+
+        override fun onPadFound() = watchJoystick()
 
         override fun onLid(closed: Boolean) = lidController.onLid(closed)
 
@@ -350,7 +394,10 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
 
         override fun onInputDeviceRemoved(deviceId: Int) {
             thorPads.clear()
-            if (deviceId == heldFrom) forgetHeld()
+            // Buttons held on the pad that went away are never released: desktop controls and hotkeys let go of them.
+            val thorPadGone = seenThorPads.remove(deviceId)
+            if (thorPadGone && ::desktopMode.isInitialized) desktopMode.padGone()
+            if (thorPadGone || deviceId == heldFrom) forgetHeld()
         }
     }
     private val screenReceiver = object : BroadcastReceiver() {
@@ -415,7 +462,13 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         if (packageName in homePackages && ::displayHome.isInitialized) displayHome.onLauncherEvent(event)
         if (::quickPanel.isInitialized) closePanelForNewApp(packageName)
         trackApp(packageName)
-        updateDesktop()
+        if (noteScreenApp(event, packageName)) {
+            checkDesktopNow(fresh = true)
+            // An app coming up on the other screen takes the controller a moment after its window shows: look again then.
+            if (event.displayId != focusedDisplay) mainHandler.postDelayed(focusReadAgain, FOCUS_AFTER_NEW_APP_MS)
+        } else {
+            updateDesktop()
+        }
         if (shouldIgnore(packageName)) return
 
         if (overridesDelay) {
@@ -479,6 +532,23 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
 
     private fun desktopActive(): Boolean = ::desktopMode.isInitialized && desktopMode.active
 
+    /**
+     * An app came up on a screen ([AccessibilityEvent.getDisplayId]): desktop controls take it as that screen's app at
+     * once, before the window list is read again. Not for system windows, dialogs over an app, keyboards, Recent apps or
+     * Thor Tools' own overlays. True when that screen's app changed.
+     */
+    private fun noteScreenApp(event: AccessibilityEvent, packageName: String): Boolean {
+        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return false
+        if (packageName in ignoredPackages || packageName in dialogPackages || currentIme.contains(packageName)) return false
+        val display = event.displayId.takeIf { it != Display.INVALID_DISPLAY } ?: return false
+        val app = packageName.takeIf { it !in homePackages }
+        if (display in screenApps && screenApps[display] == app) return false
+        screenApps = if (app == null) screenApps - display else screenApps + (display to app)
+        lastScreenAppChange = SystemClock.uptimeMillis()
+        lastScreenAppDisplay = display
+        return true
+    }
+
     /** Checks a moment later whether desktop controls work where the controller is; a burst of changes is one check. */
     private fun updateDesktop() {
         if (!::desktopMode.isInitialized || (!desktopMode.active && !desktopMode.engaged)) return
@@ -486,22 +556,103 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         mainHandler.postDelayed(desktopCheck, DESKTOP_CHECK_MS)
     }
 
-    private fun checkDesktop() {
-        val display = controllerLock.lockedTo?.let(screenFocus::displayId) ?: focusedDisplay ?: screenFocus.displayId()
-        val screenOn = getSystemService(PowerManager::class.java)?.isInteractive != false
-        val app = actionHost.appsOnScreens()[display]
-        val was = desktopMode.engaged
-        desktopMode.update(app, quickPanel.isOpen, topScreen = display == Display.DEFAULT_DISPLAY, screenOn = screenOn)
-        if (desktopMode.engaged != was) {
-            Log.d(KEYS_TAG, "desktop controls ${if (desktopMode.engaged) "on" else "off"}: display $display, $app")
+    /** [fresh]: the apps on the screens were just told by a window change, so switching on may happen at once too. */
+    private fun checkDesktop(fresh: Boolean = false) {
+        val check = ++desktopCheckStamp
+        // On, and past the lock screen: over the keyguard the controller stays a controller.
+        val screenOn = getSystemService(PowerManager::class.java)?.isInteractive != false &&
+            getSystemService(KeyguardManager::class.java)?.isKeyguardLocked != true
+        if (!desktopMode.active || !screenOn) return applyDesktop(DesktopDecision.OFF, "switched off or screen off")
+        // Where the controller really is: a lock says where it should be, Android's focus where it went.
+        val display = focusedDisplay ?: controllerLock.lockedTo?.let(screenFocus::displayId) ?: screenFocus.displayId()
+        val panelOpen = quickPanel.isOpen
+        val topLocked = controllerLock.lockedTo == Screen.TOP
+        val bottom = screenFocus.bottomDisplayId()
+        fun situation(apps: Map<Int, String>, bottomOn: Boolean) = DesktopSituation(
+            controllerOnTop = display == Display.DEFAULT_DISPLAY,
+            topApp = apps[Display.DEFAULT_DISPLAY],
+            bottomApp = bottom?.let(apps::get),
+            bottomShown = bottom != null && bottomOn,
+            panelOpen = panelOpen,
+            topLocked = topLocked,
+        )
+        // At once with the apps known now. Seen a while ago, they only switch off: switching on waits for the read.
+        val known = desktopMode.decide(situation(screenApps, bottomScreenOn))
+        val atOnce = if (fresh) known else DesktopDecision(on = known.on && desktopMode.engaged, split = known.split && desktopMode.split)
+        if (atOnce.on != desktopMode.engaged || atOnce.split != desktopMode.split) {
+            applyDesktop(atOnce, "display $display, top ${screenApps[Display.DEFAULT_DISPLAY]}")
+        }
+        // The apps are asked of their windows, which can keep a caller waiting: never on this thread.
+        scope.launch {
+            val apps = runCatching { actionHost.appsOnScreens() }.getOrDefault(emptyMap())
+            val bottomOn = runCatching { Settings.System.getInt(contentResolver, KEY_SCREEN_MODE, 0) }.getOrDefault(0) != BOTTOM_OFF
+            mainHandler.post {
+                if (check != desktopCheckStamp) return@post
+                // The window list can lag behind a window change: for a moment that screen keeps the app the change told.
+                val told = lastScreenAppDisplay
+                val read = if (told != null && SystemClock.uptimeMillis() - lastScreenAppChange < WINDOW_LIST_LAG_MS) {
+                    val app = screenApps[told]
+                    if (app == null) apps - told else apps + (told to app)
+                } else {
+                    apps
+                }
+                screenApps = read
+                bottomScreenOn = bottomOn
+                val now = situation(read, bottomOn)
+                applyDesktop(desktopMode.decide(now), "display $display, top ${now.topApp}, bottom ${now.bottomApp}")
+            }
         }
     }
 
-    /** The panel opening, the screen going off: desktop controls must stop before the next press, not a moment later. */
-    private fun checkDesktopNow() {
+    private fun applyDesktop(decision: DesktopDecision, where: String) {
+        val was = desktopMode.engaged
+        val wasSplit = desktopMode.split
+        desktopMode.update(decision)
+        if (desktopMode.engaged != was || desktopMode.split != wasSplit) {
+            val kept = if (desktopMode.split) ", the controller kept on the bottom screen" else ""
+            val since = SystemClock.uptimeMillis() - lastScreenAppChange
+            val after = if (since < WINDOW_CHANGE_LOG_MS) " ($since ms after the window change)" else ""
+            Log.d(KEYS_TAG, "desktop controls ${if (desktopMode.engaged) "on" else "off"}$kept$after: $where")
+        }
+        // Keeping the controller on the bottom screen starts now: down it goes, unless someone is typing up there.
+        if (desktopMode.split && !wasSplit && focusedDisplay != screenFocus.bottomDisplayId()) controllerLock.keepBottom()
+        steerAynMouse()
+    }
+
+    /**
+     * With AYN's mouse mode chosen to move the pointer, it is on while desktop controls are; switched off again only when
+     * Thor Tools switched it on, and only after a moment (each switch puts AYN's pointer back in the middle, so a panel
+     * opened and closed doesn't).
+     */
+    private fun steerAynMouse() {
+        val want = desktopMode.engaged && desktopMode.layout.aynPointer
+        mainHandler.removeCallbacks(aynMouseOff)
+        if (!want) {
+            if (prefs.desktopAynMouseOwned) mainHandler.postDelayed(aynMouseOff, AYN_MOUSE_OFF_MS)
+            return
+        }
+        scope.launch {
+            // Also when switched off by hand meanwhile (Select + Start).
+            if (runCatching { Settings.System.getInt(contentResolver, KEY_AYN_MOUSE, 0) }.getOrDefault(0) == 1) return@launch
+            prefs.desktopAynMouseOwned = true
+            executor.setIntSystemSetting(KEY_AYN_MOUSE, 1)
+        }
+    }
+
+    private val aynMouseOff = Runnable {
+        if (desktopMode.engaged && desktopMode.layout.aynPointer) return@Runnable
+        scope.launch {
+            if (!prefs.desktopAynMouseOwned) return@launch
+            prefs.desktopAynMouseOwned = false
+            executor.setIntSystemSetting(KEY_AYN_MOUSE, 0)
+        }
+    }
+
+    /** The panel opening, the screen going off, an app or the controller moving: desktop controls follow at once. */
+    private fun checkDesktopNow(fresh: Boolean = false) {
         if (!::desktopMode.isInitialized || (!desktopMode.active && !desktopMode.engaged)) return
         mainHandler.removeCallbacks(desktopCheck)
-        checkDesktop()
+        checkDesktop(fresh)
     }
 
     /**
@@ -529,7 +680,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         if (down && hotkeysTook) return false
         if (!thorPad(event)) return false
         val startsCombos = lastAppPackage !in hotkeysOffIn && hotkeys.startsCombos(button)
-        return desktopMode.key(control, down, repeat = event.repeatCount > 0, startsCombos = startsCombos)
+        return desktopMode.key(control, down, repeat = event.repeatCount > 0, startsCombos = startsCombos, canceled = event.isCanceled)
     }
 
     /** Thor Tools' own desktop mouse and keys: their Back, Home and other keys are the user's jobs, never the Thor's buttons. */
@@ -554,11 +705,24 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
             else -> InputDevice.getDeviceIds().none { id ->
                 InputDevice.getDevice(id)?.let { it.vendorId != AYN_VENDOR && it.name == device.name } == true
             }
-        }
+        }.also { if (it) seenThorPads += event.deviceId }
     }
 
     /** The Keyboard job: the text field in focus is tapped for the app, which then asks for Android's keyboard. */
     private fun openKeyboard() {
+        // With the controller kept on the bottom screen, the keyboard would type there: the controller goes up first, and
+        // stays while the keyboard is up.
+        if (desktopMode.split && focusedDisplay != Display.DEFAULT_DISPLAY) {
+            focusMover.moveTo(Display.DEFAULT_DISPLAY) { onTop ->
+                if (onTop) controllerMoved(Display.DEFAULT_DISPLAY)
+                clickTextField()
+            }
+            return
+        }
+        clickTextField()
+    }
+
+    private fun clickTextField() {
         val field = runCatching { findFocus(AccessibilityNodeInfo.FOCUS_INPUT) }.getOrNull()?.takeIf { it.isEditable }
         if (field == null || !field.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
             desktopNote.show(getString(R.string.desktopKeyboardNoField), Display.DEFAULT_DISPLAY)
@@ -649,7 +813,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
      * exist, and while the quick panel is open (an app starting elsewhere takes the controller from it).
      */
     private fun refreshFocusedDisplay() {
-        if (!hotkeys.usesMotion && !quickPanel.isOpen && !desktopActive()) return
+        if (!hotkeys.usesMotion && !quickPanel.isOpen && !desktopActive() && controllerLock.lockedTo == null) return
         mainHandler.removeCallbacks(focusReadAgain)
         val now = SystemClock.uptimeMillis()
         if (now - lastFocusRead < FOCUS_READ_GAP_MS || !readingFocus.compareAndSet(false, true)) {
@@ -658,19 +822,35 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
             return
         }
         lastFocusRead = now
+        val stamp = focusStamp
         scope.launch {
             try {
                 CloseTarget.parseFocusedDisplay(executor.executeAsRoot("dumpsys input | grep -m1 FocusedDisplayId").getOrNull())?.let {
-                    focusedDisplay = it
                     mainHandler.post {
+                        // A touch or a move since the read began knows better; read again instead.
+                        if (stamp != focusStamp) return@post refreshFocusedDisplay()
+                        if (it != focusedDisplay) Log.d(KEYS_TAG, "controller read on display $it")
+                        val moved = it != focusedDisplay
+                        focusedDisplay = it
                         quickPanel.controllerOn(it)
-                        updateDesktop()
+                        controllerLock.onFocusedDisplay(it)
+                        if (moved) checkDesktopNow() else updateDesktop()
                     }
                 }
             } finally {
                 readingFocus.set(false)
             }
         }
+    }
+
+    /** The controller was moved to [displayId] (a hotkey, the lock, the panel handing it back). */
+    private fun controllerMoved(displayId: Int) {
+        focusStamp++
+        focusedDisplay = displayId
+        quickPanel.controllerOn(displayId)
+        checkDesktopNow()
+        // Android may hand the keys back to an app started meanwhile: look again once things settle.
+        mainHandler.postDelayed(focusReadAgain, FOCUS_CHECK_AFTER_MOVE_MS)
     }
 
     /**
@@ -689,11 +869,12 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
 
     private fun onPadDirection(button: PadButton, down: Boolean) = onDirection(button, down, SystemClock.uptimeMillis(), note = "read")
 
-    /** The held button's release won't come (its device went away, the screen went off): nothing counts as held now. */
+    /** Releases that won't come (their device went away, the screen went off): nothing counts as held now. */
     private fun forgetHeld() {
         heldFrom = null
-        if (!hotkeys.holding) return
+        val wasHolding = hotkeys.holding
         hotkeys.forgetHeld()
+        if (!wasHolding) return
         syncDesktopHold()
         watchJoystick()
         useWaitingHotkeys()
@@ -708,13 +889,15 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
      */
     private fun watchJoystick() {
         mainHandler.removeCallbacks(catcherDue)
+        mainHandler.removeCallbacks(motionWatchCap)
         val since = hotkeys.heldSince
-        val wanted = since != null && hotkeys.wantsMotion && status.buttonRecorder == null
+        val wanted = since != null && since != motionWatchEnded && hotkeys.wantsMotion && status.buttonRecorder == null
         val raw = wanted && rawInput.padReady
         if (raw != padWatching) {
             padWatching = raw
             rawInput.watchPad(raw)
         }
+        if (since != null && wanted) mainHandler.postAtTime(motionWatchCap, since + MOTION_WATCH_CAP_MS)
         if (since != null && wanted && !quickPanel.hasController) {
             // A plain tap of the button never takes window focus from the game.
             val due = since + CATCH_AFTER_MS
@@ -722,7 +905,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
                 mainHandler.postAtTime(catcherDue, due)
                 return
             }
-            val display = controllerLock.lockedTo?.let(screenFocus::displayId) ?: focusedDisplay ?: screenFocus.displayId()
+            val display = focusedDisplay ?: controllerLock.lockedTo?.let(screenFocus::displayId) ?: screenFocus.displayId()
             joystickCatcher.start(display, since)
         } else {
             joystickCatcher.stop()
@@ -805,7 +988,8 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
      * a press never ends on another list than it started on.
      */
     private fun useHotkeysForApp() {
-        scopeWaiting = hotkeys.holding
+        // Taps still being counted would be lost with the old recognizer: the new list waits for them too.
+        scopeWaiting = hotkeys.busy
         if (!scopeWaiting) useHotkeys(HotkeyList.forApp(allHotkeys, lastAppPackage))
     }
 
@@ -1011,8 +1195,11 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         status.attach(this)
         KeepAliveNotification.show(this)
         // The bottom screen runs a secondary home, which can be another package than the main launcher.
+        // Android's Settings has a home of its own for the first boot, which makes it no launcher.
         homePackages = listOf(Intent.CATEGORY_HOME, Intent.CATEGORY_SECONDARY_HOME).flatMap { category ->
-            packageManager.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(category), 0).map { it.activityInfo.packageName }
+            packageManager.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(category), 0)
+                .filterNot { it.activityInfo.name.endsWith(FALLBACK_HOME) }
+                .map { it.activityInfo.packageName }
         }.toSet()
 
         imeObserver.onChange(false)
@@ -1045,10 +1232,20 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
 
         screenFocus = ScreenFocus(getSystemService(DisplayManager::class.java))
         displayHome = DisplayHome(this, executor, screenFocus, scope, homeKey = ::homeKey)
-        focusMover = FocusMover(this, executor, scope)
+        focusMover = FocusMover(this, executor, scope) { displayId, done ->
+            val sent = ::rawInput.isInitialized && rawInput.command("fronttop", displayId.toString()) { _, _ -> done() }
+            if (!sent) done()
+        }
         joystickCatcher = JoystickCatcher(this) { button, down, time -> if (!padWatching) onDirection(button, down, time) }
         stayAwake = StayAwake(this)
-        controllerLock = ControllerLock(this, executor, focusMover, screenFocus, scope, paused = { quickPanel.isOpen })
+        controllerLock = ControllerLock(
+            this,
+            executor,
+            focusMover,
+            screenFocus,
+            scope,
+            paused = { quickPanel.isOpen },
+        )
         controllerLock.start()
         actionRunner = ActionRunner(this, executor, prefs, scope, actionHost)
         debugSession.runner = ActionChecker(
@@ -1074,6 +1271,8 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
             helper = { name, args, onResult -> rawInput.command(name, *args.toTypedArray(), onResult = onResult) },
             stayAwakeOn = { stayAwake.isOn },
             lockedTo = { controllerLock.lockedTo },
+            belongsTo = { controllerLock.belongsTo },
+            setFocusLock = { controllerLock.setAynLock(it) },
             thorToolsShownOn = { status.appShownOn },
             onMotion = ::onPanelMotion,
             frontApp = { lastAppPackage?.let { FrontApp(it, frontSince) } },
@@ -1081,6 +1280,9 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         status.toggleQuickPanel = { mainHandler.post { quickPanel.toggle(lastAppPackage) } }
         desktopMode = DesktopMode { line -> if (::rawInput.isInitialized) rawInput.desktop(line) }
         desktopNote = FeedbackCue(this, prefs, hideAfterMs = DESKTOP_NOTE_MS, windowTitle = "ThorToolsDesktopNote")
+        controllerLock.onMoved = ::controllerMoved
+        controllerLock.desktopHoldsBottom = { desktopMode.split }
+        quickPanel.onControllerReturned = ::controllerMoved
         quickPanel.onOpenChanged = {
             checkDesktopNow()
             // The panel handed the controller back: to which screen is Android's to say.
@@ -1125,6 +1327,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
             prefs.desktopChanges().collect { settings ->
                 mainHandler.post {
                     desktopMode.configure(settings)
+                    steerAynMouse()
                     refreshFocusedDisplay()
                     updateDesktop()
                 }
@@ -1208,6 +1411,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         applyVideoOutputOverride(false)
         job.cancel()
         contentResolver.unregisterContentObserver(imeObserver)
+        if (::controllerLock.isInitialized) controllerLock.stop()
         prefs.removeAppOverrideEnabledObserver()
         prefs.removeChargeLimitEnabledObserver()
         prefs.removeVideoOutputOverrideEnabledObserver()
@@ -1227,6 +1431,21 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         private const val FOCUS_READ_GAP_MS = 500L
         private const val DESKTOP_CHECK_MS = 150L
         private const val DESKTOP_NOTE_MS = 2_000L
+        private const val DESKTOP_RETRY_MS = 2_000L
+        private const val FOCUS_CHECK_AFTER_MOVE_MS = 900L
+        private const val KEY_SCREEN_MODE = "dual_screen_display_mode"
+        private const val KEY_AYN_MOUSE = "global_gamepad_to_mouse_mode"
+        private const val AYN_MOUSE_OFF_MS = 2_000L
+        private const val WINDOW_CHANGE_LOG_MS = 5_000L
+        private const val WINDOW_LIST_LAG_MS = 1_000L
+        private const val FOCUS_AFTER_NEW_APP_MS = 250L
+        private const val FALLBACK_HOME = ".FallbackHome"
+
+        // AYN's screen mode with the bottom screen switched off.
+        private const val BOTTOM_OFF = 1
+
+        // As long as the joystick catcher stays up for a press.
+        private const val MOTION_WATCH_CAP_MS = 5_000L
         private const val KEYS_TAG = "ThorToolsKeys"
         private const val FOCUS_READ_RETRY_MS = 100L
         private const val CATCH_AFTER_MS = 150L

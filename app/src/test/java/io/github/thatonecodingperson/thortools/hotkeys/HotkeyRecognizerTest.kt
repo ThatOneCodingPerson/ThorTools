@@ -181,6 +181,14 @@ class HotkeyRecognizerTest {
     }
 
     @Test
+    fun `a game's button whose release was lost with its pad no longer gives Back to the game`() {
+        val keys = HotkeyRecognizer(listOf(hotkey(PadButton.BACK, PressKind.TAP)))
+        keys.down(PadButton.SELECT, 0)
+        keys.forgetHeld()
+        assertTrue(keys.down(PadButton.BACK, 100).consume)
+    }
+
+    @Test
     fun `holding a combo button and letting go without a combo does nothing`() {
         val keys = HotkeyRecognizer(listOf(hotkey(PadButton.HOME, PressKind.TAP, second = PadButton.A)))
         keys.down(PadButton.HOME, 0)
@@ -257,6 +265,19 @@ class HotkeyRecognizerTest {
     fun `AYN waits longer before its hold when it starts combos`() {
         val keys = HotkeyRecognizer(HotkeyList.defaults + hotkey(PadButton.AYN, PressKind.TAP, second = PadButton.B))
         assertEquals(Step(consume = true, timerAt = 1000), keys.down(PadButton.AYN, 0))
+    }
+
+    @Test
+    fun `it is busy while a press is still being counted, taps waiting for the next one too`() {
+        val keys = HotkeyRecognizer(listOf(hotkey(PadButton.BACK, PressKind.DOUBLE)))
+        assertFalse(keys.busy)
+        keys.down(PadButton.BACK, 0)
+        assertTrue(keys.busy)
+        keys.up(PadButton.BACK, 100)
+        assertFalse(keys.holding)
+        assertTrue(keys.busy)
+        assertEquals(listOf(GiveBack(PadButton.BACK, 1)), keys.onTimer(10_000).effects)
+        assertFalse(keys.busy)
     }
 
     @Test

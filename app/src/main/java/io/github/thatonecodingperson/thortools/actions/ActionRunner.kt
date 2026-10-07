@@ -11,6 +11,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.util.DisplayMetrics
+import android.util.Log
 import android.view.Display
 import androidx.annotation.StringRes
 import io.github.thatonecodingperson.thortools.R
@@ -47,6 +48,9 @@ interface ActionHost {
     fun bottomDisplayId(): Int?
 
     fun controllerDisplayId(): Int
+
+    /** Android's focused display as last read (where the controller really is); null while unknown. */
+    fun focusedDisplayId(): Int?
 
     /** Home on [displayId], or on the screen that has the controller when null. */
     fun goHome(displayId: Int?)
@@ -129,7 +133,7 @@ class ActionRunner(
                 say.done(action.label)
             }
             ThorAction.OPEN_QUICK_PANEL -> host.togglePanel()
-            ThorAction.RECENTS -> global(AccessibilityService.GLOBAL_ACTION_RECENTS, action, say)
+            ThorAction.RECENTS -> recents(action, say)
             ThorAction.NOTIFICATIONS -> global(AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS, action, say)
             ThorAction.QUICK_SETTINGS -> global(AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS, action, say)
             ThorAction.SCREENSHOT -> global(AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT, action, say)
@@ -201,6 +205,36 @@ class ActionRunner(
         say.done(action.label)
     }
 
+    /**
+     * Android's Recent apps. Its provider (AYN's Launcher3) can get stuck: a request whose animation never finished holds
+     * its queue and later ones are dropped. A moment after asking, the queue is read; stuck, the provider is restarted
+     * (Android binds it again by itself) and Recent apps is asked for again once it is back.
+     */
+    private fun recents(action: ThorAction, say: Say) {
+        global(AccessibilityService.GLOBAL_ACTION_RECENTS, action, say)
+        scope.launch {
+            delay(RECENTS_CHECK_MS)
+            val queue = readRecentsQueue() ?: return@launch
+            if (!queue.stuck) return@launch
+            Log.i(TAG, "Recent apps stuck ($queue): restarting ${RecentsQueue.PACKAGE}")
+            executor.executeAsRoot("pid=\$(pidof ${RecentsQueue.PACKAGE}) && kill -9 \$pid")
+            val back = (1..RECENTS_RESTART_POLLS).any {
+                delay(RECENTS_RESTART_POLL_MS)
+                readRecentsQueue()?.pending == 0
+            }
+            Log.i(TAG, "Recent apps provider back: $back")
+            if (!back) return@launch say.problem(R.string.actionRecentsStuck)
+            delay(RECENTS_SETTLE_MS)
+            mainHandler.post { service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_RECENTS) }
+        }
+    }
+
+    /** A root call: never on the main thread. */
+    private fun readRecentsQueue(): RecentsQueue? = RecentsQueue.parse(
+        executor.executeAsRoot("dumpsys activity service ${RecentsQueue.SERVICE} | grep -E 'mPendingCommands=|isRecentsAnimationRunning='")
+            .getOrNull(),
+    )
+
     private fun volume(direction: Int, action: ThorAction, say: Say) {
         audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, AudioManager.FLAG_SHOW_UI)
         say.done(action.label)
@@ -229,7 +263,8 @@ class ActionRunner(
     private fun moveController(target: Screen, alsoLock: Boolean, say: Say) {
         val display = if (target == Screen.TOP) Display.DEFAULT_DISPLAY else host.bottomDisplayId()
         if (display == null) return say.problem(R.string.actionResultNoSecondScreen)
-        val lockAfter = LockPolicy.afterMove(host.lockedTo, target, alsoLock)
+        val onTarget = host.focusedDisplayId()?.let { it == display } ?: true
+        val lockAfter = LockPolicy.afterMove(host.lockedTo, target, alsoLock, onTarget)
         if (alsoLock) return lock(lockAfter, say)
         val move = {
             host.moveController(display) { moved ->
@@ -466,5 +501,10 @@ class ActionRunner(
         const val FOLLOW_DELAY_MS = 300L
         const val CLEAN_MEMORY = "sync; echo 3 > /proc/sys/vm/drop_caches && echo 1 > /proc/sys/vm/compact_memory && echo ok"
         const val CLEAN_SETTLE_MS = 800L
+        const val TAG = "ThorToolsActions"
+        const val RECENTS_CHECK_MS = 1_000L
+        const val RECENTS_RESTART_POLLS = 10
+        const val RECENTS_RESTART_POLL_MS = 400L
+        const val RECENTS_SETTLE_MS = 300L
     }
 }

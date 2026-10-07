@@ -1,8 +1,10 @@
 package io.github.thatonecodingperson.thortools.desktop
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import io.github.thatonecodingperson.thortools.R
 import io.github.thatonecodingperson.thortools.data.SharedPrefsRepo
 import io.github.thatonecodingperson.thortools.hotkeys.Hotkey
 import io.github.thatonecodingperson.thortools.hotkeys.LaunchableApp
@@ -17,8 +19,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
+/** The Desktop controls page's tabs. */
+enum class DesktopTab(@StringRes val title: Int) {
+    GENERAL(R.string.desktopTabGeneral),
+    BUTTONS(R.string.desktopTabButtons),
+    STICKS(R.string.desktopTabSticks),
+}
+
 data class DesktopUiModel(
     val enabled: Boolean = false,
+    val tab: DesktopTab = DesktopTab.GENERAL,
+    /** Off while the top screen shows a home screen or a game front end. */
+    val offOnFrontEnds: Boolean = true,
     val apps: DesktopApps = DesktopApps(),
     val layout: DesktopLayout = DesktopLayout.DEFAULT,
     /** The button whose job is being picked. */
@@ -42,7 +54,12 @@ class DesktopViewModel @Inject constructor(
     private val launchableApps: LaunchableApps,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(
-        DesktopUiModel(enabled = prefs.desktopEnabled, apps = prefs.desktopApps, layout = prefs.desktopLayout),
+        DesktopUiModel(
+            enabled = prefs.desktopEnabled,
+            offOnFrontEnds = prefs.desktopOffOnFrontEnds,
+            apps = prefs.desktopApps,
+            layout = prefs.desktopLayout,
+        ),
     )
     val uiState: StateFlow<DesktopUiModel> = _uiState.asStateFlow()
 
@@ -90,6 +107,13 @@ class DesktopViewModel @Inject constructor(
 
     fun select(control: DesktopControl) = _uiState.update { it.copy(selected = control) }
 
+    fun selectTab(tab: DesktopTab) = _uiState.update { it.copy(tab = tab) }
+
+    fun setOffOnFrontEnds(on: Boolean) {
+        prefs.desktopOffOnFrontEnds = on
+        _uiState.update { it.copy(offOnFrontEnds = on) }
+    }
+
     fun setJob(job: DesktopJob) = change { it.with(_uiState.value.selected, job) }
 
     fun usePreset(preset: DesktopPreset) = change { it.withButtonsOf(preset) }
@@ -109,6 +133,16 @@ class DesktopViewModel @Inject constructor(
     fun setHorizontalScroll(on: Boolean) = change { it.copy(horizontalScroll = on) }
 
     fun setHoldStart(on: Boolean) = change { it.copy(holdStartSwitch = on) }
+
+    fun setAynPointer(on: Boolean) = change { it.copy(aynPointer = on) }
+
+    fun setBottomScreen(on: Boolean) = change { it.copy(bottomScreen = on) }
+
+    /** [control] given to the bottom screen's app while the controller stays there, or back to its job. */
+    fun toggleBottomButton(control: DesktopControl) = change { layout ->
+        val buttons = layout.bottomButtons
+        layout.copy(bottomButtons = if (control in buttons) buttons - control else buttons + control)
+    }
 
     /** The chosen button as the slow-down button, or no slow-down button. One button at most has the job. */
     fun setPrecision(on: Boolean) = change { layout ->

@@ -26,6 +26,9 @@ class LockPolicyTest {
         // "Also lock": first press locks, the second unlocks.
         assertEquals(Screen.TOP, LockPolicy.afterMove(null, Screen.TOP, alsoLock = true))
         assertNull(LockPolicy.afterMove(Screen.TOP, Screen.TOP, alsoLock = true))
+        // Locked to the top but the controller drifted to the bottom: locked there again (moved back), not unlocked.
+        assertEquals(Screen.TOP, LockPolicy.afterMove(Screen.TOP, Screen.TOP, alsoLock = true, onTarget = false))
+        assertEquals(Screen.BOTTOM, LockPolicy.afterMove(null, Screen.BOTTOM, alsoLock = true, onTarget = false))
         // A plain move releases a lock on the other screen and keeps one on the same screen.
         assertNull(LockPolicy.afterMove(Screen.BOTTOM, Screen.TOP, alsoLock = false))
         assertEquals(Screen.TOP, LockPolicy.afterMove(Screen.TOP, Screen.TOP, alsoLock = false))

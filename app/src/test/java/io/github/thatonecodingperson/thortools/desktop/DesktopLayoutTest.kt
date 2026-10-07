@@ -19,7 +19,8 @@ class DesktopLayoutTest {
         assertEquals(DesktopJob.KEYBOARD, layout.job(DesktopControl.X))
         assertEquals(DesktopJob.SPACE, layout.job(DesktopControl.Y))
         assertEquals(DesktopJob.TAB, layout.job(DesktopControl.SELECT))
-        assertTrue(layout.holdStartSwitch)
+        // Switching is the on/off hotkey's; holding Start pauses only when chosen.
+        assertFalse(layout.holdStartSwitch)
         assertEquals(DesktopPreset.STEAM_CONTROLLER, layout.preset)
     }
 
@@ -78,11 +79,77 @@ class DesktopLayoutTest {
             .with(DesktopControl.START, DesktopJob.NONE)
             .with(DesktopControl.L1, DesktopJob.NONE)
             .with(DesktopControl.R1, DesktopJob.NONE)
-            .copy(precision = DesktopControl.R1)
+            .copy(precision = DesktopControl.R1, holdStartSwitch = true)
         assertTrue(DesktopControl.START in layout.taken)
         assertFalse(DesktopControl.L1 in layout.taken)
         assertTrue(DesktopControl.R1 in layout.taken)
         assertFalse(DesktopControl.START in layout.copy(holdStartSwitch = false).taken)
+    }
+
+    @Test
+    fun `the pointer and both-screens choices come back from their stored text`() {
+        val layout = DesktopLayout.DEFAULT.copy(
+            aynPointer = true,
+            bottomScreen = true,
+            bottomButtons = setOf(DesktopControl.X, DesktopControl.A),
+        )
+        assertEquals(layout, DesktopLayout.decode(layout.encode()))
+        // No buttons ticked: only the D-pad works the bottom screen.
+        val dpadOnly = DesktopLayout.DEFAULT.copy(bottomButtons = emptySet())
+        assertEquals(dpadOnly, DesktopLayout.decode(dpadOnly.encode()))
+        // Older settings keep A and B for the bottom screen.
+        assertEquals(DesktopLayout.DEFAULT_BOTTOM_BUTTONS, DesktopLayout.decode("a=enter").bottomButtons)
+    }
+
+    @Test
+    fun `with the controller on the bottom screen its buttons stay the app's`() {
+        // Only the D-pad until buttons are chosen for the bottom screen.
+        assertEquals(DesktopLayout.DEFAULT.taken, DesktopLayout.DEFAULT.takenFor(split = true))
+        val layout = DesktopLayout.DEFAULT.copy(bottomButtons = setOf(DesktopControl.A, DesktopControl.B))
+        assertEquals(layout.taken, layout.takenFor(split = false))
+        val split = layout.takenFor(split = true)
+        assertFalse(DesktopControl.A in split)
+        assertFalse(DesktopControl.B in split)
+        assertTrue(DesktopControl.R2 in split)
+        assertTrue(DesktopControl.SELECT in split)
+    }
+
+    @Test
+    fun `with the controller kept below the right stick points and the left one is the bottom screen's`() {
+        val layout = DesktopLayout.DEFAULT.copy(leftStick = StickRole.POINTER, rightStick = StickRole.SCROLL)
+        assertEquals(StickRole.POINTER to StickRole.SCROLL, layout.sticksFor(split = false))
+        assertEquals(StickRole.NONE to StickRole.POINTER, layout.sticksFor(split = true))
+    }
+
+    @Test
+    fun `while Scroll while held is down the pointer stick scrolls`() {
+        val layout = DesktopLayout.DEFAULT.copy(leftStick = StickRole.POINTER, rightStick = StickRole.SCROLL)
+        assertEquals(StickRole.SCROLL to StickRole.SCROLL, layout.sticksFor(split = false, scrollHeld = true))
+        assertEquals(StickRole.NONE to StickRole.SCROLL, layout.sticksFor(split = true, scrollHeld = true))
+        assertTrue(DesktopControl.R1 in layout.with(DesktopControl.R1, DesktopJob.SCROLL_HOLD).taken)
+    }
+
+    @Test
+    fun `holding Start no longer pauses unless chosen, and older stored choices start over`() {
+        assertFalse(DesktopLayout.DEFAULT.holdStartSwitch)
+        // "hold=1" and "bb=a,b" were the old keys: the new defaults apply.
+        val old = DesktopLayout.decode("hold=1;bb=a,b")
+        assertFalse(old.holdStartSwitch)
+        assertEquals(emptySet<DesktopControl>(), old.bottomButtons)
+        val chosen = DesktopLayout.DEFAULT.copy(holdStartSwitch = true, bottomButtons = setOf(DesktopControl.X))
+        assertEquals(chosen, DesktopLayout.decode(chosen.encode()))
+    }
+
+    @Test
+    fun `with AYN's pointer the slow-down button stays the app's`() {
+        val layout = DesktopLayout.DEFAULT.with(DesktopControl.R1, DesktopJob.NONE).copy(precision = DesktopControl.R1)
+        assertTrue(DesktopControl.R1 in layout.taken)
+        assertFalse(DesktopControl.R1 in layout.copy(aynPointer = true).taken)
+    }
+
+    @Test
+    fun `every key job has its Android key code, for keys sent to the top screen`() {
+        assertTrue(DesktopJob.entries.filter { it.kind == DesktopJob.Kind.KEY }.all { it.keyCode > 0 })
     }
 
     @Test

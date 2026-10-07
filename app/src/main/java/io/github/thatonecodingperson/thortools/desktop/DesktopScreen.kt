@@ -13,15 +13,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Gamepad
 import androidx.compose.material.icons.rounded.Mouse
+import androidx.compose.material.icons.rounded.Splitscreen
 import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.UnfoldMore
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -35,6 +38,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import io.github.thatonecodingperson.thortools.R
+import io.github.thatonecodingperson.thortools.actions.ThorAction
 import io.github.thatonecodingperson.thortools.hotkeys.AppPicker
 import io.github.thatonecodingperson.thortools.hotkeys.Hotkey
 import io.github.thatonecodingperson.thortools.hotkeys.KeyCap
@@ -57,7 +61,7 @@ import kotlin.math.roundToInt
  * off by the app on the controller's screen. Every button, stick and speed can be changed.
  */
 @Composable
-fun DesktopScreen(viewModel: DesktopViewModel = hiltViewModel(), onBack: () -> Unit) {
+fun DesktopScreen(viewModel: DesktopViewModel = hiltViewModel(), onHotkey: () -> Unit, onBack: () -> Unit) {
     val state by viewModel.uiState.collectAsState()
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh() }
     val side = state.picker
@@ -79,42 +83,88 @@ fun DesktopScreen(viewModel: DesktopViewModel = hiltViewModel(), onBack: () -> U
         return
     }
     Scaffold(topBar = { SubTopAppBar(title = R.string.desktopTitle, onBack = onBack) }) { padding ->
-        CardColumns(
-            padding = padding,
-            left = {
-                SwitchCard(
-                    icon = Icons.Rounded.Mouse,
-                    title = R.string.desktopTitle,
-                    info = R.string.desktopSwitchInfo,
-                    checked = state.enabled,
-                    onChange = viewModel::setEnabled,
-                )
-                if (state.aynMouseOn) {
-                    NoteCard(
-                        stringResource(R.string.desktopAynMouseOn),
-                        caution = true,
-                        actionLabel = stringResource(R.string.desktopAynMouseOff),
-                        onAction = viewModel::turnOffAynMouse,
-                    )
+        Column(Modifier.padding(top = padding.calculateTopPadding())) {
+            PrimaryScrollableTabRow(selectedTabIndex = state.tab.ordinal, edgePadding = 16.dp) {
+                DesktopTab.entries.forEach { tab ->
+                    Tab(selected = tab == state.tab, onClick = { viewModel.selectTab(tab) }, text = { Text(stringResource(tab.title)) })
                 }
-                ButtonsCard(state.layout, state.selected, viewModel::select)
-                JobCard(state.layout, state.selected, state.hotkeys, viewModel)
-                WhereCard(state, viewModel)
-                Text(
-                    stringResource(R.string.desktopRule),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            }
+            when (state.tab) {
+                DesktopTab.GENERAL -> CardColumns(
+                    padding = PaddingValues(),
+                    left = {
+                        OnOffCard(state, viewModel, onHotkey)
+                        if (state.aynMouseOn && !state.layout.aynPointer) {
+                            NoteCard(
+                                stringResource(R.string.desktopAynMouseOn),
+                                caution = true,
+                                actionLabel = stringResource(R.string.desktopAynMouseOff),
+                                onAction = viewModel::turnOffAynMouse,
+                            )
+                        }
+                        WhereCard(state, viewModel)
+                    },
+                    right = {
+                        BothScreensCard(state.layout, viewModel)
+                        Text(
+                            stringResource(R.string.desktopRule),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
                 )
-            },
-            right = {
-                PresetsCard(state.layout, viewModel)
-                SticksCard(state.layout, viewModel)
-                PointerCard(state.layout, state.androidSpeed, viewModel)
-                ScrollCard(state.layout, viewModel)
-                TriggersCard(state.layout, viewModel)
-            },
-        )
+                DesktopTab.BUTTONS -> CardColumns(
+                    padding = PaddingValues(),
+                    left = {
+                        ButtonsCard(state.layout, state.selected, viewModel::select)
+                        JobCard(state.layout, state.selected, state.hotkeys, viewModel)
+                    },
+                    right = { PresetsCard(state.layout, viewModel) },
+                )
+                DesktopTab.STICKS -> CardColumns(
+                    padding = PaddingValues(),
+                    left = {
+                        SticksCard(state.layout, viewModel)
+                        PointerCard(state.layout, state.androidSpeed, viewModel)
+                    },
+                    right = {
+                        ScrollCard(state.layout, viewModel)
+                        TriggersCard(state.layout, viewModel)
+                    },
+                )
+            }
+        }
     }
+}
+
+/**
+ * Desktop controls on or off, the hotkey that switches them (set here, not in the Hotkeys menu) and whether holding
+ * Start pauses them where they are.
+ */
+@Composable
+private fun OnOffCard(state: DesktopUiModel, viewModel: DesktopViewModel, onHotkey: () -> Unit) {
+    val hotkey = state.hotkeys.firstOrNull { it.action == ThorAction.TOGGLE_DESKTOP }
+    SwitchCard(
+        icon = Icons.Rounded.Mouse,
+        title = R.string.desktopTitle,
+        info = R.string.desktopSwitchInfo,
+        checked = state.enabled,
+        onChange = viewModel::setEnabled,
+        rows = {
+            CardRow(
+                title = stringResource(R.string.desktopToggleHotkey),
+                info = stringResource(R.string.desktopToggleHotkeyInfo),
+                value = hotkey?.let { triggerText(it.button, it.second, it.press) } ?: stringResource(R.string.desktopToggleHotkeyNone),
+                onClick = onHotkey,
+            )
+            CardSwitchRow(
+                title = stringResource(R.string.desktopHoldStart),
+                info = stringResource(R.string.desktopHoldStartInfo),
+                checked = state.layout.holdStartSwitch,
+                onChange = viewModel::setHoldStart,
+            )
+        },
+    )
 }
 
 /** The Thor's buttons as keys, each with its job under it; a tap chooses the button whose job is changed below. */
@@ -280,10 +330,10 @@ private fun WhereCard(state: DesktopUiModel, viewModel: DesktopViewModel) {
             onClick = { viewModel.openPicker(DesktopApps.Side.NEVER_IN) },
         )
         CardSwitchRow(
-            title = stringResource(R.string.desktopHoldStart),
-            info = stringResource(R.string.desktopHoldStartInfo),
-            checked = state.layout.holdStartSwitch,
-            onChange = viewModel::setHoldStart,
+            title = stringResource(R.string.desktopOffFrontEnds),
+            info = stringResource(R.string.desktopOffFrontEndsInfo),
+            checked = state.offOnFrontEnds,
+            onChange = viewModel::setOffOnFrontEnds,
         )
     }
 }
@@ -323,14 +373,65 @@ private fun PresetsCard(layout: DesktopLayout, viewModel: DesktopViewModel) {
     }
 }
 
+/** The controller kept on the bottom screen while the pointer works the top one, and which buttons go with it. */
 @OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun BothScreensCard(layout: DesktopLayout, viewModel: DesktopViewModel) {
+    SettingsCard(contentPadding = PaddingValues()) {
+        CardHeader(Icons.Rounded.Splitscreen, stringResource(R.string.desktopBothScreens), stringResource(R.string.desktopBothScreensInfo))
+        CardSwitchRow(
+            title = stringResource(R.string.desktopBottomScreen),
+            info = stringResource(R.string.desktopBottomScreenInfo),
+            checked = layout.bottomScreen,
+            onChange = viewModel::setBottomScreen,
+        )
+        if (layout.bottomScreen) {
+            CardRowBox {
+                Text(
+                    stringResource(R.string.desktopBottomButtons),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 6.dp, bottom = 2.dp),
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DesktopControl.entries.forEach { control ->
+                        FilterChip(
+                            selected = control in layout.bottomButtons,
+                            onClick = { viewModel.toggleBottomButton(control) },
+                            label = { Text(stringResource(control.pad.label)) },
+                            colors = cardChipColors(),
+                        )
+                    }
+                }
+                Text(
+                    stringResource(R.string.desktopBottomButtonsInfo),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun SticksCard(layout: DesktopLayout, viewModel: DesktopViewModel) {
     SettingsCard(contentPadding = PaddingValues()) {
         CardHeader(Icons.Rounded.UnfoldMore, stringResource(R.string.desktopSticks), stringResource(R.string.desktopSticksInfo))
         CardRowBox {
-            StickChoice(R.string.desktopLeftStick, layout.leftStick, viewModel::setLeftStick)
-            StickChoice(R.string.desktopRightStick, layout.rightStick, viewModel::setRightStick)
+            PointerChoice(layout.aynPointer, viewModel::setAynPointer)
+            if (!layout.aynPointer) {
+                StickChoice(R.string.desktopLeftStick, layout.leftStick, viewModel::setLeftStick)
+                StickChoice(R.string.desktopRightStick, layout.rightStick, viewModel::setRightStick)
+                if (layout.bottomScreen) {
+                    Text(
+                        stringResource(R.string.desktopSticksBothScreens),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
             Text(
                 stringResource(R.string.desktopDpadNote),
                 style = MaterialTheme.typography.bodySmall,
@@ -338,6 +439,40 @@ private fun SticksCard(layout: DesktopLayout, viewModel: DesktopViewModel) {
                 modifier = Modifier.padding(top = 8.dp),
             )
         }
+    }
+}
+
+/** Who moves the pointer: Thor Tools from the sticks as set below, or AYN's own mouse mode. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PointerChoice(aynPointer: Boolean, onPick: (Boolean) -> Unit) {
+    Text(
+        stringResource(R.string.desktopPointerBy),
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = 6.dp, bottom = 2.dp),
+    )
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilterChip(
+            selected = !aynPointer,
+            onClick = { onPick(false) },
+            label = { Text(stringResource(R.string.desktopPointerOurs)) },
+            colors = cardChipColors(),
+        )
+        FilterChip(
+            selected = aynPointer,
+            onClick = { onPick(true) },
+            label = { Text(stringResource(R.string.desktopPointerAyn)) },
+            colors = cardChipColors(),
+        )
+    }
+    if (aynPointer) {
+        Text(
+            stringResource(R.string.desktopPointerAynInfo),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
     }
 }
 

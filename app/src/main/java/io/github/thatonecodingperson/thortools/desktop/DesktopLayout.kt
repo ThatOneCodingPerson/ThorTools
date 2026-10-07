@@ -46,9 +46,10 @@ enum class DesktopControl(val id: String, val pad: PadButton, val raw: Int) {
 /**
  * What a button does in desktop controls. [code] is the evdev code Thor Tools' own input device sends: a mouse button
  * ([Kind.MOUSE]), a key ([Kind.KEY], keys Android's generic layout knows), a wheel notch ([Kind.WHEEL], up 1, down -1),
- * or nothing because Thor Tools does it itself ([Kind.APP]). [Kind.NONE] leaves the button to the app.
+ * or nothing because Thor Tools does it itself ([Kind.APP]); [Kind.HOLD] changes what the pointer stick does while
+ * held. [Kind.NONE] leaves the button to the app. [keyCode] is a key's Android key code, for keys sent to one screen.
  */
-enum class DesktopJob(val id: String, val kind: Kind, val code: Int, @StringRes val label: Int, val group: Group) {
+enum class DesktopJob(val id: String, val kind: Kind, val code: Int, @StringRes val label: Int, val group: Group, val keyCode: Int = 0) {
     NONE("none", Kind.NONE, 0, R.string.desktopJobNone, Group.APP_OWN),
     LEFT_CLICK("left_click", Kind.MOUSE, 272, R.string.desktopJobLeftClick, Group.MOUSE),
     RIGHT_CLICK("right_click", Kind.MOUSE, 273, R.string.desktopJobRightClick, Group.MOUSE),
@@ -57,30 +58,31 @@ enum class DesktopJob(val id: String, val kind: Kind, val code: Int, @StringRes 
     MOUSE_FORWARD("mouse_forward", Kind.MOUSE, 276, R.string.desktopJobMouseForward, Group.MOUSE),
     WHEEL_UP("wheel_up", Kind.WHEEL, 1, R.string.desktopJobWheelUp, Group.MOUSE),
     WHEEL_DOWN("wheel_down", Kind.WHEEL, -1, R.string.desktopJobWheelDown, Group.MOUSE),
-    ENTER("enter", Kind.KEY, 28, R.string.desktopJobEnter, Group.KEYS),
-    ESCAPE("escape", Kind.KEY, 1, R.string.desktopJobEscape, Group.KEYS),
-    TAB("tab", Kind.KEY, 15, R.string.desktopJobTab, Group.KEYS),
-    SPACE("space", Kind.KEY, 57, R.string.desktopJobSpace, Group.KEYS),
-    BACKSPACE("backspace", Kind.KEY, 14, R.string.desktopJobBackspace, Group.KEYS),
-    DELETE("delete", Kind.KEY, 111, R.string.desktopJobDelete, Group.KEYS),
-    UP("up", Kind.KEY, 103, R.string.desktopJobUp, Group.KEYS),
-    DOWN("down", Kind.KEY, 108, R.string.desktopJobDown, Group.KEYS),
-    LEFT("left", Kind.KEY, 105, R.string.desktopJobLeft, Group.KEYS),
-    RIGHT("right", Kind.KEY, 106, R.string.desktopJobRight, Group.KEYS),
-    PAGE_UP("page_up", Kind.KEY, 104, R.string.desktopJobPageUp, Group.KEYS),
-    PAGE_DOWN("page_down", Kind.KEY, 109, R.string.desktopJobPageDown, Group.KEYS),
-    LINE_START("line_start", Kind.KEY, 102, R.string.desktopJobLineStart, Group.KEYS),
-    LINE_END("line_end", Kind.KEY, 107, R.string.desktopJobLineEnd, Group.KEYS),
-    CTRL("ctrl", Kind.KEY, 29, R.string.desktopJobCtrl, Group.KEYS),
-    ALT("alt", Kind.KEY, 56, R.string.desktopJobAlt, Group.KEYS),
-    SHIFT("shift", Kind.KEY, 42, R.string.desktopJobShift, Group.KEYS),
-    BACK("back", Kind.KEY, 158, R.string.desktopJobBack, Group.ANDROID),
-    HOME("home", Kind.KEY, 172, R.string.desktopJobHome, Group.ANDROID),
-    RECENTS("recents", Kind.KEY, 580, R.string.desktopJobRecents, Group.ANDROID),
+    SCROLL_HOLD("scroll_hold", Kind.HOLD, 0, R.string.desktopJobScrollHold, Group.MOUSE),
+    ENTER("enter", Kind.KEY, 28, R.string.desktopJobEnter, Group.KEYS, keyCode = 66),
+    ESCAPE("escape", Kind.KEY, 1, R.string.desktopJobEscape, Group.KEYS, keyCode = 111),
+    TAB("tab", Kind.KEY, 15, R.string.desktopJobTab, Group.KEYS, keyCode = 61),
+    SPACE("space", Kind.KEY, 57, R.string.desktopJobSpace, Group.KEYS, keyCode = 62),
+    BACKSPACE("backspace", Kind.KEY, 14, R.string.desktopJobBackspace, Group.KEYS, keyCode = 67),
+    DELETE("delete", Kind.KEY, 111, R.string.desktopJobDelete, Group.KEYS, keyCode = 112),
+    UP("up", Kind.KEY, 103, R.string.desktopJobUp, Group.KEYS, keyCode = 19),
+    DOWN("down", Kind.KEY, 108, R.string.desktopJobDown, Group.KEYS, keyCode = 20),
+    LEFT("left", Kind.KEY, 105, R.string.desktopJobLeft, Group.KEYS, keyCode = 21),
+    RIGHT("right", Kind.KEY, 106, R.string.desktopJobRight, Group.KEYS, keyCode = 22),
+    PAGE_UP("page_up", Kind.KEY, 104, R.string.desktopJobPageUp, Group.KEYS, keyCode = 92),
+    PAGE_DOWN("page_down", Kind.KEY, 109, R.string.desktopJobPageDown, Group.KEYS, keyCode = 93),
+    LINE_START("line_start", Kind.KEY, 102, R.string.desktopJobLineStart, Group.KEYS, keyCode = 122),
+    LINE_END("line_end", Kind.KEY, 107, R.string.desktopJobLineEnd, Group.KEYS, keyCode = 123),
+    CTRL("ctrl", Kind.KEY, 29, R.string.desktopJobCtrl, Group.KEYS, keyCode = 113),
+    ALT("alt", Kind.KEY, 56, R.string.desktopJobAlt, Group.KEYS, keyCode = 57),
+    SHIFT("shift", Kind.KEY, 42, R.string.desktopJobShift, Group.KEYS, keyCode = 59),
+    BACK("back", Kind.KEY, 158, R.string.desktopJobBack, Group.ANDROID, keyCode = 4),
+    HOME("home", Kind.KEY, 172, R.string.desktopJobHome, Group.ANDROID, keyCode = 3),
+    RECENTS("recents", Kind.KEY, 580, R.string.desktopJobRecents, Group.ANDROID, keyCode = 187),
     KEYBOARD("keyboard", Kind.APP, 0, R.string.desktopJobKeyboard, Group.ANDROID),
     ;
 
-    enum class Kind { NONE, MOUSE, KEY, WHEEL, APP }
+    enum class Kind { NONE, MOUSE, KEY, WHEEL, APP, HOLD }
 
     enum class Group(@StringRes val label: Int) {
         MOUSE(R.string.desktopGroupMouse),
@@ -126,8 +128,10 @@ enum class Acceleration(val id: String, val exponent: Float, @StringRes val labe
 /**
  * Everything desktop controls can be set to. [speed] and [scrollSpeed] scale the pointer and the wheel (1 = normal);
  * [deadZone] is the stick's travel that does nothing; [triggerThreshold] how far an analog trigger goes down before it
- * clicks; [holdStartSwitch]: holding Start switches desktop controls off and on, as holding Menu does on a Steam
- * Controller. [precision]: a button that slows the pointer down while held.
+ * clicks; [holdStartSwitch]: holding Start pauses desktop controls where they are and holding it again resumes them.
+ * [precision]: a button that slows the pointer down while held. [aynPointer]: AYN's own mouse mode moves the
+ * pointer with the sticks instead of Thor Tools. [bottomScreen]: the controller stays on the bottom screen, where the
+ * D-pad and [bottomButtons] work the app as a controller, while the pointer and the other buttons work the top screen.
  */
 data class DesktopLayout(
     val jobs: Map<DesktopControl, DesktopJob>,
@@ -141,16 +145,35 @@ data class DesktopLayout(
     val naturalScroll: Boolean = false,
     val horizontalScroll: Boolean = true,
     val triggerThreshold: Float = 0.35f,
-    val holdStartSwitch: Boolean = true,
+    val holdStartSwitch: Boolean = false,
     val precision: DesktopControl? = null,
+    val aynPointer: Boolean = false,
+    val bottomScreen: Boolean = false,
+    val bottomButtons: Set<DesktopControl> = DEFAULT_BOTTOM_BUTTONS,
 ) {
     fun job(control: DesktopControl): DesktopJob = jobs[control] ?: DesktopJob.NONE
 
     /** The buttons desktop controls take from the app while they are on. */
     val taken: Set<DesktopControl>
         get() = DesktopControl.entries.filter { control ->
-            job(control) != DesktopJob.NONE || control == precision || (control == DesktopControl.START && holdStartSwitch)
+            job(control) != DesktopJob.NONE ||
+                (control == precision && !aynPointer) ||
+                (control == DesktopControl.START && holdStartSwitch)
         }.toSet()
+
+    /** [taken] while the controller is kept on the bottom screen ([split]): the bottom screen's buttons stay its app's. */
+    fun takenFor(split: Boolean): Set<DesktopControl> = if (split) taken - bottomButtons else taken
+
+    /**
+     * What the left and right stick do now. With the controller kept on the bottom screen ([split]) the right stick
+     * points and the left one is the bottom screen's: Android turns the left stick into D-pad presses in the app with the
+     * controller, never the right one. While a Scroll while held button is down ([scrollHeld]) the pointer stick scrolls.
+     */
+    fun sticksFor(split: Boolean, scrollHeld: Boolean = false): Pair<StickRole, StickRole> {
+        val (left, right) = if (split) StickRole.NONE to StickRole.POINTER else leftStick to rightStick
+        fun StickRole.now() = if (scrollHeld && this == StickRole.POINTER) StickRole.SCROLL else this
+        return left.now() to right.now()
+    }
 
     fun with(control: DesktopControl, job: DesktopJob) = copy(jobs = jobs + (control to job))
 
@@ -187,8 +210,11 @@ data class DesktopLayout(
         add("ns=${naturalScroll.bit()}")
         add("hs=${horizontalScroll.bit()}")
         add("tt=${triggerThreshold.fmt()}")
-        add("hold=${holdStartSwitch.bit()}")
+        add("hp=${holdStartSwitch.bit()}")
         add("pr=${precision?.id ?: "none"}")
+        add("ap=${aynPointer.bit()}")
+        add("bs=${bottomScreen.bit()}")
+        add("bb2=${bottomButtons.sortedBy { it.ordinal }.joinToString(",") { it.id }}")
     }.joinToString(";")
 
     companion object {
@@ -200,6 +226,9 @@ data class DesktopLayout(
         const val MAX_DEAD_ZONE = 0.4f
         const val MIN_THRESHOLD = 0.1f
         const val MAX_THRESHOLD = 0.9f
+
+        /** Only the D-pad (always the app's) works the bottom screen until buttons are chosen for it. */
+        val DEFAULT_BOTTOM_BUTTONS = emptySet<DesktopControl>()
 
         /** Text from [encode]; anything missing or unknown comes from [DEFAULT], so older settings keep working. */
         fun decode(text: String?): DesktopLayout {
@@ -224,8 +253,12 @@ data class DesktopLayout(
                 naturalScroll = values["ns"]?.let { it == "1" } ?: base.naturalScroll,
                 horizontalScroll = values["hs"]?.let { it == "1" } ?: base.horizontalScroll,
                 triggerThreshold = values["tt"]?.toFloatOrNull()?.coerceIn(MIN_THRESHOLD, MAX_THRESHOLD) ?: base.triggerThreshold,
-                holdStartSwitch = values["hold"]?.let { it == "1" } ?: base.holdStartSwitch,
+                holdStartSwitch = values["hp"]?.let { it == "1" } ?: base.holdStartSwitch,
                 precision = if (values.containsKey("pr")) DesktopControl.byId(values["pr"]) else base.precision,
+                aynPointer = values["ap"]?.let { it == "1" } ?: base.aynPointer,
+                bottomScreen = values["bs"]?.let { it == "1" } ?: base.bottomScreen,
+                bottomButtons = values["bb2"]?.let { ids -> ids.split(',').mapNotNull(DesktopControl::byId).toSet() }
+                    ?: base.bottomButtons,
             )
         }
 

@@ -109,16 +109,24 @@ each other. Without OdinTools you won't see any of this: Thor Tools has every Od
 - The controller as a mouse and keyboard in browsers and other apps, like a Steam Controller in desktop mode: a
   pointer on one stick, scrolling on the other, clicks on the triggers and keys on the buttons, on the top screen
 - Every button's job can be changed (mouse buttons, Enter, Escape, Tab, arrows, Ctrl, Alt and more, Back, Home,
-  Recent apps, the on-screen keyboard, or left to the app), with presets, pointer and scroll speed, acceleration,
-  dead zone, a slow-down button and the trigger point
-- Only in the apps you choose, never in the ones you block (your emulators and games); hold Start to switch them off
-  and on, or use the "Desktop controls on/off" hotkey action or quick panel tile
+  Recent apps, the on-screen keyboard, scrolling while held, or left to the app), with presets, pointer and scroll
+  speed, acceleration, dead zone, a slow-down button and the trigger point, in three tabs
+- Only in the apps you choose, never in the ones you block (your emulators and games), and off on launchers and game
+  front ends (Cocoon, iiSU, Daijishō, ES-DE, Pegasus, Beacon) unless you want them there; they switch the moment you
+  change apps
+- Switch them fully on and off with their own hotkey (set in Desktop controls) or the quick panel tile; holding Start
+  can pause them where you are
+- Both screens: the controller can stay on the bottom screen, where the D-pad (and the buttons you choose) work the app
+  as a controller, while the right stick, the clicks and the other buttons work the top screen
+- The pointer can also be AYN's own mouse mode, switched on and off with desktop controls, the buttons keeping their
+  jobs
 - Hotkeys come first: a button a hotkey uses does the hotkey, and while you hold a button that starts hotkeys the
   pointer waits
 
 ### Two screens
 - Swap the apps between the screens, close the other screen's app, Home on the screen you're using or on both
-- Move the controller to the top or bottom screen, and lock it there
+- Move the controller to the top or bottom screen, and lock it there (locked to the top, it comes back up when an app
+  opens on the bottom screen)
 - Brightness per screen
 
 ### Power management

@@ -45,7 +45,16 @@ class RawInputClient(private val context: Context, private val executor: ShellEx
 
         fun onDesktopKeyboard() {}
 
+        /** Desktop controls clicked while keeping the controller on the bottom screen: it may have moved up. */
+        fun onDesktopClicked() {}
+
         fun onDesktopReady(on: Boolean) {}
+
+        /** The helper went away; whatever it was doing has stopped. */
+        fun onDisconnected() {}
+
+        /** The helper found the Thor's own pad, so [watchPad] works from now on. */
+        fun onPadFound() {}
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -127,6 +136,8 @@ class RawInputClient(private val context: Context, private val executor: ShellEx
         while (launches.isNotEmpty() && now - launches.first() > RELAUNCH_WINDOW_MS) launches.removeFirst()
         if (launches.size >= MAX_LAUNCHES_PER_WINDOW) {
             state = "stopped: the helper keeps exiting"
+            mainHandler.removeCallbacks(relaunch)
+            mainHandler.postDelayed(relaunch, launches.first() + RELAUNCH_WINDOW_MS - now + RELAUNCH_DELAY_MS)
             return
         }
         lastLaunch = now
@@ -134,7 +145,11 @@ class RawInputClient(private val context: Context, private val executor: ShellEx
         state = "starting"
 
         val name = "thortools.input.${UUID.randomUUID()}"
-        val serverSocket = LocalServerSocket(name)
+        val serverSocket = runCatching { LocalServerSocket(name) }.getOrElse {
+            state = "couldn't open the helper's socket"
+            scheduleRelaunch()
+            return
+        }
         server = serverSocket
         Thread({ acceptAndRead(serverSocket) }, "input-client").apply { isDaemon = true }.start()
         Thread({ startHelper(name) }, "input-launch").apply { isDaemon = true }.start()
@@ -151,13 +166,19 @@ class RawInputClient(private val context: Context, private val executor: ShellEx
 
     private fun startHelper(socketName: String) {
         val script = File(context.cacheDir, "input-helper-${SystemClock.elapsedRealtime()}.sh")
+        // PServer runs one call at a time, not always in order: a script that waited past its launch's time must not kill
+        // the helper a newer launch started. Only the newest launch's script goes on.
+        val newest = File(context.cacheDir, NEWEST_LAUNCH_FILE)
+        newest.writeText(socketName)
+        newest.setReadable(true, false)
         // PServer reaps its shell as soon as it returns, which would kill a child that hasn't been reparented yet. A helper
         // left over from before (an update, a crash) would keep its layers on the screens, so it goes first: found by a
         // pattern only a helper's own command line matches, never this shell (`pkill -f` with the bare class name can
         // kill the shell itself, and then no helper starts at all).
         val helper = RawInputHelper::class.java.name
         script.writeText(
-            "for p in \$(pgrep -f '^app_process /system/bin $helper '); do [ \"\$p\" = \"\$\$\" ] || kill -9 \"\$p\"; done\n" +
+            "[ \"\$(cat ${newest.absolutePath})\" = \"$socketName\" ] || exit 0\n" +
+                "for p in \$(pgrep -f '^app_process /system/bin $helper '); do [ \"\$p\" = \"\$\$\" ] || kill -9 \"\$p\"; done\n" +
                 "CLASSPATH=${context.applicationInfo.sourceDir} app_process /system/bin $helper " +
                 "$socketName ${context.applicationInfo.uid} > /dev/null 2>&1 &\nsleep 1\n",
         )
@@ -177,7 +198,7 @@ class RawInputClient(private val context: Context, private val executor: ShellEx
         } catch (_: Exception) {
             return
         }
-        if (client.peerCredentials.uid != 0) {
+        if (runCatching { client.peerCredentials.uid }.getOrNull() != 0) {
             client.close()
             state = "refused a helper that isn't root"
             closeAll()
@@ -194,6 +215,12 @@ class RawInputClient(private val context: Context, private val executor: ShellEx
         socket = client
         devices = emptyList()
         state = "connected"
+        // Stopped while this helper was connecting: it must not be left running with nobody to send it "bye".
+        if (!wanted) {
+            sendLine("bye")
+            closeAll()
+            return
+        }
         mainHandler.post { listener.onConnected() }
         try {
             client.inputStream.bufferedReader().forEachLine { line ->
@@ -206,11 +233,13 @@ class RawInputClient(private val context: Context, private val executor: ShellEx
                     is HelperMessage.Areas -> mainHandler.post { listener.onAreas(message.displayId, message.percent) }
                     is HelperMessage.DesktopPaused -> mainHandler.post { listener.onDesktopPaused(message.paused) }
                     HelperMessage.DesktopKeyboard -> mainHandler.post { listener.onDesktopKeyboard() }
+                    HelperMessage.DesktopClicked -> mainHandler.post { listener.onDesktopClicked() }
                     is HelperMessage.DesktopReady -> mainHandler.post { listener.onDesktopReady(message.on) }
                     is HelperMessage.DesktopProblem -> Log.w(TAG, "desktop controls: ${message.text}")
-                    is HelperMessage.Status ->
-                        devices =
-                            (devices.filterNot { it.startsWith(message.text.substringBefore(' ')) } + message.text)
+                    is HelperMessage.Status -> {
+                        devices = devices.filterNot { it.startsWith(message.text.substringBefore(' ')) } + message.text
+                        if (message.text.startsWith(PAD_SLOT)) mainHandler.post { listener.onPadFound() }
+                    }
                     is HelperMessage.Result -> pending.remove(message.id)?.let { callback ->
                         mainHandler.post { callback(message.ok, message.text) }
                     }
@@ -222,6 +251,7 @@ class RawInputClient(private val context: Context, private val executor: ShellEx
         }
         mainHandler.post {
             pending.keys.toList().forEach { id -> pending.remove(id)?.invoke(false, "helper stopped") }
+            listener.onDisconnected()
         }
         closeAll()
         if (wanted) {
@@ -255,6 +285,7 @@ class RawInputClient(private val context: Context, private val executor: ShellEx
     private companion object {
         const val TAG = "RawInputClient"
         const val PAD_SLOT = "pad "
+        const val NEWEST_LAUNCH_FILE = "input-helper-newest"
         const val LAUNCH_DEBOUNCE_MS = 3000L
         const val RELAUNCH_DELAY_MS = 3200L
         const val RELAUNCH_WINDOW_MS = 60_000L

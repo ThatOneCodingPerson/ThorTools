@@ -8,6 +8,7 @@ import android.hardware.display.DisplayManager
 import android.os.Handler
 import android.os.Looper
 import android.util.DisplayMetrics
+import android.view.Display
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -20,11 +21,32 @@ import kotlinx.coroutines.launch
  * is tapped with an accessibility gesture and removed right after; whatever focusable window is on top of that
  * screen then has the controller. The result is checked with `dumpsys input` and retried a few times. The newest move,
  * from any FocusMover, wins: an older one still under way neither taps nor retries, and reports false.
+ *
+ * Android also gives the keys back to the newest app once the overlay is gone: after an app started on the bottom
+ * screen, a tap alone moves them to the top one only for a moment. So a move to the top screen first has [front] bring
+ * that screen's own app to the front (through the root helper), waiting for it only briefly. Never for the bottom
+ * screen: a launcher there runs as an ordinary task, and bringing it forward brings the top screen's home forward too.
  */
-class FocusMover(private val service: AccessibilityService, private val executor: ShellExecutor, private val scope: CoroutineScope) {
+class FocusMover(
+    private val service: AccessibilityService,
+    private val executor: ShellExecutor,
+    private val scope: CoroutineScope,
+    private val front: ((displayId: Int, onDone: () -> Unit) -> Unit)? = null,
+) {
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    fun moveTo(displayId: Int, onDone: (Boolean) -> Unit = {}) = tryMove(displayId, ++latestMove, 1, onDone)
+    fun moveTo(displayId: Int, onDone: (Boolean) -> Unit = {}) {
+        val move = ++latestMove
+        val front = front?.takeIf { displayId == Display.DEFAULT_DISPLAY } ?: return tryMove(displayId, move, 1, onDone)
+        var started = false
+        val start = Runnable {
+            if (started) return@Runnable
+            started = true
+            tryMove(displayId, move, 1, onDone)
+        }
+        mainHandler.postDelayed(start, FRONT_WAIT_MS)
+        front(displayId) { mainHandler.post(start) }
+    }
 
     private fun tryMove(displayId: Int, move: Int, attempt: Int, onDone: (Boolean) -> Unit) {
         if (move != latestMove) return onDone(false)
@@ -113,5 +135,6 @@ class FocusMover(private val service: AccessibilityService, private val executor
         const val SAFETY_MS = 800L
         const val RETRY_MS = 200L
         const val MAX_ATTEMPTS = 4
+        const val FRONT_WAIT_MS = 400L
     }
 }

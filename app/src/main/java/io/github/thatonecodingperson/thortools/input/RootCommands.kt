@@ -3,11 +3,11 @@ package io.github.thatonecodingperson.thortools.input
 import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.app.ActivityOptions
-import android.hardware.input.InputManager
 import android.os.IBinder
 import android.os.Parcel
 import android.os.SystemClock
-import android.view.InputEvent
+import android.view.InputDevice
+import android.view.KeyCharacterMap
 import android.view.KeyEvent
 import io.github.thatonecodingperson.thortools.leds.LedFrame
 import io.github.thatonecodingperson.thortools.leds.LedLook
@@ -32,6 +32,7 @@ internal object RootCommands {
         "close" -> close(packageName = args[0], displayId = args[1].toInt())
         "cleanup" -> cleanup(keep = BackgroundTasks.decodeKeep(args.getOrNull(0)))
         "front" -> front(packageName = args[0], displayId = args[1].toInt())
+        "fronttop" -> frontTop(displayId = args[0].toInt())
         "key" -> key(
             deviceId = args[0].toInt(),
             keyCode = args[1].toInt(),
@@ -150,14 +151,34 @@ internal object RootCommands {
     }
 
     /**
+     * Brings the topmost task on [displayId] to the front: that screen's app becomes the newest, which Android gives the
+     * keys to (a window focused for a moment loses them again to an app started later on the other screen). A launcher
+     * is never brought back from the recent tasks, not even its task on the other screen, which is an ordinary one
+     * (Android then brings the top screen's home forward and drops the other screen's): that screen gets Home instead, as
+     * its Home button does.
+     */
+    private fun frontTop(displayId: Int): String {
+        val tasks = Tasks.list()
+        // The one showing: the list is by recent use, so a hidden task can come first.
+        val task = tasks.firstOrNull { it.displayId == displayId && it.visible } ?: return "none"
+        val launchers = tasks.filter { it.home }.mapNotNull { it.packageName }.toSet()
+        if (task.home || task.packageName in launchers) {
+            key(KeyCharacterMap.VIRTUAL_KEYBOARD, KeyEvent.KEYCODE_HOME, 0, InputDevice.SOURCE_KEYBOARD, displayId, 0L)
+            return "home"
+        }
+        Tasks.front(task.taskId, displayId)
+        return "front ${task.taskId}"
+    }
+
+    /**
      * Presses and releases a key, for one display when [displayId] >= 0 (Home on one screen). Root may inject input.
      * Android gives every injected key the virtual keyboard's device id, whatever [deviceId] says.
      */
     private fun key(deviceId: Int, keyCode: Int, scanCode: Int, source: Int, displayId: Int, holdMs: Long): String {
         val downTime = SystemClock.uptimeMillis()
-        Input.inject(KeyEvent(downTime, downTime, KeyEvent.ACTION_DOWN, keyCode, 0, 0, deviceId, scanCode, 0, source), displayId)
+        InputInject.inject(KeyEvent(downTime, downTime, KeyEvent.ACTION_DOWN, keyCode, 0, 0, deviceId, scanCode, 0, source), displayId)
         if (holdMs > 0) Thread.sleep(holdMs)
-        Input.inject(
+        InputInject.inject(
             KeyEvent(downTime, SystemClock.uptimeMillis(), KeyEvent.ACTION_UP, keyCode, 0, 0, deviceId, scanCode, 0, source),
             displayId,
         )
@@ -182,6 +203,10 @@ internal object RootCommands {
         private val taskInfo = Class.forName("android.app.TaskInfo")
         private val displayField = runCatching { taskInfo.getDeclaredField("displayId").apply { isAccessible = true } }.getOrNull()
         private val visibleField = runCatching { taskInfo.getDeclaredField("isVisible").apply { isAccessible = true } }.getOrNull()
+        private val activityType = runCatching { taskInfo.getMethod("getActivityType") }.getOrNull()
+
+        /** Home and Recent apps' own tasks (`WindowConfiguration.ACTIVITY_TYPE_HOME` and `_RECENTS`). */
+        private fun isHome(task: Any): Boolean = (activityType?.invoke(task) as? Int) in setOf(ACTIVITY_HOME, ACTIVITY_RECENTS)
 
         /** `getTasks` changes its parameters between Android versions: the first int is the count, other ints mean "all". */
         fun list(): List<TaskSnapshot> {
@@ -202,6 +227,7 @@ internal object RootCommands {
                         displayId = displayField?.getInt(task) ?: 0,
                         visible = visibleField?.getBoolean(task) ?: true,
                         packageName = (task.topActivity ?: task.baseActivity)?.packageName,
+                        home = isHome(task),
                     )
                 }
         }
@@ -243,27 +269,8 @@ internal object RootCommands {
 
         private const val RECENT_MAX = 50
         private const val RECENT_IGNORE_UNAVAILABLE = 2
-    }
-
-    private object Input {
-        // Android 14 moved the injector to InputManagerGlobal; the Thor's Android 13 still has InputManager.getInstance().
-        private val manager: Any by lazy {
-            runCatching { Class.forName("android.hardware.input.InputManagerGlobal").getMethod("getInstance").invoke(null) }.getOrNull()
-                ?: checkNotNull(InputManager::class.java.getMethod("getInstance").invoke(null))
-        }
-        private val injectMethod by lazy {
-            manager.javaClass.getMethod("injectInputEvent", InputEvent::class.java, Int::class.javaPrimitiveType)
-        }
-
-        // Hidden, so reflected: a key for one display (Home on the bottom screen goes to the bottom screen's home).
-        private val setDisplayId by lazy { InputEvent::class.java.getMethod("setDisplayId", Int::class.javaPrimitiveType) }
-
-        fun inject(event: InputEvent, displayId: Int) {
-            if (displayId >= 0) setDisplayId.invoke(event, displayId)
-            injectMethod.invoke(manager, event, INJECT_ASYNC)
-        }
-
-        private const val INJECT_ASYNC = 0
+        private const val ACTIVITY_HOME = 2
+        private const val ACTIVITY_RECENTS = 3
     }
 
     private object Displays {

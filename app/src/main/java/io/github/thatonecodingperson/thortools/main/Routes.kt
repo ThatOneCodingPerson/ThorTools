@@ -6,6 +6,7 @@ object Routes {
     const val HOTKEYS = "controller/hotkeys"
     const val CONTROLLER_MODES = "controller/modes"
     const val DESKTOP = "controller/desktop"
+    const val DESKTOP_HOTKEY = "controller/desktop/hotkey"
     const val PROFILES = "profiles"
     const val CHARGING = "charging"
     const val LID = "charging/lid"

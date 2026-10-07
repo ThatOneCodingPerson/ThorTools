@@ -30,6 +30,77 @@ class DesktopModeTest {
         assertFalse(DesktopMode.wanted(settings.copy(enabled = false), firefox, panelOpen = false, topScreen = true))
     }
 
+    private val bothScreens =
+        settings.copy(layout = DesktopLayout.DEFAULT.copy(bottomScreen = true, bottomButtons = setOf(DesktopControl.A)))
+    private val holdStart = DesktopLayout.DEFAULT.copy(holdStartSwitch = true)
+
+    private fun situation(
+        controllerOnTop: Boolean = false,
+        topApp: String? = firefox,
+        bottomApp: String? = null,
+        bottomShown: Boolean = true,
+        panelOpen: Boolean = false,
+        topLocked: Boolean = false,
+    ) = DesktopSituation(controllerOnTop, topApp, bottomApp, bottomShown, panelOpen, topLocked = topLocked)
+
+    @Test
+    fun `keeping the controller on the bottom screen, they work for the top screen's app wherever the controller is`() {
+        assertEquals(DesktopDecision(on = true, split = true), DesktopMode.decide(bothScreens, situation()))
+        assertEquals(DesktopDecision(on = true, split = true), DesktopMode.decide(bothScreens, situation(controllerOnTop = true)))
+        // The panel stops them, but the controller still belongs on the bottom screen when it closes.
+        assertEquals(DesktopDecision(on = false, split = true), DesktopMode.decide(bothScreens, situation(panelOpen = true)))
+    }
+
+    @Test
+    fun `the top lock, no bottom screen or a never-in app below make them work only on the top screen again`() {
+        val onTop = DesktopDecision(on = true, split = false)
+        val off = DesktopDecision.OFF.copy()
+        assertEquals(onTop, DesktopMode.decide(bothScreens, situation(controllerOnTop = true, topLocked = true)))
+        assertEquals(onTop, DesktopMode.decide(bothScreens, situation(controllerOnTop = true, bottomShown = false)))
+        assertEquals(onTop, DesktopMode.decide(bothScreens, situation(controllerOnTop = true, bottomApp = retroArch)))
+        assertEquals(off, DesktopMode.decide(bothScreens, situation(bottomApp = retroArch)))
+    }
+
+    @Test
+    fun `a never-in app on the top screen stops them, the controller kept below or not`() {
+        assertEquals(DesktopDecision.OFF, DesktopMode.decide(bothScreens, situation(topApp = retroArch)))
+        assertEquals(DesktopDecision.OFF, DesktopMode.decide(settings, situation(controllerOnTop = true, topApp = retroArch)))
+    }
+
+    @Test
+    fun `without the choice they work only while the controller is on the top screen`() {
+        assertEquals(DesktopDecision(on = true, split = false), DesktopMode.decide(settings, situation(controllerOnTop = true)))
+        assertEquals(DesktopDecision.OFF, DesktopMode.decide(settings, situation()))
+    }
+
+    @Test
+    fun `the helper hears when the controller is kept below, and the bottom screen's buttons are not taken then`() {
+        val mode = DesktopMode { sent += it }
+        mode.configure(bothScreens)
+        sent.clear()
+        mode.update(DesktopMode.decide(bothScreens, situation()))
+        mode.onReady(true)
+        assertEquals(listOf("split 1", "on"), sent)
+        assertFalse(mode.takes(DesktopControl.A))
+        assertTrue(mode.takes(DesktopControl.R2))
+        sent.clear()
+        mode.resend()
+        assertEquals(listOf("config ${bothScreens.layout.encode()}", "starts ", "split 1", "on"), sent)
+    }
+
+    @Test
+    fun `off on a home screen or a front end on the top screen, the controller kept below or not`() {
+        assertEquals(DesktopDecision.OFF, DesktopMode.decide(settings, situation(controllerOnTop = true, topApp = null)))
+        val cocoon = situation(controllerOnTop = true, topApp = "rip.moth.cocoonshell")
+        assertEquals(DesktopDecision.OFF, DesktopMode.decide(settings, cocoon))
+        assertEquals(DesktopDecision.OFF, DesktopMode.decide(bothScreens, situation(topApp = "org.es_de.frontend")))
+        assertEquals(DesktopDecision.OFF, DesktopMode.decide(settings, situation(controllerOnTop = true, topApp = "com.example.iisu")))
+        // With the switch off they work there as anywhere.
+        val anywhere = settings.copy(offOnFrontEnds = false)
+        val onTop = DesktopDecision(on = true, split = false)
+        assertEquals(onTop, DesktopMode.decide(anywhere, situation(controllerOnTop = true, topApp = null)))
+    }
+
     @Test
     fun `the helper hears only of changes`() {
         val mode = DesktopMode { sent += it }
@@ -117,12 +188,28 @@ class DesktopModeTest {
     }
 
     @Test
-    fun `while paused only Start is taken, to switch them back on`() {
-        val mode = onInFirefox()
+    fun `while paused nothing is taken, and the helper hears Start so holding it switches them back on`() {
+        val mode = onInFirefox(holdStart)
         mode.paused = true
-        assertTrue(mode.takes(DesktopControl.START))
+        assertFalse(mode.takes(DesktopControl.START))
         assertFalse(mode.takes(DesktopControl.A))
-        assertFalse(mode.takes(DesktopControl.R2))
+        assertFalse(mode.key(DesktopControl.A, down = true, repeat = false, startsCombos = false))
+        assertFalse(mode.key(DesktopControl.START, down = true, repeat = false, startsCombos = false))
+        assertFalse(mode.key(DesktopControl.START, down = true, repeat = true, startsCombos = false))
+        // Switched back on while held: the release is still the app's, which had the press.
+        mode.paused = false
+        assertFalse(mode.key(DesktopControl.START, down = false, repeat = false, startsCombos = false))
+        assertEquals(listOf("key start 1", "key start 0"), sent)
+    }
+
+    @Test
+    fun `while paused, Start held for a combo doesn't switch them back on`() {
+        val mode = onInFirefox(holdStart)
+        mode.paused = true
+        mode.key(DesktopControl.START, down = true, repeat = false, startsCombos = true)
+        mode.comboRan(PadButton.START)
+        assertFalse(mode.key(DesktopControl.START, down = false, repeat = false, startsCombos = true))
+        assertEquals(listOf("key start 1", "key start 0"), sent)
     }
 
     @Test
@@ -143,6 +230,80 @@ class DesktopModeTest {
         mode.startsHotkeys(setOf(DesktopControl.L1, DesktopControl.R2))
         mode.startsHotkeys(setOf(DesktopControl.L1, DesktopControl.R2))
         assertEquals(listOf("starts l1,r2"), sent)
+    }
+
+    @Test
+    fun `devices that didn't come up are tried again a few times, then left until the next change`() {
+        val mode = onInFirefox()
+        assertTrue(mode.onReady(false))
+        assertFalse(mode.engaged)
+        mode.update(firefox, panelOpen = false, topScreen = true)
+        assertEquals(listOf("on"), sent)
+        assertTrue(mode.onReady(false))
+        mode.update(firefox, panelOpen = false, topScreen = true)
+        assertTrue(mode.onReady(false))
+        mode.update(firefox, panelOpen = false, topScreen = true)
+        assertFalse(mode.onReady(false))
+        // Once up, the count starts again.
+        mode.update(firefox, panelOpen = false, topScreen = true)
+        assertFalse(mode.onReady(true))
+        assertTrue(mode.ready)
+    }
+
+    @Test
+    fun `switched off and on again quickly, only the answer to the newest request counts`() {
+        val mode = onInFirefox()
+        mode.update(firefox, panelOpen = true, topScreen = true)
+        mode.update(firefox, panelOpen = false, topScreen = true)
+        // The answers to off and to on again, in order.
+        assertFalse(mode.onReady(false))
+        assertTrue(mode.engaged)
+        assertFalse(mode.onReady(true))
+        assertTrue(mode.ready)
+        assertTrue(mode.takes(DesktopControl.A))
+    }
+
+    @Test
+    fun `a failure the helper reports on its own still counts`() {
+        val mode = onInFirefox()
+        assertTrue(mode.onReady(false))
+        assertFalse(mode.ready)
+    }
+
+    @Test
+    fun `the answer to off is no failure`() {
+        val mode = onInFirefox()
+        mode.update(firefox, panelOpen = true, topScreen = true)
+        assertFalse(mode.onReady(false))
+    }
+
+    @Test
+    fun `with the helper gone nothing is taken, and what was pressed is swallowed on release`() {
+        val mode = onInFirefox()
+        mode.key(DesktopControl.A, down = true, repeat = false, startsCombos = false)
+        mode.helperGone()
+        assertFalse(mode.takes(DesktopControl.A))
+        sent.clear()
+        assertTrue(mode.key(DesktopControl.A, down = false, repeat = false, startsCombos = false))
+        assertEquals(emptyList<String>(), sent)
+    }
+
+    @Test
+    fun `a pad that went away lets go of what it held`() {
+        val mode = onInFirefox()
+        mode.key(DesktopControl.R3, down = true, repeat = false, startsCombos = false)
+        mode.key(DesktopControl.L1, down = true, repeat = false, startsCombos = true)
+        sent.clear()
+        mode.padGone()
+        assertEquals(listOf("key r3 0"), sent)
+    }
+
+    @Test
+    fun `a canceled release of a held-back button is no tap`() {
+        val mode = onInFirefox()
+        mode.key(DesktopControl.L1, down = true, repeat = false, startsCombos = true)
+        assertTrue(mode.key(DesktopControl.L1, down = false, repeat = false, startsCombos = true, canceled = true))
+        assertEquals(emptyList<String>(), sent)
     }
 
     @Test

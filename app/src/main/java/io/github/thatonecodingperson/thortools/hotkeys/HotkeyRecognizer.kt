@@ -70,6 +70,9 @@ class HotkeyRecognizer(hotkeys: List<Hotkey>, private val timing: Timing = Timin
     private val passedDown = mutableSetOf<PadButton>()
     private val swallowUp = mutableSetOf<PadButton>()
 
+    /** A press is still being counted: a button or combo held, or taps waiting for the next one. */
+    val busy: Boolean get() = first != null || combo != null || taps != null
+
     fun onKey(button: PadButton, down: Boolean, repeat: Boolean, time: Long, canceled: Boolean = false): Step {
         val effects = mutableListOf<Effect>()
         val consume = when {
@@ -130,13 +133,15 @@ class HotkeyRecognizer(hotkeys: List<Hotkey>, private val timing: Timing = Timin
 
     /**
      * A held button's release may never come: AYN re-creates its pad on a layout switch and on sleep, and the new pad
-     * never had the key down. Forgets what is held, so no later press counts as its combo; a release that does come is
-     * still swallowed (Android takes a lone Home release for a Home press). Waiting taps stay.
+     * never had the key down. Forgets what is held, so no later press counts as its combo, and the game's own buttons
+     * passed on (one of them held would keep giving Back to the game); a release that does come is still swallowed
+     * (Android takes a lone Home release for a Home press). Waiting taps stay.
      */
     fun forgetHeld() {
         swallowUp += heldReleases()
         first = null
         combo = null
+        passedDown.clear()
     }
 
     /** Releases still to be swallowed, for the recognizer that replaces this one (the hotkey list changed). */

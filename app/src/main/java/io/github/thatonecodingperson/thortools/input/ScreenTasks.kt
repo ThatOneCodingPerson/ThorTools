@@ -3,8 +3,8 @@ package io.github.thatonecodingperson.thortools.input
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
-/** One running task as the root input helper sees it. */
-data class TaskSnapshot(val taskId: Int, val displayId: Int, val visible: Boolean, val packageName: String?)
+/** One running task as the root input helper sees it; [home] for a launcher's (or Recent apps') own task. */
+data class TaskSnapshot(val taskId: Int, val displayId: Int, val visible: Boolean, val packageName: String?, val home: Boolean = false)
 
 /**
  * "Close background apps": like swiping each app away in Recent apps, for every task that isn't showing on a screen.

@@ -327,6 +327,12 @@ object HotkeyList {
         }
     }
 
+    /** Actions whose hotkeys are set on their own screen (Desktop controls' on/off), not in the Hotkeys menu. */
+    val SET_ELSEWHERE = setOf(ThorAction.TOGGLE_DESKTOP)
+
+    /** The hotkeys the Hotkeys menu lists: all but those set elsewhere, which still count and still clash. */
+    fun listed(hotkeys: List<Hotkey>): List<Hotkey> = hotkeys.filterNot { it.action in SET_ELSEWHERE }
+
     /** The hotkeys that count in [app]: its own, and every hotkey for all apps whose trigger it has no own one for. */
     fun forApp(hotkeys: List<Hotkey>, app: String?): List<Hotkey> {
         val own = if (app == null) emptyList() else hotkeys.filter { app in it.apps }

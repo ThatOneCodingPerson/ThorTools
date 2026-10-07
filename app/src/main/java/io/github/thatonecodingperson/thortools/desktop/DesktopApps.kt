@@ -36,4 +36,22 @@ data class DesktopApps(val onlyIn: Set<String> = emptySet(), val neverIn: Set<St
     }
 
     private fun with(side: Side, apps: Set<String>) = if (side == Side.ONLY_IN) copy(onlyIn = apps) else copy(neverIn = apps)
+
+    companion object {
+        /**
+         * Game front ends and launchers: the ones known by package, and any whose package names iiSU (its package isn't
+         * published). Every app that can be a home screen counts too, but those are found from Android itself.
+         */
+        private val FRONT_ENDS = setOf(
+            "rip.moth.cocoonshell",
+            "com.odin.odinlauncher",
+            "com.magneticchen.daijishou",
+            "com.radikal.gamelauncher",
+            "org.es_de.frontend",
+            "org.es_de.frontend.galaxy",
+            "org.pegasus_frontend.android",
+        )
+
+        fun isFrontEnd(packageName: String): Boolean = packageName in FRONT_ENDS || "iisu" in packageName.lowercase()
+    }
 }

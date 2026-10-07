@@ -1,5 +1,9 @@
 package io.github.thatonecodingperson.thortools.input
 
+import android.os.SystemClock
+import android.view.InputDevice
+import android.view.KeyCharacterMap
+import android.view.KeyEvent
 import io.github.thatonecodingperson.thortools.desktop.DesktopControl
 import io.github.thatonecodingperson.thortools.desktop.DesktopJob
 import io.github.thatonecodingperson.thortools.desktop.DesktopLayout
@@ -22,7 +26,9 @@ import kotlin.math.max
  * over (`key`, `tap`: what its hotkeys passed on) become clicks and keys. The pad itself is never grabbed. While the app
  * says a hotkey may be under way (`hold`), the sticks and triggers stay still, and one still pushed afterwards waits
  * until it is let go. The devices go away with the tool, which ends when its input closes, so a helper that dies leaves
- * nothing behind.
+ * nothing behind. While the app keeps the controller on the bottom screen (`split`), keys are sent to the top screen
+ * itself instead (Thor Tools' keyboard would type where the controller is), and every click is told to the app, which
+ * then brings the controller back down.
  */
 object DesktopEngine {
     private const val MOUSE = 1
@@ -58,6 +64,7 @@ object DesktopEngine {
     private var on = false
     private var paused = false
     private var holding = false
+    private var split = false
     private var startsHotkeys = emptySet<DesktopControl>()
 
     // Written by the pad reader, which must never wait for the engine: the hotkeys' D-pad and stick combos come from it.
@@ -84,9 +91,19 @@ object DesktopEngine {
     private val mouseEvents = mutableListOf<Int>()
     private val keyEvents = mutableListOf<Int>()
 
+    /** Keys for the top screen while [split], sent at the next flush, and when each one went down. */
+    private val topKeys = mutableListOf<Pair<DesktopJob, Boolean>>()
+    private val topKeysDownAt = mutableMapOf<DesktopJob, Long>()
+
     /** Messages for the app, sent once [lock] is let go: sending may end the helper, which needs the lock to stop. */
     private val outbox = mutableListOf<HelperMessage>()
     private val problemsTold = mutableSetOf<String>()
+
+    // Messages leave in the order they were made, whichever thread delivers them.
+    private val deliverLock = Any()
+
+    /** When the last tick ran, so moves follow the time that really passed. */
+    private var lastTick = 0L
 
     /** The pad as it is now, given by the helper. */
     var sample: () -> PadSample = { PadSample() }
@@ -95,8 +112,8 @@ object DesktopEngine {
     var report: (HelperMessage) -> Unit = {}
 
     /**
-     * From the app: `config <layout>`, `on`, `off`, `stop`, `key <control> 1|0`, `tap <control>`, `hold 1|0` and
-     * `starts <control,...>`.
+     * From the app: `config <layout>`, `on`, `off`, `stop`, `key <control> 1|0`, `tap <control>`, `hold 1|0`,
+     * `starts <control,...>` and `split 1|0`.
      */
     fun command(line: String) {
         try {
@@ -112,6 +129,13 @@ object DesktopEngine {
             "config" -> {
                 releaseAll()
                 layout = DesktopLayout.decode(words.getOrNull(1))
+                startButton.release()
+                // Without switching by Start, a pause could never end.
+                if (paused && !layout.holdStartSwitch) {
+                    paused = false
+                    outbox += HelperMessage.DesktopPaused(false)
+                }
+                quietAll()
                 flush()
             }
             "on" -> {
@@ -149,7 +173,23 @@ object DesktopEngine {
                 setHold(words.getOrNull(1) == "1")
                 flush()
             }
-            "starts" -> startsHotkeys = words.getOrNull(1).orEmpty().split(',').mapNotNull(DesktopControl::byId).toSet()
+            "split" -> {
+                // Whatever is down goes up the way it went down.
+                releaseAll()
+                flush()
+                split = words.getOrNull(1) == "1"
+            }
+            "starts" -> {
+                val starts = words.getOrNull(1).orEmpty().split(',').mapNotNull(DesktopControl::byId).toSet()
+                // A trigger handed to the app while its click is down lets go now.
+                (starts - startsHotkeys).forEach { control ->
+                    val button = triggerButton(control) ?: return@forEach
+                    release(control)
+                    button.update(0f, layout.triggerThreshold)
+                }
+                startsHotkeys = starts
+                flush()
+            }
         }
     }
 
@@ -162,6 +202,7 @@ object DesktopEngine {
         switchOff()
         paused = false
         holding = false
+        split = false
         flush()
         closeTool()
     }
@@ -169,6 +210,8 @@ object DesktopEngine {
     private fun switchOff() {
         on = false
         releaseAll()
+        // Their releases won't come once the app stops handing buttons over.
+        down.clear()
         // A Start held when desktop controls went off must not count as held when they come back.
         startButton.release()
     }
@@ -190,12 +233,17 @@ object DesktopEngine {
     private fun key(control: DesktopControl, pressed: Boolean) {
         if (pressed) down += control else down -= control
         // The triggers click from their axes on each tick, unless they start hotkeys (then the app sends a tap).
-        if (control == DesktopControl.L2 || control == DesktopControl.R2) return
+        if (control == DesktopControl.L2 || control == DesktopControl.R2) {
+            if (!pressed && control in startsHotkeys) release(control)
+            return
+        }
         if (control == DesktopControl.START && layout.holdStartSwitch) {
             if (pressed) {
                 if (on) startButton.press(now())
-            } else if (startButton.release() && on && !paused) {
-                tap(control)
+            } else {
+                // A hold the ticker hasn't seen yet is still a hold, not a tap.
+                if (on && startButton.held(now())) togglePause()
+                if (startButton.release() && on && !paused) tap(control)
             }
             return
         }
@@ -288,6 +336,13 @@ object DesktopEngine {
                 synchronized(lock) {
                     ticker = null
                     problem("ticker", e)
+                    // Nothing moves the pointer now: let go of everything and tell the app, which switches on again.
+                    runCatching {
+                        releaseAll()
+                        flush()
+                    }
+                    on = false
+                    outbox += HelperMessage.DesktopReady(false)
                 }
                 deliver()
             }
@@ -295,23 +350,43 @@ object DesktopEngine {
         thread.isDaemon = true
         thread.name = "desktop-controls"
         ticker = thread
-        thread.start()
+        lastTick = now()
+        try {
+            thread.start()
+        } catch (e: Throwable) {
+            ticker = null
+            problem("ticker", e)
+        }
+    }
+
+    private fun togglePause() {
+        paused = !paused
+        releaseAll()
+        if (!paused) quietAll()
+        outbox += HelperMessage.DesktopPaused(paused)
     }
 
     private fun tick(now: Long) {
-        if (layout.holdStartSwitch && startButton.held(now)) {
-            paused = !paused
-            releaseAll()
-            if (!paused) quietAll()
-            outbox += HelperMessage.DesktopPaused(paused)
-        }
+        val dt = (now - lastTick).coerceIn(1L, MAX_TICK_GAP_MS)
+        lastTick = now
+        if (layout.holdStartSwitch && startButton.held(now)) togglePause()
         if (paused || holding) return flush()
         val pad = sample()
         trigger(DesktopControl.L2, leftTrigger, leftTriggerWait, max(pad.leftTrigger, if (l2Key) 1f else 0f))
         trigger(DesktopControl.R2, rightTrigger, rightTriggerWait, max(pad.rightTrigger, if (r2Key) 1f else 0f))
-        stick(layout.rightStick, pad.rightX, pad.rightY, rightStickWait)
-        stick(layout.leftStick, pad.leftX, pad.leftY, leftStickWait)
+        // With AYN's mouse mode moving the pointer, both sticks are AYN's.
+        if (!layout.aynPointer) {
+            val (left, right) = layout.sticksFor(split, scrollHeld = DesktopJob.SCROLL_HOLD in sentDown.values)
+            stick(right, pad.rightX, pad.rightY, rightStickWait, dt)
+            stick(left, pad.leftX, pad.leftY, leftStickWait, dt)
+        }
         flush()
+    }
+
+    private fun triggerButton(control: DesktopControl): TriggerButton? = when (control) {
+        DesktopControl.L2 -> leftTrigger
+        DesktopControl.R2 -> rightTrigger
+        else -> null
     }
 
     private fun trigger(control: DesktopControl, button: TriggerButton, wait: ReleaseWait, value: Float) {
@@ -321,21 +396,21 @@ object DesktopEngine {
         if (button.down) press(control) else release(control)
     }
 
-    private fun stick(role: StickRole, x: Float, y: Float, wait: ReleaseWait) {
+    private fun stick(role: StickRole, x: Float, y: Float, wait: ReleaseWait, dt: Long) {
         if (role == StickRole.NONE) return
         if (!wait.passes(hypot(x, y) > layout.deadZone)) return
         when (role) {
             StickRole.POINTER -> {
                 val (vx, vy) = PointerMotion.velocity(x, y, layout, precise())
-                val dx = stepsFor(vx, TICK_MS, moveX)
-                val dy = stepsFor(vy, TICK_MS, moveY)
+                val dx = stepsFor(vx, dt, moveX)
+                val dy = stepsFor(vy, dt, moveY)
                 if (dx != 0) mouseEvents += listOf(EV_REL, REL_X, dx)
                 if (dy != 0) mouseEvents += listOf(EV_REL, REL_Y, dy)
             }
             StickRole.SCROLL -> {
                 val (vertical, horizontal) = PointerMotion.scroll(x, y, layout)
-                val notches = stepsFor(vertical, TICK_MS, wheel)
-                val sideways = stepsFor(horizontal, TICK_MS, hwheel)
+                val notches = stepsFor(vertical, dt, wheel)
+                val sideways = stepsFor(horizontal, dt, hwheel)
                 if (notches != 0) mouseEvents += listOf(EV_REL, REL_WHEEL, notches)
                 if (sideways != 0) mouseEvents += listOf(EV_REL, REL_HWHEEL, sideways)
             }
@@ -360,11 +435,16 @@ object DesktopEngine {
 
     private fun press(control: DesktopControl) {
         val job = layout.job(control)
+        if (job.kind != DesktopJob.Kind.NONE && job in sentDown.values) {
+            sentDown[control] = job
+            return
+        }
         when (job.kind) {
             DesktopJob.Kind.MOUSE -> mouseEvents += listOf(EV_KEY, job.code, 1)
-            DesktopJob.Kind.KEY -> keyEvents += listOf(EV_KEY, job.code, 1)
+            DesktopJob.Kind.KEY -> if (split) topKeys += job to true else keyEvents += listOf(EV_KEY, job.code, 1)
             DesktopJob.Kind.WHEEL -> mouseEvents += listOf(EV_REL, REL_WHEEL, job.code)
             DesktopJob.Kind.APP -> outbox += HelperMessage.DesktopKeyboard
+            DesktopJob.Kind.HOLD -> Unit
             DesktopJob.Kind.NONE -> return
         }
         sentDown[control] = job
@@ -372,9 +452,13 @@ object DesktopEngine {
 
     private fun release(control: DesktopControl) {
         val job = sentDown.remove(control) ?: return
+        if (job in sentDown.values) return
         when (job.kind) {
-            DesktopJob.Kind.MOUSE -> mouseEvents += listOf(EV_KEY, job.code, 0)
-            DesktopJob.Kind.KEY -> keyEvents += listOf(EV_KEY, job.code, 0)
+            DesktopJob.Kind.MOUSE -> {
+                mouseEvents += listOf(EV_KEY, job.code, 0)
+                if (split) outbox += HelperMessage.DesktopClicked
+            }
+            DesktopJob.Kind.KEY -> if (split) topKeys += job to false else keyEvents += listOf(EV_KEY, job.code, 0)
             else -> Unit
         }
     }
@@ -388,6 +472,7 @@ object DesktopEngine {
     }
 
     private fun flush() {
+        sendTopKeys()
         val writer = tool ?: return
         val lines = buildString {
             if (mouseEvents.isNotEmpty()) append(inject(MOUSE, mouseEvents))
@@ -403,9 +488,48 @@ object DesktopEngine {
             // The tool is gone, and its devices with it: Android let go of whatever they held.
             on = false
             sentDown.clear()
+            down.clear()
             closeTool()
             problem("write", e)
             outbox += HelperMessage.DesktopReady(false)
+        }
+    }
+
+    /** Keys for the top screen's focused window, with Ctrl, Alt and Shift as they are held now. */
+    private fun sendTopKeys() {
+        if (topKeys.isEmpty()) return
+        val keys = topKeys.toList()
+        topKeys.clear()
+        keys.forEach { (job, down) ->
+            val now = SystemClock.uptimeMillis()
+            val downAt = if (down) now.also { topKeysDownAt[job] = it } else topKeysDownAt.remove(job) ?: now
+            val action = if (down) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP
+            val event = KeyEvent(
+                downAt,
+                now,
+                action,
+                job.keyCode,
+                0,
+                metaState(),
+                KeyCharacterMap.VIRTUAL_KEYBOARD,
+                0,
+                0,
+                InputDevice.SOURCE_KEYBOARD,
+            )
+            try {
+                InputInject.inject(event, TOP_DISPLAY)
+            } catch (e: Exception) {
+                problem("key", e)
+            }
+        }
+    }
+
+    private fun metaState(): Int = sentDown.values.fold(0) { meta, job ->
+        meta or when (job) {
+            DesktopJob.CTRL -> KeyEvent.META_CTRL_ON or KeyEvent.META_CTRL_LEFT_ON
+            DesktopJob.ALT -> KeyEvent.META_ALT_ON or KeyEvent.META_ALT_LEFT_ON
+            DesktopJob.SHIFT -> KeyEvent.META_SHIFT_ON or KeyEvent.META_SHIFT_LEFT_ON
+            else -> 0
         }
     }
 
@@ -415,10 +539,10 @@ object DesktopEngine {
     /** Told to the app's log once per kind, so a fault is seen without flooding the socket. */
     private fun problem(where: String, e: Throwable) {
         val text = "$where: ${e.javaClass.simpleName}: ${e.message.orEmpty().take(MAX_PROBLEM)}"
-        if (problemsTold.add(text)) outbox += HelperMessage.DesktopProblem(text)
+        if (problemsTold.size < MAX_PROBLEMS && problemsTold.add(text)) outbox += HelperMessage.DesktopProblem(text)
     }
 
-    private fun deliver() {
+    private fun deliver() = synchronized(deliverLock) {
         val messages = synchronized(lock) { outbox.toList().also { outbox.clear() } }
         messages.forEach { message -> runCatching { report(message) } }
     }
@@ -426,5 +550,8 @@ object DesktopEngine {
     private fun now(): Long = System.nanoTime() / NANOS_PER_MS
 
     private const val NANOS_PER_MS = 1_000_000L
+    private const val TOP_DISPLAY = 0
     private const val MAX_PROBLEM = 120
+    private const val MAX_PROBLEMS = 32
+    private const val MAX_TICK_GAP_MS = 50L
 }

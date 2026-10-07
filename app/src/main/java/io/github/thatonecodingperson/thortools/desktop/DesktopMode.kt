@@ -2,8 +2,33 @@ package io.github.thatonecodingperson.thortools.desktop
 
 import io.github.thatonecodingperson.thortools.hotkeys.PadButton
 
-/** Desktop controls' switch, app lists and layout, as stored. */
-data class DesktopSettings(val enabled: Boolean, val apps: DesktopApps, val layout: DesktopLayout)
+/**
+ * Desktop controls' switch, app lists and layout, as stored. [offOnFrontEnds]: off while the top screen shows a home
+ * screen or a game front end.
+ */
+data class DesktopSettings(val enabled: Boolean, val apps: DesktopApps, val layout: DesktopLayout, val offOnFrontEnds: Boolean = true)
+
+/**
+ * What desktop controls look at: [controllerOnTop] when the controller (Android's focused display) is on the top screen;
+ * the apps on the two screens (null: a home screen or nothing); [bottomShown] when there is a bottom screen and it is
+ * on; [topLocked] when the controller is locked to the top screen.
+ */
+data class DesktopSituation(
+    val controllerOnTop: Boolean,
+    val topApp: String?,
+    val bottomApp: String?,
+    val bottomShown: Boolean,
+    val panelOpen: Boolean = false,
+    val screenOn: Boolean = true,
+    val topLocked: Boolean = false,
+)
+
+/** [on]: desktop controls work now; [split]: they keep the controller on the bottom screen (also while the panel is open). */
+data class DesktopDecision(val on: Boolean, val split: Boolean) {
+    companion object {
+        val OFF = DesktopDecision(on = false, split = false)
+    }
+}
 
 /**
  * Desktop controls in the service: Thor Tools' own pointer (run by the root helper, which [send] talks to) is on while
@@ -29,7 +54,17 @@ class DesktopMode(private val send: (String) -> Unit) {
     /** Switched off by holding Start, until held again; the helper says so. */
     var paused = false
 
+    /** The controller is kept on the bottom screen while the pointer works the top one ([DesktopLayout.bottomScreen]). */
+    var split = false
+        private set
+
     private var holding = false
+
+    /** Times in a row the helper couldn't bring its devices up; a few tries, then it waits for the next change. */
+    private var failures = 0
+
+    /** On, off and stop requests still to be answered; the helper answers in order, and only the newest answer counts. */
+    private var answersDue = 0
     private var startsHotkeys = emptySet<DesktopControl>()
 
     /** Buttons whose press went to the helper and whose release must follow. */
@@ -41,16 +76,24 @@ class DesktopMode(private val send: (String) -> Unit) {
     /** Buttons taken from the app whose release must not reach it either. */
     private val swallowUp = mutableSetOf<DesktopControl>()
 
+    /** Start pressed while paused: the app's, but the helper hears it too, so holding it switches them back on. */
+    private var startWatched = false
+
     val active: Boolean get() = settings.enabled
+
+    val layout: DesktopLayout get() = settings.layout
+
+    fun decide(situation: DesktopSituation): DesktopDecision = decide(settings, situation)
 
     fun configure(settings: DesktopSettings) {
         val was = this.settings
         this.settings = settings
         if (!settings.enabled) {
-            if (was.enabled) send("stop")
+            if (was.enabled) ask("stop")
             engaged = false
             ready = false
             paused = false
+            split = false
             dropKeys()
             return
         }
@@ -58,37 +101,76 @@ class DesktopMode(private val send: (String) -> Unit) {
         if (!was.enabled) {
             sendStarts()
             if (holding) send("hold 1")
+            if (split) send("split 1")
         }
     }
 
     /** [app] is on the screen that has the controller (null: a home screen), [topScreen] when that screen is the top one. */
-    fun update(app: String?, panelOpen: Boolean, topScreen: Boolean, screenOn: Boolean = true) {
-        val want = wanted(settings, app, panelOpen, topScreen, screenOn)
-        if (want == engaged) return
-        engaged = want
-        if (!want) {
+    fun update(app: String?, panelOpen: Boolean, topScreen: Boolean, screenOn: Boolean = true) = update(
+        decide(settings, DesktopSituation(topScreen, app, bottomApp = null, bottomShown = false, panelOpen, screenOn)),
+    )
+
+    fun update(decision: DesktopDecision) {
+        if (decision.split != split) {
+            // Keys go another way with the controller on the bottom screen: whatever is held lets go first.
+            split = decision.split
+            if (settings.enabled) send(if (split) "split 1" else "split 0")
+        }
+        if (decision.on == engaged) return
+        engaged = decision.on
+        if (!engaged) {
             ready = false
             dropKeys()
         }
-        send(if (want) "on" else "off")
+        ask(if (engaged) "on" else "off")
     }
 
-    /** The helper's answer to on and off, and its report when its devices fail. */
-    fun onReady(on: Boolean) {
+    /**
+     * The helper's answer to on and off, and its report when its devices fail. Returns true when desktop controls should
+     * be on but the helper couldn't bring them up: the service looks again a moment later, which sends "on" again.
+     */
+    fun onReady(on: Boolean): Boolean {
+        // The answer to an older request: the newest one's is still on its way.
+        if (answersDue > 0 && --answersDue > 0) return false
         ready = on && engaged
-        if (!on) dropKeys()
+        if (on) {
+            failures = 0
+            return false
+        }
+        dropKeys()
+        if (!engaged) return false
+        // Not engaged any more as far as the helper knows, so the next check sends "on" again.
+        engaged = false
+        return ++failures <= MAX_FAILURES
+    }
+
+    /** The helper went away: until it is back (and [resend] ran), nothing is taken. */
+    fun helperGone() {
+        ready = false
+        answersDue = 0
+        dropKeys()
+    }
+
+    /** The pad these presses came from went away: their releases never come, so the helper lets go of them now. */
+    fun padGone() {
+        pressed.forEach { send("key ${it.id} 0") }
+        pressed.clear()
+        waiting.clear()
+        unwatchStart()
     }
 
     /** After the helper started again: it knows nothing of desktop controls, and whatever it held is gone. */
     fun resend() {
         ready = false
         paused = false
+        answersDue = 0
         dropKeys()
         if (!settings.enabled) return
         send("config ${settings.layout.encode()}")
         sendStarts()
         if (holding) send("hold 1")
-        if (engaged) send("on")
+        if (split) send("split 1")
+        if (engaged) ask("on")
     }
 
     /** While true, the helper keeps the sticks and triggers still: a hotkey may be under way. */
@@ -105,26 +187,30 @@ class DesktopMode(private val send: (String) -> Unit) {
         if (settings.enabled) sendStarts()
     }
 
-    /** Whether desktop controls want [control]'s presses now: while paused, only Start, to switch back on. */
-    fun takes(control: DesktopControl): Boolean {
-        if (!engaged || !ready) return false
-        val layout = settings.layout
-        if (paused) return control == DesktopControl.START && layout.holdStartSwitch
-        return control in layout.taken
-    }
+    /** Whether desktop controls take [control]'s presses from the app now: none while paused. */
+    fun takes(control: DesktopControl): Boolean = engaged && ready && !paused && control in settings.layout.takenFor(split)
+
+    /** Paused by holding Start: holding it again switches them back on, so the helper hears Start (the app gets it too). */
+    private fun watchesStart(control: DesktopControl): Boolean =
+        control == DesktopControl.START && engaged && ready && paused && settings.layout.holdStartSwitch
 
     /**
      * A key event of [control] the hotkeys passed on (and every release, so nothing stays down); [startsCombos] when the
      * button may still become a combo. Returns whether desktop controls took it from the app.
      */
-    fun key(control: DesktopControl, down: Boolean, repeat: Boolean, startsCombos: Boolean): Boolean {
+    fun key(control: DesktopControl, down: Boolean, repeat: Boolean, startsCombos: Boolean, canceled: Boolean = false): Boolean {
         if (!down) {
+            if (control == DesktopControl.START && startWatched) {
+                unwatchStart()
+                return false
+            }
             if (pressed.remove(control)) {
                 send("key ${control.id} 0")
                 return true
             }
             waiting.remove(control)?.let { used ->
-                if (!used && takes(control)) send("tap ${control.id}")
+                // A canceled press (Android took it back) is no tap.
+                if (!used && !canceled && takes(control)) send("tap ${control.id}")
                 return true
             }
             return swallowUp.remove(control)
@@ -134,7 +220,14 @@ class DesktopMode(private val send: (String) -> Unit) {
         if (pressed.remove(control)) send("key ${control.id} 0")
         waiting.remove(control)
         swallowUp.remove(control)
-        if (!takes(control)) return false
+        if (control == DesktopControl.START) unwatchStart()
+        if (!takes(control)) {
+            if (watchesStart(control)) {
+                startWatched = true
+                send("key ${control.id} 1")
+            }
+            return false
+        }
         if (startsCombos) {
             waiting[control] = false
         } else {
@@ -148,6 +241,14 @@ class DesktopMode(private val send: (String) -> Unit) {
     fun comboRan(first: PadButton) {
         val control = DesktopControl.of(first) ?: return
         if (control in waiting) waiting[control] = true
+        // Held for a combo, not to switch desktop controls back on.
+        if (control == DesktopControl.START) unwatchStart()
+    }
+
+    private fun unwatchStart() {
+        if (!startWatched) return
+        startWatched = false
+        send("key ${DesktopControl.START.id} 0")
     }
 
     /** The helper lets go of everything it held; the app still never sees the releases of what was taken. */
@@ -160,8 +261,34 @@ class DesktopMode(private val send: (String) -> Unit) {
 
     private fun sendStarts() = send("starts ${startsHotkeys.joinToString(",") { it.id }}")
 
+    private fun ask(line: String) {
+        answersDue++
+        send(line)
+    }
+
     companion object {
+        private const val MAX_FAILURES = 3
+
         fun wanted(settings: DesktopSettings, app: String?, panelOpen: Boolean, topScreen: Boolean, screenOn: Boolean = true): Boolean =
             settings.enabled && screenOn && !panelOpen && topScreen && settings.apps.worksFor(app)
+
+        /**
+         * Where desktop controls stand. They work for the top screen's app, the only screen with Android's pointer, and
+         * (with [DesktopSettings.offOnFrontEnds]) not on a home screen or front end there (null: a home screen). With
+         * [DesktopLayout.bottomScreen] they keep the controller on the bottom screen meanwhile, unless the controller is
+         * locked to the top, there is no bottom screen, or the bottom screen's app is a never-in one (a game there has
+         * the controller to itself); otherwise they work only while the controller is on the top screen.
+         */
+        fun decide(settings: DesktopSettings, situation: DesktopSituation): DesktopDecision {
+            if (!settings.enabled || !situation.screenOn || !settings.apps.worksFor(situation.topApp)) return DesktopDecision.OFF
+            val topApp = situation.topApp
+            if (settings.offOnFrontEnds && (topApp == null || DesktopApps.isFrontEnd(topApp))) return DesktopDecision.OFF
+            val bottomApp = situation.bottomApp
+            val split = settings.layout.bottomScreen &&
+                situation.bottomShown &&
+                !situation.topLocked &&
+                (bottomApp == null || bottomApp !in settings.apps.neverIn)
+            return DesktopDecision(on = !situation.panelOpen && (split || situation.controllerOnTop), split = split)
+        }
     }
 }

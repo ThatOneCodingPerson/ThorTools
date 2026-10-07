@@ -259,10 +259,15 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
 
     fun setWiiName(setup: String, name: String?) = prefs.edit().putString(KEY_WII_NAME + setup, name).apply()
 
-    /** Desktop controls: AYN's mouse mode switched for the app on the screen that has the controller. */
+    /** Desktop controls on or off. */
     var desktopEnabled: Boolean
         get() = prefs.getBoolean(KEY_DESKTOP_ENABLED, false)
         set(value) = prefs.edit().putBoolean(KEY_DESKTOP_ENABLED, value).apply()
+
+    /** Desktop controls switched AYN's mouse mode on to move the pointer, so they switch it off again. */
+    var desktopAynMouseOwned: Boolean
+        get() = prefs.getBoolean(KEY_DESKTOP_AYN_MOUSE_OWNED, false)
+        set(value) = prefs.edit().putBoolean(KEY_DESKTOP_AYN_MOUSE_OWNED, value).apply()
 
     /** Where desktop controls work. */
     var desktopApps: DesktopApps
@@ -277,7 +282,13 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
         get() = DesktopLayout.decode(prefs.getString(KEY_DESKTOP_LAYOUT, null))
         set(value) = prefs.edit().putString(KEY_DESKTOP_LAYOUT, value.encode()).apply()
 
-    val desktopSettings: DesktopSettings get() = DesktopSettings(desktopEnabled, desktopApps, desktopLayout)
+    /** Desktop controls stay off while the top screen shows a home screen or a game front end. */
+    var desktopOffOnFrontEnds: Boolean
+        get() = prefs.getBoolean(KEY_DESKTOP_OFF_FRONT_ENDS, true)
+        set(value) = prefs.edit().putBoolean(KEY_DESKTOP_OFF_FRONT_ENDS, value).apply()
+
+    val desktopSettings: DesktopSettings
+        get() = DesktopSettings(desktopEnabled, desktopApps, desktopLayout, desktopOffOnFrontEnds)
 
     /** Desktop controls' switch, app lists and layout, now and after each change. */
     fun desktopChanges(): Flow<DesktopSettings> = callbackFlow {
@@ -517,7 +528,10 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
         private const val KEY_DESKTOP_ONLY_IN = "desktop_only_in"
         private const val KEY_DESKTOP_NEVER_IN = "desktop_never_in"
         private const val KEY_DESKTOP_LAYOUT = "desktop_layout"
-        private val DESKTOP_KEYS = setOf(KEY_DESKTOP_ENABLED, KEY_DESKTOP_ONLY_IN, KEY_DESKTOP_NEVER_IN, KEY_DESKTOP_LAYOUT)
+        private const val KEY_DESKTOP_AYN_MOUSE_OWNED = "desktop_ayn_mouse_owned"
+        private const val KEY_DESKTOP_OFF_FRONT_ENDS = "desktop_off_front_ends"
+        private val DESKTOP_KEYS =
+            setOf(KEY_DESKTOP_ENABLED, KEY_DESKTOP_ONLY_IN, KEY_DESKTOP_NEVER_IN, KEY_DESKTOP_LAYOUT, KEY_DESKTOP_OFF_FRONT_ENDS)
         private const val KEY_LED_AYN_SAVED = "led_ayn_saved"
         private const val KEY_DEBUG_REPORT_FILE = "debug_report_file"
         private const val KEY_LID_WIFI_OFF = "lid_wifi_off"

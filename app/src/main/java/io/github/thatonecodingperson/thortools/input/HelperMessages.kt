@@ -75,6 +75,9 @@ sealed interface HelperMessage {
     /** Desktop controls' devices are up and following the pad ([on]), or not (off, or the uinput tool failed). */
     data class DesktopReady(val on: Boolean) : HelperMessage
 
+    /** Desktop controls let go of a mouse button while keeping the controller on the bottom screen. */
+    data object DesktopClicked : HelperMessage
+
     /** Something went wrong in desktop controls, for the app's log. */
     data class DesktopProblem(val text: String) : HelperMessage
 
@@ -106,6 +109,7 @@ sealed interface HelperMessage {
                     else -> null
                 }
                 "de" -> DesktopProblem(trimmed.substringAfter(' ', ""))
+                "dc" -> DesktopClicked
                 "a" -> trimmed.split(' ').let { words ->
                     val id = words.getOrNull(1)?.toIntOrNull()
                     val percent = words.getOrNull(2)?.toIntOrNull()
@@ -156,7 +160,8 @@ sealed interface HelperMessage {
             is DesktopPaused -> "dp ${if (message.paused) 1 else 0}"
             DesktopKeyboard -> "dk"
             is DesktopReady -> "dr ${if (message.on) 1 else 0}"
-            is DesktopProblem -> "de ${message.text.replace('\n', ' ')}"
+            is DesktopProblem -> "de ${message.text.replace('\n', ' ').replace('\r', ' ')}"
+            DesktopClicked -> "dc"
         }
     }
 }

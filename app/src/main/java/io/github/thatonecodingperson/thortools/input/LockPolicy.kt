@@ -12,10 +12,12 @@ object LockPolicy {
     fun toggledHere(current: Screen?, controllerOn: Screen): Screen? = if (current != null) null else controllerOn
 
     /**
-     * Sending the controller somewhere by hand: with "also lock", a second press on the same screen unlocks.
+     * Sending the controller somewhere by hand: with "also lock", a second press on the same screen unlocks, unless the
+     * controller has drifted off that screen ([onTarget] false): then it is locked there again, which moves it back.
      * Without it, a lock to the other screen is released, so the move isn't undone.
      */
-    fun afterMove(current: Screen?, target: Screen, alsoLock: Boolean): Screen? = when {
+    fun afterMove(current: Screen?, target: Screen, alsoLock: Boolean, onTarget: Boolean = true): Screen? = when {
+        alsoLock && current == target && !onTarget -> target
         alsoLock -> toggled(current, target)
         current != null && current != target -> null
         else -> current

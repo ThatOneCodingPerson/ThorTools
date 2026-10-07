@@ -23,6 +23,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import dagger.hilt.android.AndroidEntryPoint
+import io.github.thatonecodingperson.thortools.actions.ThorAction
 import io.github.thatonecodingperson.thortools.appsettings.AppOverrideListScreen
 import io.github.thatonecodingperson.thortools.appsettings.AppOverridesScreen
 import io.github.thatonecodingperson.thortools.appsettings.ProfilesScreen
@@ -147,7 +148,10 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         composable(Routes.DESKTOP) {
-                            DesktopScreen(onBack = back)
+                            DesktopScreen(onHotkey = { navController.navigate(Routes.DESKTOP_HOTKEY) }, onBack = back)
+                        }
+                        composable(Routes.DESKTOP_HOTKEY) {
+                            HotkeysScreen(onlyAction = ThorAction.TOGGLE_DESKTOP, onBack = back)
                         }
                         composable(Routes.HOTKEYS) {
                             HotkeysScreen(onBack = back)

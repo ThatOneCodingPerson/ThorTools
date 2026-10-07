@@ -58,7 +58,11 @@ class QuickPanel(
     private val scope: CoroutineScope,
     private val helper: HelperCommand,
     stayAwakeOn: () -> Boolean,
-    lockedTo: () -> Screen?,
+    private val lockedTo: () -> Screen?,
+    /** Where the controller belongs when the panel hands it back: the locked screen, or where desktop controls keep it. */
+    private val belongsTo: () -> Screen? = lockedTo,
+    /** Writes AYN's controller lock (through the controller lock, which tells its own writes from others'). */
+    private val setFocusLock: (Boolean) -> Unit,
     /** The display Thor Tools' own screen is showing on, null when it isn't showing. */
     private val thorToolsShownOn: () -> Int?,
     /** Joystick motion reaching the panel; true when the hotkeys took it (a held button's D-pad or stick combos). */
@@ -68,7 +72,10 @@ class QuickPanel(
     private val runAction: (ActionCall) -> Unit,
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    // Nothing is brought forward for the panel: a launcher there would get Home, which closes the panel.
     private val focusMover = FocusMover(service, executor, scope)
+
     private val timerNote = FeedbackCue(service, prefs, hideAfterMs = TIMER_NOTE_MS, windowTitle = "ThorToolsTimerNote")
     private val model = QuickPanelModel(
         context = service,
@@ -123,6 +130,9 @@ class QuickPanel(
     /** Called after the panel opened or closed. Main thread. */
     var onOpenChanged: (() -> Unit)? = null
 
+    /** Told where the controller went back to when the panel closed. */
+    var onControllerReturned: ((Int) -> Unit)? = null
+
     /** Open and holding the controller (Panel takes the controller), so the pad's buttons work the panel. */
     val hasController: Boolean get() = isOpen && tookController && controllerHere
 
@@ -172,7 +182,8 @@ class QuickPanel(
         val closed = removeWindow() ?: return
         if (!closed.tookController) return
         if (!returnFocus) {
-            if (closed.relock) setFocusLock(true)
+            // Only with the controller verified on the top screen: armed elsewhere, AYN's lock freezes input.
+            if (closed.relock) relockWhenOnTop()
             return
         }
         if (!closed.hadController) {
@@ -210,9 +221,10 @@ class QuickPanel(
 
     /** Gives the controller back to the screen it came from. */
     private fun handBack(closed: Closed) {
-        focusMover.moveTo(returnDisplay) { onTop ->
+        focusMover.moveTo(returnDisplay) { moved ->
             // AYN's lock pins the controller to the top screen; arming it with focus elsewhere freezes input.
-            if (closed.relock && onTop && returnDisplay == Display.DEFAULT_DISPLAY) setFocusLock(true)
+            if (closed.relock && moved && returnDisplay == Display.DEFAULT_DISPLAY) setFocusLock(true)
+            if (moved) onControllerReturned?.invoke(returnDisplay)
         }
     }
 
@@ -314,7 +326,8 @@ class QuickPanel(
 
     private fun takeController(displayId: Int, session: Int) {
         tookController = true
-        returnDisplay = screenFocus.displayId()
+        // Locked to a screen, the controller goes back there; otherwise to the screen used last.
+        returnDisplay = belongsTo()?.let(screenFocus::displayId) ?: screenFocus.displayId()
         scope.launch {
             // Before the controller moves to the panel, Android still says where it was. The PServer call can't be cut
             // short, so it runs on its own and an answer later than the wait is dropped (it would name the panel's screen).
@@ -337,10 +350,6 @@ class QuickPanel(
     /** Root call: never on the main thread. */
     private fun readFocusedDisplay(): Int? =
         CloseTarget.parseFocusedDisplay(executor.executeAsRoot("dumpsys input | grep -m1 FocusedDisplayId").getOrNull())
-
-    private fun setFocusLock(on: Boolean) {
-        scope.launch { executor.executeAsRoot("settings put system $KEY_FOCUS_LOCK ${if (on) 1 else 0}") }
-    }
 
     private fun onBack(panelOwner: OverlayOwner) {
         if (panelOwner.onBackPressedDispatcher.hasEnabledCallbacks()) {

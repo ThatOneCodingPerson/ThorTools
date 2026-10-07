@@ -25,6 +25,7 @@ object RawInputHelper {
     private const val EV_ABS = 3
     private const val EV_SW = 5
     private const val SYN_REPORT = 0
+    private const val SYN_DROPPED = 3
     private const val SW_LID = 0
     private const val EVENT_SIZE = 24
     private const val TOUCH_REPORT_GAP_MS = 300L
@@ -70,7 +71,8 @@ object RawInputHelper {
 
         // The readers can block in read() for hours, so this loop is the one that notices the app went away.
         while (true) {
-            val line = input.readLine()
+            // A broken connection ends the helper the same way a closed one does, putting everything back.
+            val line = runCatching { input.readLine() }.getOrNull()
             when {
                 line == null || line == "bye" -> quit()
                 line == "screen on" -> {
@@ -216,18 +218,29 @@ object RawInputHelper {
      * releases count.
      */
     private fun readPad(stream: FileInputStream) {
-        synchronized(padLock) { pad.reset() }
-        DesktopEngine.onPadReset()
-        forEachEvent(stream) { type, code, value ->
-            when {
-                type == EV_ABS -> synchronized(padLock) { pad.onAbs(code, value) }
-                type == EV_KEY && value != 2 -> DesktopEngine.onPadKey(code, value == 1)
-                type == EV_SYN && code == SYN_REPORT -> {
-                    val changes = synchronized(padLock) { padDirections?.update(pad.sample()) }
-                    changes?.forEach { send(HelperMessage.Direction(it.button, it.down)) }
+        forgetPad()
+        try {
+            forEachEvent(stream) { type, code, value ->
+                when {
+                    type == EV_ABS -> synchronized(padLock) { pad.onAbs(code, value) }
+                    type == EV_KEY && value != 2 -> DesktopEngine.onPadKey(code, value == 1)
+                    type == EV_SYN && code == SYN_REPORT -> {
+                        val changes = synchronized(padLock) { padDirections?.update(pad.sample()) }
+                        changes?.forEach { send(HelperMessage.Direction(it.button, it.down)) }
+                    }
+                    // Events were lost: a stick's way back to the middle may be among them.
+                    type == EV_SYN && code == SYN_DROPPED -> forgetPad()
                 }
             }
+        } finally {
+            // The pad went away: its last stick and trigger values mustn't keep moving the pointer.
+            forgetPad()
         }
+    }
+
+    private fun forgetPad() {
+        synchronized(padLock) { pad.reset() }
+        DesktopEngine.onPadReset()
     }
 
     /** The lid sensor, as the lid closes (1) and opens (0). */
