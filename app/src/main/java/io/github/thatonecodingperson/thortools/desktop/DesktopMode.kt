@@ -85,6 +85,9 @@ class DesktopMode(private val send: (String) -> Unit) {
 
     fun decide(situation: DesktopSituation): DesktopDecision = decide(settings, situation)
 
+    /** See [Companion.inUse]. */
+    fun inUse(situation: DesktopSituation): Boolean = inUse(settings, situation)
+
     fun configure(settings: DesktopSettings) {
         val was = this.settings
         this.settings = settings
@@ -279,6 +282,13 @@ class DesktopMode(private val send: (String) -> Unit) {
          * locked to the top, there is no bottom screen, or the bottom screen's app is a never-in one (a game there has
          * the controller to itself); otherwise they work only while the controller is on the top screen.
          */
+        /**
+         * Desktop controls are in use for the top screen's app: switched on and working there, though they may pause for
+         * the quick panel or while the controller visits the bottom screen.
+         */
+        fun inUse(settings: DesktopSettings, situation: DesktopSituation): Boolean =
+            decide(settings, situation.copy(controllerOnTop = true, panelOpen = false, screenOn = true)).on
+
         fun decide(settings: DesktopSettings, situation: DesktopSituation): DesktopDecision {
             if (!settings.enabled || !situation.screenOn || !settings.apps.worksFor(situation.topApp)) return DesktopDecision.OFF
             val topApp = situation.topApp

@@ -69,6 +69,7 @@ import io.github.thatonecodingperson.thortools.leds.LedLook
 import io.github.thatonecodingperson.thortools.lid.LidController
 import io.github.thatonecodingperson.thortools.lid.LidText
 import io.github.thatonecodingperson.thortools.main.MainActivity
+import io.github.thatonecodingperson.thortools.models.AppGestures
 import io.github.thatonecodingperson.thortools.models.AppRefreshRate
 import io.github.thatonecodingperson.thortools.models.AppVibration
 import io.github.thatonecodingperson.thortools.models.BottomScreenRule
@@ -79,6 +80,7 @@ import io.github.thatonecodingperson.thortools.models.L2R2Style
 import io.github.thatonecodingperson.thortools.models.PerfMode
 import io.github.thatonecodingperson.thortools.models.RefreshRate
 import io.github.thatonecodingperson.thortools.models.ScreenMode
+import io.github.thatonecodingperson.thortools.navigation.GestureNav
 import io.github.thatonecodingperson.thortools.oled.OledGuard
 import io.github.thatonecodingperson.thortools.panel.CloseReason
 import io.github.thatonecodingperson.thortools.panel.FocusMover
@@ -124,6 +126,9 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
 
     @Inject
     lateinit var debugSession: DebugSession
+
+    @Inject
+    lateinit var gestureNav: GestureNav
 
     private var batteryLevelReceiver: BatteryLevelReceiver = BatteryLevelReceiver()
     private var videoOutputReceiver: VideoOutputReceiver = VideoOutputReceiver()
@@ -489,6 +494,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         val odinCategories = perAppControlsEnabled
         val appOnTop = override?.bottomScreen != null && actionHost.appsOnScreens()[Display.DEFAULT_DISPLAY] == packageName
         if (::ledController.isInitialized) ledController.setForApp(override?.leds?.let(LedLook::decode))
+        gestureNav.setForApp(packageName, AppGestures.byId(override?.gestures)?.on)
         overrideExecutor.execute {
             if (override != null) {
                 if (odinCategories) applyOverride(override) else resetOverrides()
@@ -567,6 +573,8 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         // On, and past the lock screen: over the keyguard the controller stays a controller.
         val screenOn = getSystemService(PowerManager::class.java)?.isInteractive != false &&
             getSystemService(KeyguardManager::class.java)?.isKeyguardLocked != true
+        // The screen going off isn't the end of desktop controls' use: the swipes stay as they are meanwhile.
+        if (!desktopMode.active) gestureNav.setDesktop(false)
         if (!desktopMode.active || !screenOn) return applyDesktop(DesktopDecision.OFF, "switched off or screen off")
         // The hotkey editor records stick flicks from the motion reaching it: the copy of the pad would keep them away.
         if (status.buttonRecorder != null) return applyDesktop(DesktopDecision.OFF, "the hotkey editor records")
@@ -585,6 +593,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         )
         // At once with the apps known now. Seen a while ago, they only switch off: switching on waits for the read.
         val known = desktopMode.decide(situation(screenApps, bottomScreenOn))
+        gestureNav.setDesktop(desktopMode.inUse(situation(screenApps, bottomScreenOn)))
         val atOnce = if (fresh) known else DesktopDecision(on = known.on && desktopMode.engaged, split = known.split && desktopMode.split)
         if (atOnce.on != desktopMode.engaged || atOnce.split != desktopMode.split) {
             applyDesktop(atOnce, "display $display, top ${screenApps[Display.DEFAULT_DISPLAY]}")
@@ -606,6 +615,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
                 screenApps = read
                 bottomScreenOn = bottomOn
                 val now = situation(read, bottomOn)
+                gestureNav.setDesktop(desktopMode.inUse(now))
                 applyDesktop(desktopMode.decide(now), "display $display, top ${now.topApp}, bottom ${now.bottomApp}")
             }
         }
@@ -1218,7 +1228,10 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
 
         overridesEnabled = prefs.appOverridesEnabled
         prefs.observeAppOverrideEnabledState(
-            { overridesEnabled = it },
+            {
+                overridesEnabled = it
+                if (!it) gestureNav.forgetApp()
+            },
             { overridesDelay = it },
         )
 
@@ -1254,7 +1267,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
             paused = { quickPanel.isOpen },
         )
         controllerLock.start()
-        actionRunner = ActionRunner(this, executor, prefs, scope, actionHost)
+        actionRunner = ActionRunner(this, executor, prefs, scope, actionHost, gestureNav)
         debugSession.runner = ActionChecker(
             service = this,
             executor = executor,
@@ -1267,6 +1280,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
             stayAwakeOn = { stayAwake.isOn },
             desktopOn = { prefs.desktopEnabled },
             setDesktopOn = { prefs.desktopEnabled = it },
+            gestures = gestureNav,
             helperConnected = { rawInput.connected },
         )
         quickPanel = QuickPanel(
@@ -1277,6 +1291,7 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
             scope = scope,
             helper = { name, args, onResult -> rawInput.command(name, *args.toTypedArray(), onResult = onResult) },
             stayAwakeOn = { stayAwake.isOn },
+            gesturesOn = { gestureNav.on },
             lockedTo = { controllerLock.lockedTo },
             belongsTo = { controllerLock.belongsTo },
             setFocusLock = { controllerLock.setAynLock(it) },
@@ -1339,6 +1354,8 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
             prefs.desktopChanges().collect { settings ->
                 mainHandler.post {
                     desktopMode.configure(settings)
+                    // Switched off they stop at once, without the check below that hands over their use.
+                    if (!settings.enabled) gestureNav.setDesktop(false)
                     steerAynMouse()
                     refreshFocusedDisplay()
                     updateDesktop()
@@ -1363,6 +1380,8 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
             helper = { name, args, onResult -> rawInput.command(name, *args.toTypedArray(), onResult = onResult) },
         )
         ledController.start()
+        // A restart clears the status bar flags behind the swipe up.
+        gestureNav.reapply()
         oledGuard = OledGuard(
             service = this,
             executor = executor,
@@ -1405,6 +1424,8 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         debugSession.stopProbe()
         if (!status.connected) KeepAliveNotification.hide(this)
         overrideExecutor.shutdown()
+        gestureNav.forgetApp()
+        gestureNav.setDesktop(false)
         // Android can destroy a service that never got as far as onServiceConnected.
         if (::rawInput.isInitialized) {
             quickPanel.close(CloseReason.SERVICE_STOPPED, returnFocus = false)

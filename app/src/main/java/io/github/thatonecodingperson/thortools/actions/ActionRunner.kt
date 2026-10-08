@@ -30,6 +30,7 @@ import io.github.thatonecodingperson.thortools.models.FanMode
 import io.github.thatonecodingperson.thortools.models.L2R2Style
 import io.github.thatonecodingperson.thortools.models.PerfMode
 import io.github.thatonecodingperson.thortools.models.RefreshRate
+import io.github.thatonecodingperson.thortools.navigation.GestureNav
 import io.github.thatonecodingperson.thortools.panel.StatsParser
 import io.github.thatonecodingperson.thortools.tools.AynHooks
 import io.github.thatonecodingperson.thortools.tools.ShellExecutor
@@ -99,6 +100,7 @@ class ActionRunner(
     private val prefs: SharedPrefsRepo,
     private val scope: CoroutineScope,
     private val host: ActionHost,
+    private val gestures: GestureNav,
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val audio = service.getSystemService(AudioManager::class.java)
@@ -157,6 +159,9 @@ class ActionRunner(
             }
             ThorAction.TOGGLE_STAY_AWAKE -> say.done(
                 if (host.toggleStayAwake()) R.string.actionResultStayAwakeOn else R.string.actionResultStayAwakeOff,
+            )
+            ThorAction.TOGGLE_GESTURES -> say.done(
+                if (gestures.toggle()) R.string.actionResultGesturesOn else R.string.actionResultGesturesOff,
             )
             ThorAction.SWIPE_UP -> swipe(0f, -1f, action, say)
             ThorAction.SWIPE_DOWN -> swipe(0f, 1f, action, say)

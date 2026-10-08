@@ -28,6 +28,7 @@ object PanelTiles {
         -> Look.MODE
         ThorAction.TOGGLE_BOTTOM_SCREEN,
         ThorAction.TOGGLE_STAY_AWAKE,
+        ThorAction.TOGGLE_GESTURES,
         ThorAction.TOGGLE_AYN_MOUSE,
         ThorAction.TOGGLE_DESKTOP,
         ThorAction.TOGGLE_CONTROLLER_LOCK,
@@ -107,6 +108,7 @@ object PanelTiles {
         ThorAction.CLOSE_APP -> R.string.panelTileCloseApp
         ThorAction.CLEAR_BACKGROUND -> R.string.panelTileCleanUp
         ThorAction.TOGGLE_STAY_AWAKE -> R.string.panelTileStayAwake
+        ThorAction.TOGGLE_GESTURES -> R.string.panelTileGestures
         ThorAction.SWIPE_UP -> R.string.actionSwipeUp
         ThorAction.SWIPE_DOWN -> R.string.actionSwipeDown
         ThorAction.SWIPE_LEFT -> R.string.actionSwipeLeft

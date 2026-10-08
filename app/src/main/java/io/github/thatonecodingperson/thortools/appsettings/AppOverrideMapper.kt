@@ -7,6 +7,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.thatonecodingperson.thortools.R
 import io.github.thatonecodingperson.thortools.data.AppOverrideEntity
 import io.github.thatonecodingperson.thortools.leds.LedPreset
+import io.github.thatonecodingperson.thortools.models.AppGestures
 import io.github.thatonecodingperson.thortools.models.AppRefreshRate
 import io.github.thatonecodingperson.thortools.models.AppVibration
 import io.github.thatonecodingperson.thortools.models.BottomScreenRule
@@ -47,12 +48,13 @@ class AppOverrideMapper @Inject constructor(@ApplicationContext private val cont
         val bottomScreen = BottomScreenRule.byId(app.bottomScreen)
         val vibration = AppVibration.byId(app.vibration)
         val leds = LedPreset.of(app.leds)
+        val gestures = AppGestures.byId(app.gestures)
 
         return AppUiModel(
             packageName = app.packageName,
             appName = context.packageManager.getApplicationLabel(appInfo).toString(),
             appIcon = context.packageManager.getApplicationIcon(appInfo),
-            subtitle = getSubtitle(controllerStyle, l2R2Style, perfMode, fanMode, refreshRate, bottomScreen, vibration, leds),
+            subtitle = getSubtitle(controllerStyle, l2R2Style, perfMode, fanMode, refreshRate, bottomScreen, vibration, leds, gestures),
             controllerStyle = controllerStyle,
             l2r2Style = l2R2Style,
             perfMode = perfMode,
@@ -61,6 +63,7 @@ class AppOverrideMapper @Inject constructor(@ApplicationContext private val cont
             bottomScreen = bottomScreen,
             vibration = vibration,
             leds = leds,
+            gestures = gestures,
         )
     }
 
@@ -84,6 +87,7 @@ class AppOverrideMapper @Inject constructor(@ApplicationContext private val cont
         bottomScreen: BottomScreenRule?,
         vibration: AppVibration?,
         leds: LedPreset?,
+        gestures: AppGestures?,
     ): String? = buildString {
         if (controllerStyle != ControllerStyle.Unknown) {
             append(context.getString(R.string.controllerStyle))
@@ -131,6 +135,12 @@ class AppOverrideMapper @Inject constructor(@ApplicationContext private val cont
             append(context.getString(R.string.profileLeds))
             append(": ")
             append(context.getString(leds.textRes))
+            append(" | ")
+        }
+        if (gestures != null) {
+            append(context.getString(R.string.profileGestures))
+            append(": ")
+            append(context.getString(gestures.textRes))
             append(" | ")
         }
     }.trimEnd(' ', '|').ifEmpty { null }

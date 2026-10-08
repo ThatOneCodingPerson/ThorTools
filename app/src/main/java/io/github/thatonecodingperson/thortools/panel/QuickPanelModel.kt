@@ -48,6 +48,8 @@ data class PanelUiState(
     val refreshHz: Int? = null,
     val bottomScreenOn: Boolean = true,
     val stayAwake: Boolean = false,
+    /** Android's navigation swipes are meant to work. */
+    val gestures: Boolean = true,
     val aynMouse: Boolean = false,
     val desktop: Boolean = false,
     /** Where the controller is locked, if anywhere. */
@@ -110,6 +112,7 @@ class QuickPanelModel(
     private val helper: HelperCommand,
     private val stayAwakeOn: () -> Boolean,
     private val desktopOn: () -> Boolean,
+    private val gesturesOn: () -> Boolean = { true },
     private val bottomDisplay: () -> Int?,
     private val lockedTo: () -> Screen?,
     private val frontApp: () -> FrontApp? = { null },
@@ -191,6 +194,7 @@ class QuickPanelModel(
                     refreshHz = refreshHz,
                     bottomScreenOn = systemInt(KEY_SCREEN_MODE) != 1,
                     stayAwake = stayAwakeOn(),
+                    gestures = gesturesOn(),
                     aynMouse = systemInt(KEY_AYN_MOUSE) == 1,
                     desktop = desktopOn(),
                     lockedTo = lockedTo(),

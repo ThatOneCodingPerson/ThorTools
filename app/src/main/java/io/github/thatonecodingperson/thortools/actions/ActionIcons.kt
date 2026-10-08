@@ -32,6 +32,7 @@ import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Splitscreen
 import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.SwapVert
+import androidx.compose.material.icons.rounded.Swipe
 import androidx.compose.material.icons.rounded.ToggleOn
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.VerticalAlignBottom
@@ -66,6 +67,7 @@ val ThorAction.icon: ImageVector
         ThorAction.CLOSE_APP -> Icons.Rounded.Cancel
         ThorAction.CLEAR_BACKGROUND -> Icons.Rounded.CleaningServices
         ThorAction.TOGGLE_STAY_AWAKE -> Icons.Rounded.LightMode
+        ThorAction.TOGGLE_GESTURES -> Icons.Rounded.Swipe
         ThorAction.SWIPE_UP -> Icons.Rounded.North
         ThorAction.SWIPE_DOWN -> Icons.Rounded.South
         ThorAction.SWIPE_LEFT -> Icons.Rounded.West

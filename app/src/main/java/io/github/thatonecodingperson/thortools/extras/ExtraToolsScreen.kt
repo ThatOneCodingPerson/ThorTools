@@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Brightness4
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.SportsEsports
+import androidx.compose.material.icons.rounded.Swipe
 import androidx.compose.material.icons.rounded.VideogameAsset
 import androidx.compose.material.icons.rounded.WbIridescent
 import androidx.compose.material3.Scaffold
@@ -17,6 +18,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import io.github.thatonecodingperson.thortools.R
 import io.github.thatonecodingperson.thortools.hotkeys.NoteCard
 import io.github.thatonecodingperson.thortools.leds.modeName
+import io.github.thatonecodingperson.thortools.navigation.GestureWish
 import io.github.thatonecodingperson.thortools.oled.OledPart
 import io.github.thatonecodingperson.thortools.ui.composables.CardColumns
 import io.github.thatonecodingperson.thortools.ui.composables.ChoiceCard
@@ -25,7 +27,7 @@ import io.github.thatonecodingperson.thortools.ui.composables.SubTopAppBar
 
 /**
  * The extras that don't belong to another section: the stick lights, Wii profiles for Dolphin, the RetroArch assistant,
- * OLED Safety, where the keyboard appears.
+ * OLED Safety, gesture navigation, where the keyboard appears.
  */
 @Composable
 fun ExtraToolsScreen(
@@ -34,6 +36,7 @@ fun ExtraToolsScreen(
     onWii: () -> Unit,
     onRetroArch: () -> Unit,
     onOled: () -> Unit,
+    onGestures: () -> Unit,
     onBack: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -73,6 +76,13 @@ fun ExtraToolsScreen(
                     value = stringResource(if (oledParts.isEmpty()) R.string.oledOff else R.string.oledOn),
                     onClick = onOled,
                 )
+                LinkCard(
+                    icon = Icons.Rounded.Swipe,
+                    title = stringResource(R.string.gestureNavTitle),
+                    info = gesturesInfo(state.gestures),
+                    value = stringResource(if (state.gestures.on) R.string.gestureNavOn else R.string.gestureNavOff),
+                    onClick = onGestures,
+                )
             },
             right = {
                 ChoiceCard(
@@ -87,6 +97,16 @@ fun ExtraToolsScreen(
             },
         )
     }
+}
+
+@Composable
+private fun gesturesInfo(wish: GestureWish): String {
+    val parts = listOfNotNull(
+        R.string.gestureNavPartHome.takeIf { !wish.parts.homeSwipe },
+        R.string.gestureNavPartBack.takeIf { !wish.parts.backSwipe },
+    )
+    if (parts.isEmpty()) return stringResource(R.string.gestureNavTitleInfo)
+    return stringResource(R.string.gestureNavOffInfo, parts.map { stringResource(it) }.joinToString(", "))
 }
 
 @StringRes

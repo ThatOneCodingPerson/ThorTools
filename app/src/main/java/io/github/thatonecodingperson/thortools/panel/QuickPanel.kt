@@ -58,6 +58,7 @@ class QuickPanel(
     private val scope: CoroutineScope,
     private val helper: HelperCommand,
     stayAwakeOn: () -> Boolean,
+    gesturesOn: () -> Boolean,
     private val lockedTo: () -> Screen?,
     /** Where the controller belongs when the panel hands it back: the locked screen, or where desktop controls keep it. */
     private val belongsTo: () -> Screen? = lockedTo,
@@ -84,6 +85,7 @@ class QuickPanel(
         helper = helper,
         stayAwakeOn = stayAwakeOn,
         desktopOn = { prefs.desktopEnabled },
+        gesturesOn = gesturesOn,
         bottomDisplay = { screenFocus.bottomDisplayId() },
         lockedTo = lockedTo,
         frontApp = frontApp,

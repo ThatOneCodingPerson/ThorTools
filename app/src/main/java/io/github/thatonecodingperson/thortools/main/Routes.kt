@@ -31,6 +31,7 @@ object Routes {
     const val RETROARCH = "extras/retroarch"
     const val OLED = "extras/oled"
     const val OLED_AYN = "extras/oled/ayn"
+    const val GESTURES = "extras/gestures"
 
     fun override(packageName: String) = "override/$packageName"
 

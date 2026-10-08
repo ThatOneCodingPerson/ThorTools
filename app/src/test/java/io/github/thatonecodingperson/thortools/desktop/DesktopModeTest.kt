@@ -89,6 +89,17 @@ class DesktopModeTest {
     }
 
     @Test
+    fun `in use for the top screen's app also while the panel is open or the controller is below`() {
+        assertTrue(DesktopMode.inUse(settings, situation(controllerOnTop = true)))
+        assertTrue(DesktopMode.inUse(settings, situation(controllerOnTop = true, panelOpen = true)))
+        assertTrue(DesktopMode.inUse(settings, situation(controllerOnTop = false)))
+        assertFalse(DesktopMode.inUse(settings.copy(enabled = false), situation(controllerOnTop = true)))
+        assertFalse(DesktopMode.inUse(settings, situation(controllerOnTop = true, topApp = retroArch)))
+        assertFalse(DesktopMode.inUse(settings, situation(controllerOnTop = true, topApp = "rip.moth.cocoonshell")))
+        assertTrue(DesktopMode.inUse(settings.copy(offOnFrontEnds = false), situation(controllerOnTop = true, topApp = null)))
+    }
+
+    @Test
     fun `off on a home screen or a front end on the top screen, the controller kept below or not`() {
         assertEquals(DesktopDecision.OFF, DesktopMode.decide(settings, situation(controllerOnTop = true, topApp = null)))
         val cocoon = situation(controllerOnTop = true, topApp = "rip.moth.cocoonshell")

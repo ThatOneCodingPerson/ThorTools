@@ -577,6 +577,7 @@ private fun modeValue(action: ThorAction?, state: PanelUiState): String? = when 
 private fun switchOn(action: ThorAction?, state: PanelUiState): Boolean = when (action) {
     ThorAction.TOGGLE_BOTTOM_SCREEN -> state.bottomScreenOn
     ThorAction.TOGGLE_STAY_AWAKE -> state.stayAwake
+    ThorAction.TOGGLE_GESTURES -> state.gestures
     ThorAction.TOGGLE_AYN_MOUSE -> state.aynMouse
     ThorAction.TOGGLE_DESKTOP -> state.desktop
     ThorAction.TOGGLE_CONTROLLER_LOCK -> state.lockedTo == Screen.TOP

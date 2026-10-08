@@ -34,18 +34,23 @@ Shizuku or ADB to set up.
   </tr>
   <tr>
     <td valign="top"><a href="#controller-and-the-two-screens"><b>Two screens</b></a><br>Swap apps, move and lock the controller</td>
+    <td valign="top"><a href="#gesture-navigation"><b>Gesture navigation</b></a><br>Android's swipes off for good, or just the white bar</td>
     <td valign="top"><a href="#retroarch-assistant"><b>RetroArch assistant</b></a><br>Menus, speeds, hotkeys, BIOS files and cheats</td>
-    <td valign="top"><a href="#wii-profiles-for-dolphin"><b>Wii profiles for Dolphin</b></a><br>Wii Remote, Nunchuk and Classic Controller layouts</td>
   </tr>
   <tr>
+    <td valign="top"><a href="#wii-profiles-for-dolphin"><b>Wii profiles for Dolphin</b></a><br>Wii Remote, Nunchuk and Classic Controller layouts</td>
     <td valign="top"><a href="#oled-safety-beta"><b>OLED Safety</b></a><br>Pixel shifter, refresher and idle screens</td>
     <td valign="top"><a href="#stick-lights"><b>Stick lights</b></a><br>Colours and effects for the rings around the sticks</td>
-    <td valign="top"><a href="#power-and-the-lid"><b>Power and the lid</b></a><br>Charging help and what happens when the lid closes</td>
   </tr>
   <tr>
+    <td valign="top"><a href="#power-and-the-lid"><b>Power and the lid</b></a><br>Charging help and what happens when the lid closes</td>
     <td valign="top"><a href="#app-profiles"><b>App profiles</b></a><br>Settings that follow the app in front</td>
     <td valign="top"><a href="#themes"><b>Themes</b></a><br>Fifteen looks for the app and the panel, or your own</td>
+  </tr>
+  <tr>
     <td valign="top"><a href="#setup-and-diagnostics"><b>Setup</b></a><br>A guided start and one-tap fixes</td>
+    <td></td>
+    <td></td>
   </tr>
 </table>
 
@@ -76,7 +81,7 @@ underneath keeps running.
 
 - **Icons**: switch the Xbox / Standard layout, cycle the controller style, L2/R2, performance and fan, 60 / 120 Hz,
   swap screens, bottom screen on/off, screenshot, Recent apps, close the current app, lock the controller, desktop
-  controls, AYN's drawer and much more
+  controls, gesture navigation on/off, AYN's drawer and much more
 - **Sliders**: volume and the brightness of each screen, standing or lying down
 - **Device stats**: refresh rate, CPU, GPU, power, memory and temperatures
 - **Now playing**: what's playing, with play, pause and skip
@@ -134,7 +139,8 @@ Back still does what it always did, and your games keep their buttons.
   it, so Thor Tools asks before you turn it off and offers to turn it back on
 - Hotkeys keep working with the quick panel open
 - The action catalogue covers the controller, both screens, the system (Back, Home, Recent apps, notifications,
-  screenshot, sleep, keep the screens on), brightness and volume, performance, fan and refresh rate
+  screenshot, sleep, keep the screens on, gesture navigation on/off), brightness and volume, performance, fan and
+  refresh rate
 
 </details>
 
@@ -213,6 +219,32 @@ The small things that make two screens easier to live with.
 - Locked to the top screen, the controller comes back up when an app opens on the bottom screen
 - Quick settings tiles that cycle the controller style and the L2/R2 mode
 - Controller style and L2/R2 for an external display
+
+</details>
+
+## Gesture navigation
+
+Turn Android's navigation swipes off for good, not only the white bar: no more landing on the home screen or going
+back by accident in the middle of a game. Get around with the Thor's Home and Back buttons, the quick panel and your
+hotkeys instead.
+
+<p align="center"><img src="screenshots/gesture-navigation.png" alt="Gesture navigation" width="80%"></p>
+
+- One switch stops the swipe up for Home and Recent apps and the back swipe from the screen edges; tick which ones go
+- **Off with desktop controls**: the swipes stop while desktop controls are in use and come back when they stop
+- Per app in App profiles, and a hotkey or quick panel tile to switch them on the spot
+- Hide the white home bar on the top screen while the swipes keep working
+
+<details>
+<summary><b>Everything it does</b></summary>
+
+- It uses Android's own switches through AYN's system service: no Shizuku, no ADB, no PC
+- The back swipe stops on both screens, and the bottom screen's home bar goes with it; the bottom screen has no swipe
+  up
+- Your back gesture sensitivity is saved and put back exactly when the back swipe returns
+- After a restart the swipe up works until Thor Tools has started, then it stops again
+- "Right now" on the page says what is stopped and why: the switch, desktop controls, an app's profile or the hotkey
+- The quick panel opened in desktop controls doesn't bring the swipes back
 
 </details>
 
@@ -359,7 +391,8 @@ Settings that follow the app in front, and go back when you leave it.
 <p align="center"><img src="screenshots/app-profiles.png" alt="An app profile" width="60%"></p>
 
 - Controller style, L2/R2 mode, performance and fan (from OdinTools)
-- Refresh rate, the bottom screen off while the app is on the top screen, vibration strength and the stick lights
+- Refresh rate, the bottom screen off while the app is on the top screen, vibration strength, the stick lights and
+  gesture navigation
 
 ## Themes
 

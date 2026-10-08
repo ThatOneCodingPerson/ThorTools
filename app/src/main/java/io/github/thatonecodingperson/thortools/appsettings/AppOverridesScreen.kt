@@ -36,6 +36,7 @@ import com.google.accompanist.drawablepainter.rememberDrawablePainter
 import io.github.thatonecodingperson.thortools.R
 import io.github.thatonecodingperson.thortools.hotkeys.NoteCard
 import io.github.thatonecodingperson.thortools.leds.LedPreset
+import io.github.thatonecodingperson.thortools.models.AppGestures
 import io.github.thatonecodingperson.thortools.models.AppRefreshRate
 import io.github.thatonecodingperson.thortools.models.AppVibration
 import io.github.thatonecodingperson.thortools.models.BottomScreenRule
@@ -271,6 +272,15 @@ fun AppOverridesScreen(viewModel: AppOverridesViewModel = hiltViewModel(), navig
                     modifier = Modifier.padding(bottom = 4.dp),
                 )
                 ModeInfo(R.string.profileLedsInfo.takeIf { uiState.app?.leds != null })
+                OverrideSpinnerRow(
+                    label = R.string.profileGestures,
+                    spinnerItems = listOf(NoChange.KEY to stringResource(id = NoChange.textRes)) +
+                        AppGestures.entries.map { it.id to stringResource(it.textRes) },
+                    initialSelection = uiState.app?.gestures?.id ?: NoChange.KEY,
+                    onSelectionChanged = { viewModel.gesturesSelected(it) },
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+                ModeInfo(R.string.profileGesturesInfo.takeIf { uiState.app?.gestures != null })
             }
         }
     }

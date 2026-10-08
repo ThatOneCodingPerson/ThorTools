@@ -25,6 +25,9 @@ enum class Probe {
     /** `top`, `bottom` or `none`. */
     LOCK,
     STAY_AWAKE,
+
+    /** `home=on|off,back=on|off`: which of Android's navigation swipes work, as read from the system. */
+    GESTURES,
     DESKTOP,
     PANEL,
 
@@ -191,6 +194,7 @@ object ActionChecks {
             restore = Restore.CLOSE_APP,
         ),
         ActionCheck(ThorAction.TOGGLE_STAY_AWAKE, Probe.STAY_AWAKE, Expect.Changed),
+        ActionCheck(ThorAction.TOGGLE_GESTURES, Probe.GESTURES, Expect.Changed),
         ActionCheck(ThorAction.SWIPE_UP, Probe.SWIPE, Expect.Is("up"), setup = Setup.GESTURE_PAD, restore = Restore.NONE),
         ActionCheck(ThorAction.SWIPE_DOWN, Probe.SWIPE, Expect.Is("down"), setup = Setup.GESTURE_PAD, restore = Restore.NONE),
         ActionCheck(ThorAction.SWIPE_LEFT, Probe.SWIPE, Expect.Is("left"), setup = Setup.GESTURE_PAD, restore = Restore.NONE),

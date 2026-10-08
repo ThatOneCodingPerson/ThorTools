@@ -6,6 +6,7 @@ import android.content.Intent
 import dagger.hilt.android.AndroidEntryPoint
 import io.github.thatonecodingperson.thortools.coexist.Overlap
 import io.github.thatonecodingperson.thortools.data.SharedPrefsRepo
+import io.github.thatonecodingperson.thortools.navigation.GestureNav
 import io.github.thatonecodingperson.thortools.service.ServiceWatchJob
 import javax.inject.Inject
 
@@ -17,6 +18,9 @@ class BootReceiver : BroadcastReceiver() {
 
     @Inject
     lateinit var prefs: SharedPrefsRepo
+
+    @Inject
+    lateinit var gestureNav: GestureNav
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) {
@@ -35,6 +39,8 @@ class BootReceiver : BroadcastReceiver() {
                 if (vibrationStrength != 0 && prefs.isEnabled(Overlap.VIBRATION_AT_BOOT)) {
                     settings.vibrationStrength = vibrationStrength
                 }
+                // The status bar flags behind the swipe up don't survive a restart.
+                gestureNav.reapplyAndWait()
             } finally {
                 pending.finish()
             }

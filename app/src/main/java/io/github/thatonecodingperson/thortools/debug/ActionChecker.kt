@@ -18,6 +18,8 @@ import io.github.thatonecodingperson.thortools.main.MainActivity
 import io.github.thatonecodingperson.thortools.models.ControllerStyle
 import io.github.thatonecodingperson.thortools.models.L2R2Style
 import io.github.thatonecodingperson.thortools.models.RefreshRate
+import io.github.thatonecodingperson.thortools.navigation.GestureNav
+import io.github.thatonecodingperson.thortools.navigation.GestureShell
 import io.github.thatonecodingperson.thortools.tools.ShellExecutor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -47,6 +49,7 @@ class ActionChecker(
     private val stayAwakeOn: () -> Boolean,
     private val desktopOn: () -> Boolean,
     private val setDesktopOn: (Boolean) -> Unit,
+    private val gestures: GestureNav,
     private val helperConnected: () -> Boolean,
 ) : CheckRunner {
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -242,6 +245,7 @@ class ActionChecker(
         Probe.CONTROLLER -> if (host.controllerDisplayId() == Display.DEFAULT_DISPLAY) ActionChecks.TOP else ActionChecks.BOTTOM
         Probe.LOCK -> host.lockedTo?.name?.lowercase() ?: ActionChecks.NONE
         Probe.STAY_AWAKE -> if (onMainResult { stayAwakeOn() }) "on" else "off"
+        Probe.GESTURES -> GestureShell.probe(gestures.readNow())
         Probe.DESKTOP -> if (onMainResult { desktopOn() }) "on" else "off"
         Probe.PANEL -> if (onMainResult { panelOpen() }) "open" else "closed"
         Probe.BRIGHTNESS -> helper("getbrightness", displays().joinToString(","))
@@ -280,6 +284,7 @@ class ActionChecker(
                 )?.let { moveController(it) }
             Probe.LOCK -> setLock(Screen.entries.find { it.name.lowercase() == value })
             Probe.STAY_AWAKE -> if (read(Probe.STAY_AWAKE) != value) onMain { host.toggleStayAwake() }
+            Probe.GESTURES -> if (read(Probe.GESTURES) != value) gestures.toggle()
             Probe.DESKTOP -> onMain { setDesktopOn(value == "on") }
             Probe.BRIGHTNESS -> displays().zip(value.split(',')).forEach { (display, level) -> helper("setbrightness", "$display", level) }
             Probe.VOLUME -> value.toIntOrNull()?.let { audio.setStreamVolume(AudioManager.STREAM_MUSIC, it, 0) }

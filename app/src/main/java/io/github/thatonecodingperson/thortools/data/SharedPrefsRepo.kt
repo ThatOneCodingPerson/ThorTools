@@ -21,6 +21,8 @@ import io.github.thatonecodingperson.thortools.lid.OldLidChanges
 import io.github.thatonecodingperson.thortools.lid.WaitUnit
 import io.github.thatonecodingperson.thortools.models.ControllerStyle
 import io.github.thatonecodingperson.thortools.models.L2R2Style
+import io.github.thatonecodingperson.thortools.navigation.BackValues
+import io.github.thatonecodingperson.thortools.navigation.GestureChoice
 import io.github.thatonecodingperson.thortools.oled.OledChoices
 import io.github.thatonecodingperson.thortools.panel.PanelLayout
 import io.github.thatonecodingperson.thortools.ui.theme.ThorPalette
@@ -290,6 +292,26 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
     val desktopSettings: DesktopSettings
         get() = DesktopSettings(desktopEnabled, desktopApps, desktopLayout, desktopOffOnFrontEnds)
 
+    /** Gesture navigation's page: the main switch and which swipes go when it is off. */
+    var gestureChoice: GestureChoice
+        get() = GestureChoice.stored(
+            on = prefs.getBoolean(KEY_GESTURES_ON, true),
+            stopHome = prefs.getBoolean(KEY_GESTURES_STOP_HOME, true),
+            stopBack = prefs.getBoolean(KEY_GESTURES_STOP_BACK, true),
+            offWithDesktop = prefs.getBoolean(KEY_GESTURES_OFF_WITH_DESKTOP, false),
+        )
+        set(value) = prefs.edit()
+            .putBoolean(KEY_GESTURES_ON, value.on)
+            .putBoolean(KEY_GESTURES_STOP_HOME, value.stopHome)
+            .putBoolean(KEY_GESTURES_STOP_BACK, value.stopBack)
+            .putBoolean(KEY_GESTURES_OFF_WITH_DESKTOP, value.offWithDesktop)
+            .apply()
+
+    /** The back swipe's settings as they were before Thor Tools turned it off; null while it hasn't. */
+    var gestureBackSaved: BackValues?
+        get() = BackValues.decode(prefs.getString(KEY_GESTURES_BACK_SAVED, null))
+        set(value) = prefs.edit().putString(KEY_GESTURES_BACK_SAVED, value?.encode()).apply()
+
     /** Desktop controls' switch, app lists and layout, now and after each change. */
     fun desktopChanges(): Flow<DesktopSettings> = callbackFlow {
         val listener = OnSharedPreferenceChangeListener { _, key ->
@@ -532,6 +554,11 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
         private const val KEY_DESKTOP_OFF_FRONT_ENDS = "desktop_off_front_ends"
         private val DESKTOP_KEYS =
             setOf(KEY_DESKTOP_ENABLED, KEY_DESKTOP_ONLY_IN, KEY_DESKTOP_NEVER_IN, KEY_DESKTOP_LAYOUT, KEY_DESKTOP_OFF_FRONT_ENDS)
+        private const val KEY_GESTURES_ON = "gestures_on"
+        private const val KEY_GESTURES_STOP_HOME = "gestures_stop_home"
+        private const val KEY_GESTURES_STOP_BACK = "gestures_stop_back"
+        private const val KEY_GESTURES_BACK_SAVED = "gestures_back_saved"
+        private const val KEY_GESTURES_OFF_WITH_DESKTOP = "gestures_off_with_desktop"
         private const val KEY_LED_AYN_SAVED = "led_ayn_saved"
         private const val KEY_DEBUG_REPORT_FILE = "debug_report_file"
         private const val KEY_LID_WIFI_OFF = "lid_wifi_off"

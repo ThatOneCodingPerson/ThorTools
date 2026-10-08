@@ -10,6 +10,7 @@ import io.github.thatonecodingperson.thortools.data.AppOverrideDao
 import io.github.thatonecodingperson.thortools.data.AppOverrideEntity
 import io.github.thatonecodingperson.thortools.data.SharedPrefsRepo
 import io.github.thatonecodingperson.thortools.leds.LedPreset
+import io.github.thatonecodingperson.thortools.models.AppGestures
 import io.github.thatonecodingperson.thortools.models.AppRefreshRate
 import io.github.thatonecodingperson.thortools.models.AppVibration
 import io.github.thatonecodingperson.thortools.models.BottomScreenRule
@@ -49,6 +50,7 @@ class AppOverridesViewModel @Inject constructor(
     private var initialBottomScreen = NoChange.KEY
     private var initialVibration = NoChange.KEY
     private var initialLeds = NoChange.KEY
+    private var initialGestures = NoChange.KEY
 
     init {
         viewModelScope.launch {
@@ -67,6 +69,7 @@ class AppOverridesViewModel @Inject constructor(
                 initialBottomScreen = app.bottomScreen ?: NoChange.KEY
                 initialVibration = app.vibration ?: NoChange.KEY
                 initialLeds = LedPreset.of(app.leds)?.id ?: NoChange.KEY
+                initialGestures = app.gestures ?: NoChange.KEY
 
                 appOverrideMapper.mapAppOverride(app)
             }
@@ -96,6 +99,7 @@ class AppOverridesViewModel @Inject constructor(
                         bottomScreen = _uiState.value.app?.bottomScreen?.id,
                         vibration = _uiState.value.app?.vibration?.id,
                         leds = _uiState.value.app?.leds?.look?.encode(),
+                        gestures = _uiState.value.app?.gestures?.id,
                     ),
                 )
             }
@@ -198,6 +202,15 @@ class AppOverridesViewModel @Inject constructor(
         }
     }
 
+    fun gesturesSelected(key: String) {
+        _uiState.update {
+            it.copy(
+                app = it.app?.copy(gestures = AppGestures.byId(key)),
+                hasUnsavedChanges = hasUnsavedChanges(gestures = key),
+            )
+        }
+    }
+
     fun vibrationSelected(key: String) {
         _uiState.update {
             it.copy(
@@ -225,6 +238,7 @@ class AppOverridesViewModel @Inject constructor(
         bottomScreen: String? = null,
         vibration: String? = null,
         leds: String? = null,
+        gestures: String? = null,
     ): Boolean = listOf(
         (controllerStyle ?: _uiState.value.app?.controllerStyle?.id) != initialControllerStyle,
         (l2R2Style ?: _uiState.value.app?.l2r2Style?.id) != initialL2R2Style,
@@ -234,6 +248,7 @@ class AppOverridesViewModel @Inject constructor(
         (bottomScreen ?: _uiState.value.app?.bottomScreen?.id ?: NoChange.KEY) != initialBottomScreen,
         (vibration ?: _uiState.value.app?.vibration?.id ?: NoChange.KEY) != initialVibration,
         (leds ?: _uiState.value.app?.leds?.id ?: NoChange.KEY) != initialLeds,
+        (gestures ?: _uiState.value.app?.gestures?.id ?: NoChange.KEY) != initialGestures,
     ).any { it }
 
     companion object {

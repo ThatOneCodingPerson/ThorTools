@@ -89,6 +89,7 @@ enum class ThorAction(
     CLOSE_APP("system_close_app", R.string.actionCloseApp, R.string.actionCloseAppInfo, ActionCategory.SYSTEM),
     CLEAR_BACKGROUND("system_clear_background", R.string.actionClearBackground, R.string.actionClearBackgroundInfo, ActionCategory.SYSTEM),
     TOGGLE_STAY_AWAKE("system_stay_awake", R.string.actionStayAwake, R.string.actionStayAwakeInfo, ActionCategory.SYSTEM),
+    TOGGLE_GESTURES("system_gestures", R.string.actionGestures, R.string.actionGesturesInfo, ActionCategory.SYSTEM),
     SWIPE_UP("gesture_swipe_up", R.string.actionSwipeUp, R.string.actionSwipeUpInfo, ActionCategory.SYSTEM),
     SWIPE_DOWN("gesture_swipe_down", R.string.actionSwipeDown, R.string.actionSwipeDownInfo, ActionCategory.SYSTEM),
     SWIPE_LEFT("gesture_swipe_left", R.string.actionSwipeLeft, R.string.actionSwipeLeftInfo, ActionCategory.SYSTEM),

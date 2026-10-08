@@ -15,4 +15,5 @@ data class AppOverrideEntity(
     val bottomScreen: String? = null,
     val vibration: String? = null,
     val leds: String? = null,
+    val gestures: String? = null,
 )

@@ -2,6 +2,7 @@ package io.github.thatonecodingperson.thortools.appsettings
 
 import android.graphics.drawable.Drawable
 import io.github.thatonecodingperson.thortools.leds.LedPreset
+import io.github.thatonecodingperson.thortools.models.AppGestures
 import io.github.thatonecodingperson.thortools.models.AppRefreshRate
 import io.github.thatonecodingperson.thortools.models.AppVibration
 import io.github.thatonecodingperson.thortools.models.BottomScreenRule
@@ -41,4 +42,5 @@ data class AppUiModel(
     val bottomScreen: BottomScreenRule? = null,
     val vibration: AppVibration? = null,
     val leds: LedPreset? = null,
+    val gestures: AppGestures? = null,
 )

@@ -46,6 +46,7 @@ import io.github.thatonecodingperson.thortools.hotkeys.toPadSample
 import io.github.thatonecodingperson.thortools.input.PadDirections
 import io.github.thatonecodingperson.thortools.leds.LedScreen
 import io.github.thatonecodingperson.thortools.lid.LidScreen
+import io.github.thatonecodingperson.thortools.navigation.GestureNavScreen
 import io.github.thatonecodingperson.thortools.oled.AynScreen
 import io.github.thatonecodingperson.thortools.oled.OledScreen
 import io.github.thatonecodingperson.thortools.panel.PanelEditorScreen
@@ -235,8 +236,12 @@ class MainActivity : ComponentActivity() {
                                 onWii = { navController.navigate(Routes.WII) },
                                 onRetroArch = { navController.navigate(Routes.RETROARCH) },
                                 onOled = { navController.navigate(Routes.OLED) },
+                                onGestures = { navController.navigate(Routes.GESTURES) },
                                 onBack = back,
                             )
+                        }
+                        composable(Routes.GESTURES) {
+                            GestureNavScreen(onProfiles = { navController.navigate(Routes.OVERRIDE_LIST) }, onBack = back)
                         }
                         composable(Routes.OLED) {
                             OledScreen(onAyn = { navController.navigate(Routes.OLED_AYN) }, onBack = back)
