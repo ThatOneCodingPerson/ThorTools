@@ -3,7 +3,10 @@ package io.github.thatonecodingperson.thortools.input
 import io.github.thatonecodingperson.thortools.hotkeys.PadButton
 
 /** An input device as sysfs lists it; [abs] is its `EV_ABS` capability bits (axes 0 to 63). */
-data class InputNode(val path: String, val name: String, val vendor: Int, val product: Int, val abs: Long = 0L)
+data class InputNode(val path: String, val name: String, val vendor: Int, val product: Int, val abs: Long = 0L, val version: Int = 0) {
+    /** sysfs's own directory for this node, `/sys/class/input/eventN`. */
+    val sysfs: String get() = "/sys/class/input/" + path.substringAfterLast('/')
+}
 
 enum class Screen { TOP, BOTTOM }
 

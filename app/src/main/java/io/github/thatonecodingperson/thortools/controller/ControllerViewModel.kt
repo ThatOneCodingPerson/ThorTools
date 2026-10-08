@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.thatonecodingperson.thortools.coexist.OdinToolsDetector
+import io.github.thatonecodingperson.thortools.data.SharedPrefsRepo
+import io.github.thatonecodingperson.thortools.hotkeys.HotkeyList
 import io.github.thatonecodingperson.thortools.models.ControllerStyle
 import io.github.thatonecodingperson.thortools.models.L2R2Style
 import io.github.thatonecodingperson.thortools.tools.DeviceType
@@ -30,11 +32,14 @@ data class ControllerUiModel(
     /** The Odin 2 back button being remapped, as AYN's setting key. */
     val remapSetting: String? = null,
     val remapKeyCode: Int = 0,
+    /** Hotkeys on Home that turning single-press Home off would block; asked about first while above 0. */
+    val confirmHomeOff: Int = 0,
 )
 
 @HiltViewModel
 class ControllerViewModel @Inject constructor(
     private val settings: SettingsRepo,
+    private val prefs: SharedPrefsRepo,
     private val odinTools: OdinToolsDetector,
     private val executor: ShellExecutor,
     deviceUtils: DeviceUtils,
@@ -94,8 +99,24 @@ class ControllerViewModel @Inject constructor(
     }
 
     fun updateSinglePressHomePreference(newValue: Boolean) {
+        val blocked = HotkeyList.usingHome(prefs.hotkeys)
+        if (!newValue && blocked > 0) {
+            _uiState.update { it.copy(confirmHomeOff = blocked) }
+            return
+        }
+        writeSinglePressHome(newValue)
+    }
+
+    fun homeOffConfirmed() {
+        _uiState.update { it.copy(confirmHomeOff = 0) }
+        writeSinglePressHome(false)
+    }
+
+    fun homeOffDismissed() = _uiState.update { it.copy(confirmHomeOff = 0) }
+
+    private fun writeSinglePressHome(on: Boolean) {
         // Invert here as prevent == double press; written through PServer, so off the main thread.
-        viewModelScope.launch(Dispatchers.IO) { settings.preventPressHome = !newValue }
-        _uiState.update { it.copy(singlePressHomeEnabled = newValue) }
+        viewModelScope.launch(Dispatchers.IO) { settings.preventPressHome = !on }
+        _uiState.update { it.copy(singlePressHomeEnabled = on) }
     }
 }

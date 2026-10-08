@@ -73,6 +73,7 @@ import io.github.thatonecodingperson.thortools.actions.ThorAction
 import io.github.thatonecodingperson.thortools.actions.icon
 import io.github.thatonecodingperson.thortools.ui.composables.CreditNote
 import io.github.thatonecodingperson.thortools.ui.composables.DialogButton
+import io.github.thatonecodingperson.thortools.ui.composables.HomeOffDialog
 import io.github.thatonecodingperson.thortools.ui.composables.SubTopAppBar
 import io.github.thatonecodingperson.thortools.ui.composables.SwitchPreference
 import io.github.thatonecodingperson.thortools.ui.composables.TriggerPreference
@@ -118,6 +119,9 @@ fun HotkeysScreen(viewModel: HotkeysViewModel = hiltViewModel(), onlyAction: Tho
             dismissButton = { DialogButton(text = stringResource(R.string.cancel), onClick = viewModel::dismissReset) },
             text = { Text(text = stringResource(R.string.hotkeysResetConfirm)) },
         )
+    }
+    if (uiState.confirmHomeOff > 0) {
+        HomeOffDialog(uiState.confirmHomeOff, onConfirm = viewModel::homeOffConfirmed, onDismiss = viewModel::homeOffDismissed)
     }
 }
 

@@ -157,6 +157,13 @@ private fun OnOffCard(state: DesktopUiModel, viewModel: DesktopViewModel, onHotk
                 value = hotkey?.let { triggerText(it.button, it.second, it.press) } ?: stringResource(R.string.desktopToggleHotkeyNone),
                 onClick = onHotkey,
             )
+            if (hotkey?.usesHome == true && state.homeHeldBack) {
+                CardRow(
+                    title = stringResource(R.string.desktopToggleHomeFix),
+                    info = stringResource(R.string.desktopToggleHomeOff),
+                    onClick = viewModel::turnOnSinglePressHome,
+                )
+            }
             CardSwitchRow(
                 title = stringResource(R.string.desktopHoldStart),
                 info = stringResource(R.string.desktopHoldStartInfo),
@@ -437,6 +444,22 @@ private fun SticksCard(layout: DesktopLayout, viewModel: DesktopViewModel) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp),
+            )
+            if (!layout.aynPointer && !layout.hideSticks && layout.leftStick != StickRole.NONE) {
+                Text(
+                    stringResource(R.string.desktopLeftStickNote),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+        if (!layout.aynPointer) {
+            CardSwitchRow(
+                title = stringResource(R.string.desktopHideSticks),
+                info = stringResource(R.string.desktopHideSticksInfo),
+                checked = layout.hideSticks,
+                onChange = viewModel::setHideSticks,
             )
         }
     }

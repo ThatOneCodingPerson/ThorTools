@@ -41,6 +41,17 @@ class ThorPadTest {
     }
 
     @Test
+    fun `Thor Tools' copy of the pad is never taken for AYN's, in either style, listed first or not`() {
+        val copy = InputNode("/dev/input/event9", "Xbox Wireless Controller", 0x2020, 0x0112, padAbs, version = 1)
+        val pad = InputNode("/dev/input/event13", "Xbox Wireless Controller", 0x2020, 0x0112, padAbs, version = 0)
+        assertEquals(pad, ThorPad.pick(listOf(copy, pad)))
+        assertNull(ThorPad.pick(listOf(copy)))
+        val standardCopy = InputNode("/dev/input/event9", "Odin Controller", 0x2020, 0x0111, padAbs, version = 1)
+        assertNull(ThorPad.pick(listOf(standardCopy)))
+        assertEquals("/sys/class/input/event13", pad.sysfs)
+    }
+
+    @Test
     fun `AYN's virtual mouse has no sticks and is left out`() {
         val mouse = node("ODIN Station Virtual Mouse", 0x2020, 0x0112, abs = 0L)
         assertNull(ThorPad.pick(listOf(mouse)))

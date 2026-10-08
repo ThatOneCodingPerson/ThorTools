@@ -829,6 +829,8 @@
     <string name="desktopPresetsInfo">Now: %1$s. A preset sets the buttons and sticks; your speeds stay.</string>
     <string name="desktopPresetCustom">your own layout</string>
     <string name="desktopPresetInUse">In use</string>
+    <string name="desktopPresetShoulders">Shoulders and triggers</string>
+    <string name="desktopPresetShouldersInfo">R2 clicks, L2 right-clicks, L1 and R1 go back and forward a page; every other button stays the app\'s</string>
     <string name="desktopPresetSteam">Like a Steam Controller</string>
     <string name="desktopPresetSteamInfo">Right stick pointer, left stick scrolls, R2 and R3 click, L2 right-clicks, L3 middle-clicks, A Enter, B Escape, X keyboard, Y Space, L1 Ctrl, R1 Alt, Select Tab, Start Escape</string>
     <string name="desktopPresetDeck">Like a Steam Deck</string>
@@ -836,7 +838,7 @@
     <string name="desktopPresetAndroid">Android-friendly</string>
     <string name="desktopPresetAndroidInfo">B goes back, L1 and R1 go back and forward a page, Start shows the recent apps</string>
     <string name="desktopResetAll">Reset everything</string>
-    <string name="desktopResetAllInfo">Like a Steam Controller, with every speed back to normal</string>
+    <string name="desktopResetAllInfo">Shoulders and triggers, with every speed back to normal</string>
     <string name="desktopSticks">Sticks</string>
     <string name="desktopSticksInfo">Left to the app, a stick works as it always does there (the left one moves between links like the D-pad).</string>
     <string name="desktopLeftStick">Left stick</string>
@@ -844,7 +846,10 @@
     <string name="desktopStickPointer">Pointer</string>
     <string name="desktopStickScroll">Scroll</string>
     <string name="desktopStickNone">The app\'s own</string>
-    <string name="desktopDpadNote">The D-pad always stays the app\'s: it moves between links and buttons like arrow keys. Some apps (Thor Tools, not Firefox) also move their focus with the left stick while it scrolls; give scrolling to the other stick there if that gets in the way.</string>
+    <string name="desktopDpadNote">The D-pad always stays the app\'s: it moves between links and buttons like arrow keys.</string>
+    <string name="desktopLeftStickNote">Apps see the sticks too: many (Settings, Thor Tools; not Firefox) move their highlight with the left stick while it points or scrolls.</string>
+    <string name="desktopHideSticks">Keep these sticks from apps</string>
+    <string name="desktopHideSticksInfo">Like AYN\'s mouse mode: the sticks only point and scroll, and apps don\'t turn them into D-pad steps. Thor Tools hands apps a copy of the pad without them while desktop controls are on.</string>
     <string name="desktopPointer">Pointer</string>
     <string name="desktopPointerInfo">How fast it moves, how much faster towards the stick\'s edge, and how far the stick goes before it moves.</string>
     <string name="desktopSpeed">Speed</string>
@@ -1569,8 +1574,22 @@
     <string name="hotkeysReset">Reset hotkeys</string>
     <string name="hotkeysResetInfo">Back to the AYN button\'s defaults: a tap opens the quick panel, a hold opens AYN\'s drawer</string>
     <string name="hotkeysResetConfirm">Replace your hotkeys with the defaults?</string>
-    <string name="hotkeysFootnote">A button is only taken over while a hotkey uses it. Presses that turn out not to be a hotkey are pressed again for the app. A game button that only starts combos still reaches the game. Holding a button that starts combos and letting go without one does nothing. Home and Back held together are never a hotkey.</string>
-    <string name="hotkeysHomeHeldBack">Single-press home button is off, so the system holds back the first Home press and your Home hotkeys won\'t react.</string>
+    <string name="hotkeysFootnote">A button is only taken over while a hotkey uses it. A press that turns out not to be a hotkey does the button\'s own job (Home goes Home, Back goes back); nothing is pressed again. A game button that only starts combos still reaches the game. Holding a button that starts combos and letting go without one does nothing. Home and Back held together are never a hotkey.</string>
+    <string name="hotkeysHomeHeldBack">Single-press home button is off, so AYN catches a tap of Home before Thor Tools sees it: your Home hotkeys miss most presses.</string>
+    <string name="homeOffTitle">Your Home hotkeys need it</string>
+    <plurals name="homeOffText">
+        <item quantity="one">With Single-press home button off, AYN catches a tap of Home before Thor Tools sees it, so your hotkey on Home will miss most presses.</item>
+        <item quantity="other">With Single-press home button off, AYN catches a tap of Home before Thor Tools sees it, so your %1$d hotkeys on Home will miss most presses.</item>
+    </plurals>
+    <string name="homeOffConfirm">Turn it off anyway</string>
+    <string name="homeOffKeep">Keep it on</string>
+    <plurals name="homeBlocked">
+        <item quantity="one">Single-press home button is off, so AYN catches a tap of Home before Thor Tools sees it: your hotkey on Home misses most presses.</item>
+        <item quantity="other">Single-press home button is off, so AYN catches a tap of Home before Thor Tools sees it: your %1$d hotkeys on Home miss most presses.</item>
+    </plurals>
+    <string name="homeBlockedFix">Turn it back on</string>
+    <string name="desktopToggleHomeFix">Turn single-press Home back on</string>
+    <string name="desktopToggleHomeOff">Single-press home button is off, so this hotkey on Home misses most presses.</string>
     <string name="hotkeyTriggerSingle">%1$s: %2$s</string>
     <string name="hotkeyTriggerCombo">Hold %1$s + %2$s %3$s</string>
     <string name="hotkeyNew">New hotkey</string>
@@ -1606,7 +1625,7 @@
     <string name="hotkeyOpenAnApp">Open an app</string>
     <string name="hotkeyOpenAnAppInfo">Pick an app and the screen it opens on</string>
     <string name="hotkeyOpenApp">Open %1$s</string>
-    <string name="hotkeysSinglePressHomeInfo">Needed for hotkeys on Home: otherwise the system holds back the first Home press</string>
+    <string name="hotkeysSinglePressHomeInfo">Needed for hotkeys on Home: with it off, AYN catches a tap of Home before Thor Tools sees it</string>
     <string name="hotkeysOffApps">Apps without hotkeys</string>
     <string name="hotkeysOffAppsNone">None: hotkeys work in every app</string>
     <string name="hotkeysOffAppsInfo">In these apps every button goes straight to the app; only the AYN button\'s hotkeys still work.</string>
@@ -1617,7 +1636,7 @@
     <string name="hotkeyRecording">Listening. Press the button, or hold one and press another (a button, the D-pad or a stick flick) for a combo.</string>
     <string name="hotkeyRecordNeedsService">Recording needs the Thor Tools service. Pick the buttons on the right instead.</string>
     <string name="hotkeyGameButtonNote">%1$s is a game button, so it only works in a combo: hold Home, Back or AYN, then press %1$s. On its own it always goes to the game as a real press.</string>
-    <string name="hotkeyHomeNote">Single-press home button is off, so the system holds back the first Home press.</string>
+    <string name="hotkeyHomeNote">Single-press home button is off, so AYN catches a tap of Home before Thor Tools sees it and this hotkey misses most presses.</string>
     <string name="hotkeySlotButton">Button</string>
     <string name="hotkeySlotChoose">Choose</string>
     <string name="hotkeySlotSecond">Then press</string>

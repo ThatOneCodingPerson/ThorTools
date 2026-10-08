@@ -144,6 +144,17 @@ class HotkeyRecognizer(hotkeys: List<Hotkey>, private val timing: Timing = Timin
         passedDown.clear()
     }
 
+    /**
+     * The pad went away while the held button is another device's (AYN, a volume key): only what was pressed on the pad
+     * is forgotten, the game's buttons passed on and a combo's second button (its release is swallowed if it comes). The
+     * held button stays held, so another combo on it still works.
+     */
+    fun forgetPassed() {
+        combo?.takeIf { it.down }?.let { swallowUp += it.second }
+        combo = null
+        passedDown.clear()
+    }
+
     /** Releases still to be swallowed, for the recognizer that replaces this one (the hotkey list changed). */
     fun releasesToSwallow(): Set<PadButton> = swallowUp + heldReleases()
 

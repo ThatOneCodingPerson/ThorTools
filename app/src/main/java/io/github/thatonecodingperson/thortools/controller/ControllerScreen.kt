@@ -9,6 +9,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import io.github.thatonecodingperson.thortools.R
 import io.github.thatonecodingperson.thortools.tools.DeviceType
 import io.github.thatonecodingperson.thortools.tools.SettingsRepo
+import io.github.thatonecodingperson.thortools.ui.composables.HomeOffDialog
 import io.github.thatonecodingperson.thortools.ui.composables.RemapButtonDialog
 import io.github.thatonecodingperson.thortools.ui.composables.SettingsHeader
 import io.github.thatonecodingperson.thortools.ui.composables.SubScreen
@@ -26,6 +27,10 @@ fun ControllerScreen(
     val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(Unit) { viewModel.refresh() }
+
+    if (uiState.confirmHomeOff > 0) {
+        HomeOffDialog(uiState.confirmHomeOff, onConfirm = viewModel::homeOffConfirmed, onDismiss = viewModel::homeOffDismissed)
+    }
 
     uiState.remapSetting?.let { setting ->
         RemapButtonDialog(

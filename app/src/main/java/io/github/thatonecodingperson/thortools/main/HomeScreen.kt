@@ -67,6 +67,7 @@ import io.github.thatonecodingperson.thortools.BuildConfig
 import io.github.thatonecodingperson.thortools.R
 import io.github.thatonecodingperson.thortools.coexist.LeftoverBuildBanner
 import io.github.thatonecodingperson.thortools.coexist.OdinToolsDetector
+import io.github.thatonecodingperson.thortools.hotkeys.NoteCard
 import io.github.thatonecodingperson.thortools.leds.modeName
 import io.github.thatonecodingperson.thortools.ui.composables.PServerNotAvailableDialog
 import io.github.thatonecodingperson.thortools.ui.composables.UnsupportedDeviceDialog
@@ -103,6 +104,14 @@ fun HomeScreen(viewModel: MainViewModel = hiltViewModel(), navigate: (route: Str
             .padding(horizontal = 20.dp, vertical = 8.dp),
     ) {
         Header(uiState, onFix = { navigate(Routes.PERMISSIONS) })
+        if (uiState.homeBlocked > 0) {
+            NoteCard(
+                text = pluralStringResource(R.plurals.homeBlocked, uiState.homeBlocked, uiState.homeBlocked),
+                warning = true,
+                actionLabel = stringResource(R.string.homeBlockedFix),
+                onAction = viewModel::fixHome,
+            )
+        }
         if (uiState.odinTools.leftoverThorTools) {
             LeftoverBuildBanner {
                 context.startActivity(

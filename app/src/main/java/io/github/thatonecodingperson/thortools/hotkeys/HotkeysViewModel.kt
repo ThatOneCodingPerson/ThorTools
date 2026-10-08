@@ -47,6 +47,8 @@ data class HotkeysUiModel(
     val picker: AppPickerMode? = null,
     val confirmReset: Boolean = false,
     val suggestionProfile: SuggestionProfile = SuggestionProfile.THOR,
+    /** Hotkeys on Home that turning single-press Home off would block; asked about first while above 0. */
+    val confirmHomeOff: Int = 0,
 ) {
     /** Some hotkey uses Home while AYN holds back the first Home press. */
     val homeHeldBack: Boolean get() = !singlePressHome && hotkeys.any { it.usesHome }
@@ -218,6 +220,22 @@ class HotkeysViewModel @Inject constructor(
     }
 
     fun setSinglePressHome(on: Boolean) {
+        val blocked = HotkeyList.usingHome(_uiState.value.hotkeys)
+        if (!on && blocked > 0) {
+            _uiState.update { it.copy(confirmHomeOff = blocked) }
+            return
+        }
+        writeSinglePressHome(on)
+    }
+
+    fun homeOffConfirmed() {
+        _uiState.update { it.copy(confirmHomeOff = 0) }
+        writeSinglePressHome(false)
+    }
+
+    fun homeOffDismissed() = _uiState.update { it.copy(confirmHomeOff = 0) }
+
+    private fun writeSinglePressHome(on: Boolean) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { settings.preventPressHome = !on }
             refresh()

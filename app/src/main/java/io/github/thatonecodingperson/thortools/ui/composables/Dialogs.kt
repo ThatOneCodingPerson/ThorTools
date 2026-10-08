@@ -4,6 +4,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import io.github.thatonecodingperson.thortools.R
 import io.github.thatonecodingperson.thortools.coexist.Overlap
@@ -75,6 +76,18 @@ fun DeleteConfirmDialog(onDelete: () -> Unit, onDismiss: () -> Unit) {
         text = {
             Text(text = stringResource(id = R.string.deleteConfirm))
         },
+    )
+}
+
+/** Asked before single-press Home goes off while [count] hotkeys use Home: AYN would catch their taps first. */
+@Composable
+fun HomeOffDialog(count: Int, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { DialogButton(text = stringResource(R.string.homeOffKeep), onClick = onDismiss) },
+        dismissButton = { DialogButton(text = stringResource(R.string.homeOffConfirm), onClick = onConfirm) },
+        title = { Text(text = stringResource(R.string.homeOffTitle)) },
+        text = { Text(text = pluralStringResource(R.plurals.homeOffText, count, count)) },
     )
 }
 

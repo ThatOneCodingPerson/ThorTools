@@ -150,8 +150,20 @@ data class DesktopLayout(
     val aynPointer: Boolean = false,
     val bottomScreen: Boolean = false,
     val bottomButtons: Set<DesktopControl> = DEFAULT_BOTTOM_BUTTONS,
+    /** Apps don't see the sticks that point and scroll (the root helper passes them a copy of the pad without them). */
+    val hideSticks: Boolean = true,
 ) {
     fun job(control: DesktopControl): DesktopJob = jobs[control] ?: DesktopJob.NONE
+
+    /**
+     * Whether the left and right stick are kept from apps now: those that point or scroll with Thor Tools' pointer.
+     * A stick left to the app, and both while AYN's mouse mode moves the pointer (AYN keeps them itself), stay the app's.
+     */
+    fun sticksHidden(split: Boolean): Pair<Boolean, Boolean> {
+        if (!hideSticks || aynPointer) return false to false
+        val (left, right) = sticksFor(split)
+        return (left != StickRole.NONE) to (right != StickRole.NONE)
+    }
 
     /** The buttons desktop controls take from the app while they are on. */
     val taken: Set<DesktopControl>
@@ -215,10 +227,11 @@ data class DesktopLayout(
         add("ap=${aynPointer.bit()}")
         add("bs=${bottomScreen.bit()}")
         add("bb2=${bottomButtons.sortedBy { it.ordinal }.joinToString(",") { it.id }}")
+        add("hk=${hideSticks.bit()}")
     }.joinToString(";")
 
     companion object {
-        val DEFAULT: DesktopLayout get() = DesktopPreset.STEAM_CONTROLLER.layout
+        val DEFAULT: DesktopLayout get() = DesktopPreset.SHOULDERS.layout
 
         const val MIN_SPEED = 0.25f
         const val MAX_SPEED = 3f
@@ -259,6 +272,7 @@ data class DesktopLayout(
                 bottomScreen = values["bs"]?.let { it == "1" } ?: base.bottomScreen,
                 bottomButtons = values["bb2"]?.let { ids -> ids.split(',').mapNotNull(DesktopControl::byId).toSet() }
                     ?: base.bottomButtons,
+                hideSticks = values["hk"]?.let { it == "1" } ?: base.hideSticks,
             )
         }
 
@@ -270,6 +284,9 @@ data class DesktopLayout(
 
 /** Ready-made layouts to start from. */
 enum class DesktopPreset(val id: String, @StringRes val label: Int, @StringRes val info: Int) {
+    /** Only the shoulders and triggers: clicks on L2 and R2, a page back and forward on L1 and R1; every other button stays the app's. */
+    SHOULDERS("shoulders", R.string.desktopPresetShoulders, R.string.desktopPresetShouldersInfo),
+
     /** As close as the Thor gets to a Steam Controller's desktop layout: its sticks stand in for the trackpads. */
     STEAM_CONTROLLER("steam_controller", R.string.desktopPresetSteam, R.string.desktopPresetSteamInfo),
 
@@ -282,6 +299,17 @@ enum class DesktopPreset(val id: String, @StringRes val label: Int, @StringRes v
 
     val layout: DesktopLayout
         get() = when (this) {
+            SHOULDERS -> DesktopLayout(
+                // Every button listed, as a stored layout lists them all.
+                jobs = DesktopControl.entries.associateWith { DesktopJob.NONE } + mapOf(
+                    DesktopControl.L1 to DesktopJob.MOUSE_BACK,
+                    DesktopControl.R1 to DesktopJob.MOUSE_FORWARD,
+                    DesktopControl.L2 to DesktopJob.RIGHT_CLICK,
+                    DesktopControl.R2 to DesktopJob.LEFT_CLICK,
+                ),
+                leftStick = StickRole.SCROLL,
+                rightStick = StickRole.POINTER,
+            )
             STEAM_CONTROLLER -> DesktopLayout(
                 jobs = mapOf(
                     DesktopControl.A to DesktopJob.ENTER,

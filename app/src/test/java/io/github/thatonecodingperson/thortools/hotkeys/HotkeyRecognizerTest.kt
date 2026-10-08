@@ -189,6 +189,20 @@ class HotkeyRecognizerTest {
     }
 
     @Test
+    fun `when the pad goes while AYN is held, AYN stays held and its next combo still runs`() {
+        val toR1 = hotkey(PadButton.AYN, PressKind.TAP, second = PadButton.R1, action = ThorAction.TOGGLE_DESKTOP)
+        val toL1 = hotkey(PadButton.AYN, PressKind.TAP, second = PadButton.L1)
+        val keys = HotkeyRecognizer(listOf(toR1, toL1))
+        keys.down(PadButton.AYN, 0)
+        assertEquals(listOf(Run(toR1)), keys.down(PadButton.R1, 100).effects)
+        keys.forgetPassed()
+        assertTrue(keys.holding)
+        // R1's release, if it comes from the pad that replaced the old one, is swallowed with the press it ends.
+        assertTrue(keys.up(PadButton.R1, 150).consume)
+        assertEquals(listOf(Run(toL1)), keys.down(PadButton.L1, 300).effects)
+    }
+
+    @Test
     fun `holding a combo button and letting go without a combo does nothing`() {
         val keys = HotkeyRecognizer(listOf(hotkey(PadButton.HOME, PressKind.TAP, second = PadButton.A)))
         keys.down(PadButton.HOME, 0)

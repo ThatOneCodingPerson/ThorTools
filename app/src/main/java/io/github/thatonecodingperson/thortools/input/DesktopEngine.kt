@@ -23,10 +23,10 @@ import kotlin.math.max
  * Desktop controls inside the root helper. Android's own `uinput` tool gives Thor Tools a mouse and a keyboard of its
  * own (the keyboard has no letters, so Android's on-screen keyboard still opens); while the app has desktop controls on,
  * the pad's sticks and triggers, read raw, become pointer moves, wheel notches and clicks, and the buttons the app hands
- * over (`key`, `tap`: what its hotkeys passed on) become clicks and keys. The pad itself is never grabbed. While the app
- * says a hotkey may be under way (`hold`), the sticks and triggers stay still, and one still pushed afterwards waits
- * until it is let go. The devices go away with the tool, which ends when its input closes, so a helper that dies leaves
- * nothing behind. While the app keeps the controller on the bottom screen (`split`), keys are sent to the top screen
+ * over (`key`, `tap`: what its hotkeys passed on) become clicks and keys. The sticks that point and scroll are kept from
+ * apps while desktop controls are on, through a copy of the pad without them ([PadCopy]). While the app says a hotkey
+ * may be under way (`hold`), the sticks and triggers stay still, and one still pushed afterwards waits until it is let
+ * go. The devices go away with the tool, which ends when its input closes, so a helper that dies leaves nothing behind. While the app keeps the controller on the bottom screen (`split`), keys are sent to the top screen
  * itself instead (Thor Tools' keyboard would type where the controller is), and every click is told to the app, which
  * then brings the controller back down.
  */
@@ -117,11 +117,24 @@ object DesktopEngine {
      */
     fun command(line: String) {
         try {
-            synchronized(lock) { run(line.trim().split(' ')) }
+            synchronized(lock) {
+                try {
+                    run(line.trim().split(' '))
+                } finally {
+                    wishCopy()
+                }
+            }
         } catch (e: Throwable) {
             synchronized(lock) { problem("command", e) }
         }
         deliver()
+    }
+
+    /** Which sticks the copy of the pad keeps from apps now (none while off, paused or without a ticker). */
+    private fun wishCopy() {
+        val running = on && !paused && process != null && ticker != null
+        val (left, right) = layout.sticksHidden(split)
+        PadCopy.want(if (running) PadCopyPlan.hiddenAxes(left, right) else emptySet())
     }
 
     private fun run(words: List<String>) {
@@ -148,7 +161,8 @@ object DesktopEngine {
                     quietAll()
                 }
                 startTicker()
-                outbox += HelperMessage.DesktopReady(true)
+                // Without a ticker nothing moves the pointer: that is off, whatever was asked.
+                outbox += HelperMessage.DesktopReady(on)
             }
             "off" -> {
                 switchOff()
@@ -205,6 +219,7 @@ object DesktopEngine {
         split = false
         flush()
         closeTool()
+        PadCopy.want(emptySet(), now = true)
     }
 
     private fun switchOff() {
@@ -328,6 +343,8 @@ object DesktopEngine {
                         } catch (e: Exception) {
                             problem("tick", e)
                         }
+                        // Holding Start pauses on a tick: the copy follows.
+                        wishCopy()
                     }
                     deliver()
                     Thread.sleep(TICK_MS)
@@ -343,6 +360,7 @@ object DesktopEngine {
                     }
                     on = false
                     outbox += HelperMessage.DesktopReady(false)
+                    wishCopy()
                 }
                 deliver()
             }
@@ -355,6 +373,7 @@ object DesktopEngine {
             thread.start()
         } catch (e: Throwable) {
             ticker = null
+            on = false
             problem("ticker", e)
         }
     }

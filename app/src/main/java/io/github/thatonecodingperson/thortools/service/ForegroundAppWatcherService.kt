@@ -394,10 +394,15 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
 
         override fun onInputDeviceRemoved(deviceId: Int) {
             thorPads.clear()
-            // Buttons held on the pad that went away are never released: desktop controls and hotkeys let go of them.
+            // Buttons held on the pad that went away are never released: desktop controls and hotkeys let go of them. A
+            // held button of another device (AYN, a volume key) stays held; the pad's copy comes and goes with desktop
+            // controls, so this happens while AYN is held for one of its combos.
             val thorPadGone = seenThorPads.remove(deviceId)
             if (thorPadGone && ::desktopMode.isInitialized) desktopMode.padGone()
-            if (thorPadGone || deviceId == heldFrom) forgetHeld()
+            when {
+                deviceId == heldFrom -> forgetHeld()
+                thorPadGone -> hotkeys.forgetPassed()
+            }
         }
     }
     private val screenReceiver = object : BroadcastReceiver() {
@@ -563,6 +568,8 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
         val screenOn = getSystemService(PowerManager::class.java)?.isInteractive != false &&
             getSystemService(KeyguardManager::class.java)?.isKeyguardLocked != true
         if (!desktopMode.active || !screenOn) return applyDesktop(DesktopDecision.OFF, "switched off or screen off")
+        // The hotkey editor records stick flicks from the motion reaching it: the copy of the pad would keep them away.
+        if (status.buttonRecorder != null) return applyDesktop(DesktopDecision.OFF, "the hotkey editor records")
         // Where the controller really is: a lock says where it should be, Android's focus where it went.
         val display = focusedDisplay ?: controllerLock.lockedTo?.let(screenFocus::displayId) ?: screenFocus.displayId()
         val panelOpen = quickPanel.isOpen
@@ -1288,7 +1295,12 @@ class ForegroundAppWatcherService @Inject constructor() : AccessibilityService()
             // The panel handed the controller back: to which screen is Android's to say.
             if (!quickPanel.isOpen) refreshFocusedDisplay()
         }
-        status.onRecorderChanged = { mainHandler.post { syncDesktopHold() } }
+        status.onRecorderChanged = {
+            mainHandler.post {
+                syncDesktopHold()
+                checkDesktopNow()
+            }
+        }
         syncDesktopHotkeys()
         breakNote = FeedbackCue(this, prefs, hideAfterMs = BREAK_NOTE_MS, windowTitle = "ThorToolsBreakNote")
         mainHandler.postDelayed(breakCheck, BREAK_CHECK_MS)

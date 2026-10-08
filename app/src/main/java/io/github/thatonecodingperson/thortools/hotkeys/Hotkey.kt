@@ -333,6 +333,12 @@ object HotkeyList {
     /** The hotkeys the Hotkeys menu lists: all but those set elsewhere, which still count and still clash. */
     fun listed(hotkeys: List<Hotkey>): List<Hotkey> = hotkeys.filterNot { it.action in SET_ELSEWHERE }
 
+    /**
+     * How many of [hotkeys] need single-press Home: with AYN's double-press Home on, AYN catches a tap of Home before
+     * any app sees it, so these miss most presses.
+     */
+    fun usingHome(hotkeys: List<Hotkey>): Int = hotkeys.count { it.usesHome }
+
     /** The hotkeys that count in [app]: its own, and every hotkey for all apps whose trigger it has no own one for. */
     fun forApp(hotkeys: List<Hotkey>, app: String?): List<Hotkey> {
         val own = if (app == null) emptyList() else hotkeys.filter { app in it.apps }

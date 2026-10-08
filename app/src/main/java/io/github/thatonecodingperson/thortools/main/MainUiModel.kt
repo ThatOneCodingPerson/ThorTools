@@ -21,6 +21,8 @@ data class MainUiModel(
     val accessNeedsAttention: Boolean = false,
     val serviceRunning: Boolean = true,
     val helperRunning: Boolean = true,
+    /** Hotkeys on Home that AYN's double-press Home blocks (single-press Home is off); 0 when nothing clashes. */
+    val homeBlocked: Int = 0,
     val summary: HomeSummary = HomeSummary(),
 )
 

@@ -9,6 +9,7 @@ import io.github.thatonecodingperson.thortools.data.SharedPrefsRepo
 import io.github.thatonecodingperson.thortools.hotkeys.Hotkey
 import io.github.thatonecodingperson.thortools.hotkeys.LaunchableApp
 import io.github.thatonecodingperson.thortools.hotkeys.LaunchableApps
+import io.github.thatonecodingperson.thortools.tools.SettingsRepo
 import io.github.thatonecodingperson.thortools.tools.ShellExecutor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,12 +46,15 @@ data class DesktopUiModel(
     val picker: DesktopApps.Side? = null,
     /** The hotkeys, which come first where they use the same buttons. */
     val hotkeys: List<Hotkey> = emptyList(),
+    /** AYN's double-press Home is on (single-press Home off), which blocks an on/off hotkey on Home. */
+    val homeHeldBack: Boolean = false,
 )
 
 @HiltViewModel
 class DesktopViewModel @Inject constructor(
     private val prefs: SharedPrefsRepo,
     private val executor: ShellExecutor,
+    private val settings: SettingsRepo,
     private val launchableApps: LaunchableApps,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(
@@ -82,8 +86,14 @@ class DesktopViewModel @Inject constructor(
             val (aynOn, speed) = withContext(Dispatchers.IO) {
                 (executor.getIntSystemSetting(AYN_MOUSE, 0) == 1) to executor.getIntSystemSetting(ANDROID_SPEED, 0)
             }
-            _uiState.update { it.copy(aynMouseOn = aynOn, androidSpeed = speed) }
+            val heldBack = withContext(Dispatchers.IO) { settings.preventPressHome }
+            _uiState.update { it.copy(aynMouseOn = aynOn, androidSpeed = speed, homeHeldBack = heldBack) }
         }
+    }
+
+    fun turnOnSinglePressHome() {
+        _uiState.update { it.copy(homeHeldBack = false) }
+        viewModelScope.launch(Dispatchers.IO) { settings.preventPressHome = false }
     }
 
     fun resetAndroidSpeed() {
@@ -135,6 +145,8 @@ class DesktopViewModel @Inject constructor(
     fun setHoldStart(on: Boolean) = change { it.copy(holdStartSwitch = on) }
 
     fun setAynPointer(on: Boolean) = change { it.copy(aynPointer = on) }
+
+    fun setHideSticks(on: Boolean) = change { it.copy(hideSticks = on) }
 
     fun setBottomScreen(on: Boolean) = change { it.copy(bottomScreen = on) }
 

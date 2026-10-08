@@ -130,6 +130,8 @@ Back still does what it always did, and your games keep their buttons.
 - A controller move can also lock the controller to that screen; Close the current app can act on the screen you're
   using, the top or the bottom one; Close background apps can also clean memory
 - Suggestion profiles to pick from, one hotkey or all the free ones at once
+- Hotkeys on Home need AYN's "Single-press home button": with it off, AYN catches a tap of Home before any app sees
+  it, so Thor Tools asks before you turn it off and offers to turn it back on
 - Hotkeys keep working with the quick panel open
 - The action catalogue covers the controller, both screens, the system (Back, Home, Recent apps, notifications,
   screenshot, sleep, keep the screens on), brightness and volume, performance, fan and refresh rate
@@ -139,8 +141,9 @@ Back still does what it always did, and your games keep their buttons.
 ## Desktop controls
 
 Use a browser or any other app with the controller the way a Steam Controller works in desktop mode: a mouse pointer
-on the right stick, scrolling on the left, clicks on the triggers and keys on the buttons. They come on by themselves
-in the apps you want and stay out of your games.
+on the right stick, scrolling on the left, clicks on the triggers and keys on the buttons. Like AYN's own mouse mode,
+the sticks only point and scroll while the D-pad still moves around the app. They come on by themselves in the apps
+you want and stay out of your games.
 
 <table>
   <tr>
@@ -153,9 +156,11 @@ in the apps you want and stay out of your games.
   </tr>
 </table>
 
+- The sticks that point and scroll are kept from apps, so they never move an app's highlight; the D-pad does
 - Every button's job can be changed: mouse buttons, keys like Enter, Escape and Tab, Back, Home, Recent apps or the
   on-screen keyboard
-- Presets: like a Steam Controller, like a Steam Deck, or Android-friendly
+- Presets: shoulders and triggers only (the default: every other button stays the app's), like a Steam Controller, like
+  a Steam Deck, or Android-friendly
 - Only in the apps you choose, never in the ones you block, and off on home screens and game front ends
 - Switch them on and off with their own hotkey or a quick panel tile
 
@@ -175,6 +180,8 @@ in the apps you want and stay out of your games.
 - Hotkeys come first: a button a hotkey uses does the hotkey, and while you hold a button that starts hotkeys the
   pointer waits
 - Holding Start can pause them where you are, if you like
+- Keeping the sticks from apps can be switched off in the Sticks tab; holding Home and Back together for a few seconds
+  gives the sticks back to apps until desktop controls switch on again
 
 </details>
 

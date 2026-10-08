@@ -2,6 +2,7 @@ package io.github.thatonecodingperson.thortools.input
 
 import android.net.LocalSocket
 import android.net.LocalSocketAddress
+import android.os.SystemClock
 import io.github.thatonecodingperson.thortools.leds.LightWriter
 import io.github.thatonecodingperson.thortools.oled.OledEngine
 import java.io.File
@@ -15,9 +16,10 @@ import kotlin.system.exitProcess
 /**
  * Runs as root through `app_process` (started by [RawInputClient]): reports which screen was touched last and when
  * the last finger left it, the pad's D-pad directions and stick flicks while the app watches the pad, the lid opening
- * and closing, and runs the commands an app may not (see [RootCommands]). It never grabs or mutes anything, and injects
- * nothing on its own: only desktop controls, through their own devices, on the app's say ([DesktopEngine]).
- * Arguments: abstract socket name, the app's uid.
+ * and closing, and runs the commands an app may not (see [RootCommands]). It mutes nothing and injects nothing on its
+ * own: only desktop controls, through their own devices, on the app's say ([DesktopEngine]). While they keep sticks
+ * from apps it takes the pad and hands apps a copy without those sticks ([PadCopy]); the kernel gives the pad back the
+ * moment the helper ends. Arguments: abstract socket name, the app's uid.
  */
 object RawInputHelper {
     private const val EV_SYN = 0
@@ -31,10 +33,18 @@ object RawInputHelper {
     private const val TOUCH_REPORT_GAP_MS = 300L
     private const val QUIT_LIMIT_MS = 2_000L
 
-    // The pad as its raw events leave it, and the directions while the app watches (null: not watching).
+    // The pad as its raw events leave it, its keys down, and the directions while the app watches (null: not watching).
     private val padLock = Any()
     private val pad = RawPad()
+    private val padKeys = mutableSetOf<Int>()
     private var padDirections: PadDirections? = null
+
+    // The pad being read now, and when it last sent anything; for the copy, which takes it only while it rests.
+    @Volatile
+    private var currentPad: InputNode? = null
+
+    @Volatile
+    private var lastPadEvent = 0L
 
     @Volatile
     private var screenOn = true
@@ -63,10 +73,17 @@ object RawInputHelper {
         OledEngine.reportAreas = { displayId, percent -> send(HelperMessage.Areas(displayId, percent)) }
         DesktopEngine.sample = { synchronized(padLock) { pad.sample() } }
         DesktopEngine.report = ::send
+        PadCopy.currentPad = { currentPad }
+        PadCopy.restingSince = {
+            val (keys, sample) = synchronized(padLock) { padKeys.toSet() to pad.sample() }
+            if (PadCopyPlan.atRest(keys, sample)) lastPadEvent else null
+        }
+        PadCopy.onPadEvent = ::onPadEvent
+        PadCopy.report = ::send
 
         startReader("top", { nodes -> nodes.firstOrNull { it.name == "fts_ts" } }) { _, stream -> readTouch(stream, Screen.TOP) }
         startReader("bottom", { nodes -> nodes.firstOrNull { it.name == "fts_ts_3" } }) { _, stream -> readTouch(stream, Screen.BOTTOM) }
-        startReader("pad", ThorPad::pick) { _, stream -> readPad(stream) }
+        startReader("pad", ThorPad::pick) { node, stream -> readPad(node, stream) }
         startReader("lid", { nodes -> nodes.firstOrNull { it.name == "hall_switch" } }) { _, stream -> readLid(stream) }
 
         // The readers can block in read() for hours, so this loop is the one that notices the app went away.
@@ -107,6 +124,8 @@ object RawInputHelper {
             Thread.sleep(QUIT_LIMIT_MS)
             Runtime.getRuntime().halt(0)
         }.apply { isDaemon = true }.start()
+        // First, and without waiting on anything: the pad goes back to Android before anything else is cleaned up.
+        runCatching { PadCopy.shutdown() }
         runCatching { DesktopEngine.stop() }
         exitProcess(0)
     }
@@ -184,8 +203,15 @@ object RawInputHelper {
                     vendor = File(device, "id/vendor").readText().trim().toInt(16),
                     product = File(device, "id/product").readText().trim().toInt(16),
                     abs = runCatching { ThorPad.parseAbs(File(device, "capabilities/abs").readText()) }.getOrDefault(0L),
+                    version = runCatching { File(device, "id/version").readText().trim().toInt(16) }.getOrDefault(0),
                 )
             }.getOrNull()
+        }
+
+    /** Reads [stream]'s raw events until it ends or fails (the copy's forwarder reads the pad it has taken this way). */
+    fun readEvents(stream: FileInputStream, handle: (type: Int, code: Int, value: Int) -> Unit) =
+        forEachEvent(stream) { type, code, value ->
+            handle(type, code, value)
         }
 
     private inline fun forEachEvent(stream: FileInputStream, crossinline handle: (type: Int, code: Int, value: Int) -> Unit) {
@@ -213,33 +239,47 @@ object RawInputHelper {
     }
 
     /**
-     * Follows the pad's axes all the time, so watching can start from how the pad is at that moment, and tells desktop
-     * controls about its triggers' keys (which never waits on them). A key held down repeats (value 2); only presses and
-     * releases count.
+     * Follows the pad's axes and keys all the time, so watching can start from how the pad is at that moment. While the
+     * copy has the pad, its forwarder hands the events to [onPadEvent] instead and this read waits with nothing coming.
      */
-    private fun readPad(stream: FileInputStream) {
+    private fun readPad(node: InputNode, stream: FileInputStream) {
         forgetPad()
+        currentPad = node
         try {
-            forEachEvent(stream) { type, code, value ->
-                when {
-                    type == EV_ABS -> synchronized(padLock) { pad.onAbs(code, value) }
-                    type == EV_KEY && value != 2 -> DesktopEngine.onPadKey(code, value == 1)
-                    type == EV_SYN && code == SYN_REPORT -> {
-                        val changes = synchronized(padLock) { padDirections?.update(pad.sample()) }
-                        changes?.forEach { send(HelperMessage.Direction(it.button, it.down)) }
-                    }
-                    // Events were lost: a stick's way back to the middle may be among them.
-                    type == EV_SYN && code == SYN_DROPPED -> forgetPad()
-                }
-            }
+            forEachEvent(stream, ::onPadEvent)
         } finally {
+            currentPad = null
             // The pad went away: its last stick and trigger values mustn't keep moving the pointer.
             forgetPad()
         }
     }
 
+    /**
+     * One raw event of the pad: its axes and keys, the directions while the app watches, and its triggers' keys for
+     * desktop controls (which never waits on them). A key held down repeats (value 2); only presses and releases count.
+     */
+    private fun onPadEvent(type: Int, code: Int, value: Int) {
+        lastPadEvent = SystemClock.uptimeMillis()
+        when {
+            type == EV_ABS -> synchronized(padLock) { pad.onAbs(code, value) }
+            type == EV_KEY && value != 2 -> {
+                synchronized(padLock) { if (value == 1) padKeys += code else padKeys -= code }
+                DesktopEngine.onPadKey(code, value == 1)
+            }
+            type == EV_SYN && code == SYN_REPORT -> {
+                val changes = synchronized(padLock) { padDirections?.update(pad.sample()) }
+                changes?.forEach { send(HelperMessage.Direction(it.button, it.down)) }
+            }
+            // Events were lost: a stick's way back to the middle may be among them.
+            type == EV_SYN && code == SYN_DROPPED -> forgetPad()
+        }
+    }
+
     private fun forgetPad() {
-        synchronized(padLock) { pad.reset() }
+        synchronized(padLock) {
+            pad.reset()
+            padKeys.clear()
+        }
         DesktopEngine.onPadReset()
     }
 

@@ -9,6 +9,7 @@ import io.github.thatonecodingperson.thortools.coexist.OdinToolsDetector
 import io.github.thatonecodingperson.thortools.data.AppOverrideDao
 import io.github.thatonecodingperson.thortools.data.SharedPrefsRepo
 import io.github.thatonecodingperson.thortools.extras.KeyboardPlace
+import io.github.thatonecodingperson.thortools.hotkeys.HotkeyList
 import io.github.thatonecodingperson.thortools.models.ControllerStyle
 import io.github.thatonecodingperson.thortools.models.L2R2Style
 import io.github.thatonecodingperson.thortools.service.ServiceStatus
@@ -31,7 +32,7 @@ import javax.inject.Inject
 class MainViewModel @Inject constructor(
     @ApplicationContext context: Context,
     deviceUtils: DeviceUtils,
-    settings: SettingsRepo,
+    private val settings: SettingsRepo,
     private val odinTools: OdinToolsDetector,
     private val access: AccessChecker,
     private val prefs: SharedPrefsRepo,
@@ -96,6 +97,16 @@ class MainViewModel @Inject constructor(
                 it.copy(summary = it.summary.copy(controllerStyle = style, l2r2 = l2r2, profiles = profiles, keyboard = keyboard))
             }
         }
+        viewModelScope.launch {
+            val prevent = withContext(Dispatchers.IO) { settings.preventPressHome }
+            _uiState.update { it.copy(homeBlocked = if (prevent) HotkeyList.usingHome(prefs.hotkeys) else 0) }
+        }
+    }
+
+    /** Single-press Home back on, so the Home hotkeys see every press again. */
+    fun fixHome() {
+        _uiState.update { it.copy(homeBlocked = 0) }
+        viewModelScope.launch(Dispatchers.IO) { settings.preventPressHome = false }
     }
 
     fun openPanel() {

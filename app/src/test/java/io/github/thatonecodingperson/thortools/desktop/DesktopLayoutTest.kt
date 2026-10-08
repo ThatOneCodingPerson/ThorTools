@@ -8,8 +8,22 @@ import org.junit.Test
 
 class DesktopLayoutTest {
     @Test
-    fun `the default is a Steam Controller's desktop layout`() {
+    fun `the default uses only the shoulders and triggers and leaves every other button to the app`() {
         val layout = DesktopLayout.DEFAULT
+        assertEquals(DesktopPreset.SHOULDERS, layout.preset)
+        assertEquals(StickRole.POINTER, layout.rightStick)
+        assertEquals(StickRole.SCROLL, layout.leftStick)
+        assertEquals(DesktopJob.LEFT_CLICK, layout.job(DesktopControl.R2))
+        assertEquals(DesktopJob.RIGHT_CLICK, layout.job(DesktopControl.L2))
+        assertEquals(DesktopJob.MOUSE_BACK, layout.job(DesktopControl.L1))
+        assertEquals(DesktopJob.MOUSE_FORWARD, layout.job(DesktopControl.R1))
+        assertEquals(setOf(DesktopControl.L1, DesktopControl.R1, DesktopControl.L2, DesktopControl.R2), layout.taken)
+        assertFalse(layout.holdStartSwitch)
+    }
+
+    @Test
+    fun `the Steam Controller preset is a Steam Controller's desktop layout`() {
+        val layout = DesktopPreset.STEAM_CONTROLLER.layout
         assertEquals(StickRole.POINTER, layout.rightStick)
         assertEquals(StickRole.SCROLL, layout.leftStick)
         assertEquals(DesktopJob.LEFT_CLICK, layout.job(DesktopControl.R2))
@@ -105,7 +119,7 @@ class DesktopLayoutTest {
     fun `with the controller on the bottom screen its buttons stay the app's`() {
         // Only the D-pad until buttons are chosen for the bottom screen.
         assertEquals(DesktopLayout.DEFAULT.taken, DesktopLayout.DEFAULT.takenFor(split = true))
-        val layout = DesktopLayout.DEFAULT.copy(bottomButtons = setOf(DesktopControl.A, DesktopControl.B))
+        val layout = DesktopPreset.STEAM_CONTROLLER.layout.copy(bottomButtons = setOf(DesktopControl.A, DesktopControl.B))
         assertEquals(layout.taken, layout.takenFor(split = false))
         val split = layout.takenFor(split = true)
         assertFalse(DesktopControl.A in split)
@@ -165,5 +179,23 @@ class DesktopLayoutTest {
     fun `Thor Tools' keyboard has no letters, so Android's on-screen keyboard still opens`() {
         val letters = (16..25) + (30..38) + (44..50)
         assertTrue(DesktopJob.keys.none { it in letters })
+    }
+
+    @Test
+    fun `the sticks that point and scroll are kept from apps, a stick left to the app is not`() {
+        val layout = DesktopLayout.DEFAULT
+        assertEquals(true to true, layout.sticksHidden(split = false))
+        assertEquals(false to true, layout.copy(leftStick = StickRole.NONE).sticksHidden(split = false))
+        // With the controller kept below, the left stick is the bottom screen's app's.
+        assertEquals(false to true, layout.sticksHidden(split = true))
+    }
+
+    @Test
+    fun `with AYN's pointer or the choice off, apps keep both sticks, and the choice comes back from its stored text`() {
+        val layout = DesktopLayout.DEFAULT
+        assertEquals(false to false, layout.copy(aynPointer = true).sticksHidden(split = false))
+        assertEquals(false to false, layout.copy(hideSticks = false).sticksHidden(split = false))
+        assertEquals(false, DesktopLayout.decode(layout.copy(hideSticks = false).encode()).hideSticks)
+        assertEquals(true, DesktopLayout.decode("ls=pointer").hideSticks)
     }
 }

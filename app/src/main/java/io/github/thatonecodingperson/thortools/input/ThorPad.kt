@@ -27,11 +27,18 @@ object ThorPad {
         val foreignNames = nodes.filter { it.vendor != VENDOR }.map { it.name }.toSet()
         return nodes.firstOrNull { node ->
             node.vendor == VENDOR &&
+                !isCopy(node) &&
                 node.hasAbs(ABS_X) &&
                 node.hasAbs(ABS_HAT0X) &&
                 (node.product == PRODUCT_XBOX_LAYOUT || (node.product == PRODUCT_STANDARD_LAYOUT && node.name !in foreignNames))
         }
     }
+
+    /**
+     * Thor Tools' own copy of the pad, which has AYN's name and ids: Android's uinput tool always makes version
+     * [PadCopyPlan.VERSION], while AYN's pad (and the pads AYN sends on for external controllers) are version 0.
+     */
+    fun isCopy(node: InputNode): Boolean = node.vendor == VENDOR && node.version == PadCopyPlan.VERSION
 
     /** sysfs `capabilities/abs`: hex words, the most significant first; every axis read here is in the last one. */
     fun parseAbs(text: String): Long = text.trim().split(' ').lastOrNull()?.toULongOrNull(16)?.toLong() ?: 0L
@@ -39,7 +46,7 @@ object ThorPad {
     private fun InputNode.hasAbs(code: Int): Boolean = ((abs shr code) and 1L) == 1L
 }
 
-/** The pad's axes as its raw events leave them; one reader thread at a time. */
+/** The pad's axes as its raw events leave them; under the helper's pad lock (its reader, or the copy's forwarder). */
 class RawPad {
     private val values = IntArray(ThorPad.ABS_HAT0Y + 1)
 

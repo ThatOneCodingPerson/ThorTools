@@ -9,11 +9,11 @@ import org.junit.Test
 class DesktopModeTest {
     private val firefox = "org.mozilla.firefox"
     private val retroArch = "com.retroarch.aarch64"
-    private val settings = DesktopSettings(true, DesktopApps(neverIn = setOf(retroArch)), DesktopLayout.DEFAULT)
+    private val settings = DesktopSettings(true, DesktopApps(neverIn = setOf(retroArch)), DesktopPreset.STEAM_CONTROLLER.layout)
     private val sent = mutableListOf<String>()
 
     /** Switched on, in Firefox on the top screen, with the helper's devices up; what was sent so far is forgotten. */
-    private fun onInFirefox(layout: DesktopLayout = DesktopLayout.DEFAULT): DesktopMode = DesktopMode { sent += it }.also {
+    private fun onInFirefox(layout: DesktopLayout = DesktopPreset.STEAM_CONTROLLER.layout): DesktopMode = DesktopMode { sent += it }.also {
         it.configure(settings.copy(layout = layout))
         it.update(firefox, panelOpen = false, topScreen = true)
         it.onReady(true)
@@ -31,8 +31,8 @@ class DesktopModeTest {
     }
 
     private val bothScreens =
-        settings.copy(layout = DesktopLayout.DEFAULT.copy(bottomScreen = true, bottomButtons = setOf(DesktopControl.A)))
-    private val holdStart = DesktopLayout.DEFAULT.copy(holdStartSwitch = true)
+        settings.copy(layout = DesktopPreset.STEAM_CONTROLLER.layout.copy(bottomScreen = true, bottomButtons = setOf(DesktopControl.A)))
+    private val holdStart = DesktopPreset.STEAM_CONTROLLER.layout.copy(holdStartSwitch = true)
 
     private fun situation(
         controllerOnTop: Boolean = false,
@@ -110,7 +110,7 @@ class DesktopModeTest {
         mode.update(retroArch, panelOpen = false, topScreen = true)
         mode.configure(settings)
         mode.configure(settings.copy(enabled = false))
-        assertEquals(listOf("config ${DesktopLayout.DEFAULT.encode()}", "starts ", "on", "off", "stop"), sent)
+        assertEquals(listOf("config ${DesktopPreset.STEAM_CONTROLLER.layout.encode()}", "starts ", "on", "off", "stop"), sent)
     }
 
     @Test
@@ -128,7 +128,7 @@ class DesktopModeTest {
 
     @Test
     fun `buttons with a job are taken, the others stay the app's`() {
-        val mode = onInFirefox(DesktopLayout.DEFAULT.with(DesktopControl.Y, DesktopJob.NONE))
+        val mode = onInFirefox(DesktopPreset.STEAM_CONTROLLER.layout.with(DesktopControl.Y, DesktopJob.NONE))
         assertTrue(mode.takes(DesktopControl.A))
         assertTrue(mode.takes(DesktopControl.R2))
         assertFalse(mode.takes(DesktopControl.Y))
@@ -316,7 +316,7 @@ class DesktopModeTest {
         mode.resend()
         assertFalse(mode.paused)
         assertFalse(mode.ready)
-        assertEquals(listOf("config ${DesktopLayout.DEFAULT.encode()}", "starts ", "hold 1", "on"), sent)
+        assertEquals(listOf("config ${DesktopPreset.STEAM_CONTROLLER.layout.encode()}", "starts ", "hold 1", "on"), sent)
         // A's release is still swallowed, but nothing is sent for it: the old helper's devices are gone.
         sent.clear()
         assertTrue(mode.key(DesktopControl.A, down = false, repeat = false, startsCombos = false))
