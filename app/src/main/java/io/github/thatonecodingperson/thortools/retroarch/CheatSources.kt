@@ -55,7 +55,7 @@ data class PackInfo(val size: Long, val time: Long)
 
 /** Plain HTTP GETs with timeouts; every failure comes out as a [CheatProblem]. Blocking: never on the main thread. */
 class CheatHttp(private val userAgent: String) {
-    class Response(val code: Int, val body: ByteArray, val etag: String?)
+    class Response(val code: Int, val body: ByteArray, val etag: String?, val link: String? = null)
 
     /** [url]'s body; with [etag], a 304 answer when it hasn't changed (empty body). */
     fun get(url: String, etag: String? = null, accept: String? = null): Response {
@@ -66,7 +66,7 @@ class CheatHttp(private val userAgent: String) {
             if (code == HttpURLConnection.HTTP_NOT_MODIFIED) return Response(code, ByteArray(0), etag)
             check(connection, code)
             val body = connection.inputStream.use { it.readBytes() }
-            return Response(code, body, connection.getHeaderField("ETag"))
+            return Response(code, body, connection.getHeaderField("ETag"), connection.getHeaderField("Link"))
         } catch (e: IOException) {
             throw problem(e)
         } finally {

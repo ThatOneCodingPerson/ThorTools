@@ -42,11 +42,16 @@ class CheatFiles @Inject constructor(
         return listing
     }
 
-    /** What RetroArch has (cheat files, core folders, saves and states, installed cores); null when root can't look. */
+    /**
+     * What RetroArch has (cheat files, core folders, saves and states, installed cores) and the games it started; null
+     * when root can't look.
+     */
     fun scanRetroArch(places: RetroArchPlaces): RetroArchSide? {
         val output = executor.capture(RomScan.retroArchScript(places)).getOrNull() ?: return null
-        Log.i(TAG, RomScan.summary(output))
-        return RomScan.parseRetroArch(output)
+        val history = places.history.firstNotNullOfOrNull { rootFiles.read(it) }?.let(RaHistory::parse).orEmpty()
+        val side = RomScan.parseRetroArch(output).copy(history = history)
+        Log.i(TAG, "${RomScan.summary(output)}; history: ${history.size}; folders: ${side.folders}")
+        return side
     }
 
     fun choices(): CheatChoices =
@@ -60,7 +65,7 @@ class CheatFiles @Inject constructor(
     }
 
     /** RetroArch's cheat file at [path] (as root reaches it); null when it isn't there or root can't read it. */
-    fun readInstalled(path: String): ChtFile? = rootFiles.read(path)?.let { ChtFile.of(it.toByteArray(Charsets.UTF_8)) }
+    fun readInstalled(path: String): ChtFile? = rootFiles.readBytes(path)?.let(ChtFile::of)
 
     /**
      * Writes [cht] as [name] into [core]'s folder in RetroArch's cheats folder ([cheatsRoot], as root reaches it). A

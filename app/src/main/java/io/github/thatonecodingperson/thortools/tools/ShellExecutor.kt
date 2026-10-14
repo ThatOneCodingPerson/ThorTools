@@ -61,11 +61,25 @@ class ShellExecutor @Inject constructor(@ApplicationContext private val context:
     /** True when PServer answers as uid 0. It stops answering once SELinux is enforcing. */
     fun probe(): Boolean = executeAsRoot("id").getOrNull()?.contains("uid=0") == true
 
-    /** Runs [cmd] as root and returns its complete stdout and stderr, routed through a scratch file. */
+    /**
+     * Runs [cmd] as root and returns its complete stdout and stderr, routed through a scratch file. Always as a script
+     * (the line break): run on PServer's line, a short one leaves an output file the app can't open.
+     */
     fun capture(cmd: String): Result<String> {
         val out = scratchFile("out")
-        return script("($cmd) > ${out.absolutePath} 2>&1; chmod 644 ${out.absolutePath}")
+        return script("($cmd) > ${out.absolutePath} 2>&1\nchmod 644 ${out.absolutePath}")
             .mapCatching { out.readText().trimEnd() }
+            .also { out.delete() }
+    }
+
+    /** Runs [cmd] as root and returns its stdout byte for byte, as [capture] does; fails when [cmd] ends with an error. */
+    fun captureBytes(cmd: String): Result<ByteArray> {
+        val out = scratchFile("out")
+        return script("($cmd) > ${out.absolutePath} 2>/dev/null\ns=\$?\nchmod 644 ${out.absolutePath}\necho \$s")
+            .mapCatching { status ->
+                check(status?.trim() == "0") { "exit $status" }
+                out.readBytes()
+            }
             .also { out.delete() }
     }
 

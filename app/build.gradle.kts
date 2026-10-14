@@ -23,8 +23,8 @@ android {
         applicationId = "io.github.thatonecodingperson.thortools"
         minSdk = 33
         targetSdk = 36
-        versionCode = 69
-        versionName = "0.45.2"
+        versionCode = 77
+        versionName = "0.50.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -24,6 +24,9 @@ class RootFiles @Inject constructor(@ApplicationContext private val context: Con
         return output.takeIf { it.endsWith(END) }?.removeSuffix(END)
     }
 
+    /** The whole file byte for byte, whatever its encoding; null when it isn't there or root can't read it. */
+    fun readBytes(path: String): ByteArray? = executor.captureBytes("cat ${quote(path)}").getOrNull()
+
     /** True or false when root could look, null when it couldn't. */
     fun exists(path: String): Boolean? = when (executor.script("[ -e ${quote(path)} ] && echo yes || echo no").getOrNull()) {
         "yes" -> true
@@ -115,6 +118,12 @@ class RootFiles @Inject constructor(@ApplicationContext private val context: Con
 
         /** [path] (as root sees shared storage) in Android's own view of shared storage; null when it lies elsewhere. */
         fun storageView(path: String): String? = path.takeIf { it.startsWith("$MEDIA/") }?.let { SHARED + it.removePrefix(MEDIA) }
+
+        /**
+         * [path] (in Android's view of shared storage) as root sees it underneath, where reading thousands of files is
+         * much quicker; only ever for reading. Null when it lies elsewhere.
+         */
+        fun underneath(path: String): String? = path.takeIf { it.startsWith("$SHARED/") }?.let { MEDIA + it.removePrefix(SHARED) }
 
         /** [text] as one shell word, whatever quotes it holds. */
         fun quote(text: String): String = "'" + text.replace("'", "'\\''") + "'"

@@ -69,7 +69,7 @@ data class GameTitle(
     val revision: Int,
     val flags: Set<String>,
 ) {
-    val tokens: Set<String> get() = title.split(' ').filter { it.isNotEmpty() }.toSet()
+    val tokens: Set<String> by lazy { title.split(' ').filter { it.isNotEmpty() }.toSet() }
 
     companion object {
         private val ROUND = Regex("""\(([^)]*)\)""")

@@ -57,9 +57,11 @@ class RomScanTest {
             V $media/states/Mupen64Plus-Next/Castlevania (USA) (Rev B).n64.state.png
             Q $media/saves/PCSX-ReARMed
             V $media/saves/PCSX-ReARMed/3Xtreme (USA).srm
+            C $media/config/Mesen2
             K snes9x_libretro
             I corename = "Snes9x"
             I database = "Nintendo - Super Nintendo Entertainment System|Nintendo - Sufami Turbo|Nintendo - Satellaview"
+            I cheats = "true"
             K mupen64plus_next_libretro
             I corename = "Mupen64Plus-Next"
             I database = "Nintendo - Nintendo 64"
@@ -69,7 +71,7 @@ class RomScanTest {
         assertEquals("$media/cheats", side.cheatsRoot)
         assertEquals(listOf(InstalledCheats("Mupen64Plus-Next", "Castlevania (USA) (Rev B).cht", 249, 2)), side.installed)
         assertEquals(setOf("Mupen64Plus-Next", "Snes9x"), side.cheatFolders)
-        assertEquals(setOf("Mupen64Plus-Next", "Snes9x", "PCSX-ReARMed"), side.coreFolders)
+        assertEquals(setOf("Mupen64Plus-Next", "PCSX-ReARMed", "Mesen2"), side.made)
         assertEquals(setOf("3Xtreme (USA).srm"), side.played["PCSX-ReARMed"])
         assertEquals(2, side.played["Mupen64Plus-Next"]?.size)
         assertEquals(
@@ -78,6 +80,7 @@ class RomScanTest {
                     "snes9x_libretro",
                     "Snes9x",
                     listOf("Nintendo - Super Nintendo Entertainment System", "Nintendo - Sufami Turbo", "Nintendo - Satellaview"),
+                    cheats = true,
                 ),
                 CoreInfo("mupen64plus_next_libretro", "Mupen64Plus-Next", listOf("Nintendo - Nintendo 64")),
             ),
@@ -101,8 +104,12 @@ class RomScanTest {
         assertTrue(places.states.isEmpty())
         assertEquals("/data/user/0/com.retroarch.aarch64/cores", places.cores)
         assertEquals("/data/user/0/com.retroarch.aarch64/info", places.info)
+        assertEquals("$media/config", places.config.first())
+        assertEquals("$media/playlists/builtin/content_history.lpl", places.history.first())
         val script = RomScan.retroArchScript(places)
         assertTrue(script.contains("'/data/user/0/com.retroarch.aarch64/cores'/*_libretro_android.so"))
         assertTrue(script.contains("-name '*.cht'"))
+        assertTrue(script.contains("stat -c 'C %n'"))
+        assertTrue(script.contains("^(corename|database|cheats)"))
     }
 }

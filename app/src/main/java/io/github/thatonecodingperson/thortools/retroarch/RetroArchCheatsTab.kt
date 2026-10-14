@@ -89,7 +89,11 @@ internal fun CheatsTab(state: RaUiModel, viewModel: RetroArchViewModel, pickFold
         },
         right = {
             val open = cheats.game
-            if (open != null) GameCards(state, open, viewModel) else GamesCard(state, viewModel)
+            if (open != null) {
+                GameCards(state, open, viewModel)
+            } else {
+                GamesCard(state, viewModel)
+            }
         },
     )
 }
@@ -219,7 +223,10 @@ private fun RetroArchCard(state: RaUiModel, viewModel: RetroArchViewModel) {
     }
 }
 
-/** The games of the chosen console, with a chip per console and a search. */
+/**
+ * The games of the chosen console, with a chip per console and a search: the ones RetroArch played first, with the core
+ * it used and where it looks for their cheats, then the others.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun GamesCard(state: RaUiModel, viewModel: RetroArchViewModel) {
@@ -231,10 +238,10 @@ private fun GamesCard(state: RaUiModel, viewModel: RetroArchViewModel) {
         CardHeader(
             Icons.Rounded.VideogameAsset,
             stringResource(R.string.raCheatGames),
-            if (cheats.games.isEmpty()) {
+            if (cheats.allGames.isEmpty()) {
                 stringResource(R.string.raCheatNoGames)
             } else {
-                stringResource(R.string.raCheatGamesInfo, cheats.games.size)
+                stringResource(R.string.raCheatGamesInfo, cheats.allGames.size)
             },
         )
         if (systems.isNotEmpty()) {
@@ -259,22 +266,53 @@ private fun GamesCard(state: RaUiModel, viewModel: RetroArchViewModel) {
         }
         if (system != null) {
             if (system in cheats.loading) CardRowBox { Muted(stringResource(R.string.raCheatGettingList, system.label)) }
-            val (shown, total) = cheats.shownGames(SHOWN)
-            shown.forEach { game -> GameRow(state, game, viewModel) }
-            if (total > shown.size) CardRowBox { Muted(stringResource(R.string.raCheatShowing, shown.size, total)) }
+            val shown = cheats.shownGames(SHOWN)
+            if (shown.played.isNotEmpty()) {
+                SectionLabel(stringResource(R.string.raCheatPlayed, shown.played.size))
+                shown.played.forEach { game -> GameRow(state, game, viewModel) }
+                if (shown.others.isNotEmpty()) SectionLabel(stringResource(R.string.raCheatOtherGames))
+            }
+            shown.others.forEach { game -> GameRow(state, game, viewModel) }
+            if (shown.total > shown.count) CardRowBox { Muted(stringResource(R.string.raCheatShowing, shown.count, shown.total)) }
         }
     }
 }
 
-/** A game with how it stands: in RetroArch with how many cheats on, the cheat file found, or none. */
+/** Where RetroArch looks for [game]'s cheats and what is there; null while RetroArch's side isn't read. */
+@Composable
+private fun statusText(game: RomGame, status: CheatStatus?): String? {
+    val file = status?.file
+    return when {
+        !game.system.hasCheats -> stringResource(R.string.raCheatStatusNoDb, game.system.label)
+        status == null -> null
+        status.noCore -> stringResource(R.string.raCheatStatusNoCore, game.system.label)
+        file != null && status.core != null -> stringResource(R.string.raCheatStatusReady, status.core, file.count, file.on)
+        file != null -> stringResource(R.string.raCheatGameInRetroArch, file.count, file.on)
+        status.elsewhere != null && status.core != null -> stringResource(R.string.raCheatStatusElsewhere, status.core, status.elsewhere)
+        status.elsewhere != null -> stringResource(R.string.raCheatStatusElsewhereAny, status.elsewhere)
+        status.core != null -> stringResource(R.string.raCheatStatusMissing, status.core)
+        else -> stringResource(R.string.raCheatStatusMissingAny)
+    }
+}
+
+/** A part of the game list, named. */
+@Composable
+private fun SectionLabel(text: String) {
+    CardRowBox { Text(text, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary) }
+}
+
+/**
+ * A game with how it stands: a played one with the core RetroArch used and where it looks for its cheats; another one
+ * in RetroArch with how many cheats on, the cheat file found, or none.
+ */
 @Composable
 private fun GameRow(state: RaUiModel, game: RomGame, viewModel: RetroArchViewModel) {
     val cheats = state.cheats
-    val installed = cheats.installed(game, state.found?.version).firstOrNull()
-    val pick = cheats.pick(game)
+    val status = cheats.status(game, state.found?.version)
+    val pick = cheats.picks[game.path]
     val info = when {
-        installed != null -> stringResource(R.string.raCheatGameInRetroArch, installed.count, installed.on)
-        game.system !in cheats.indexes -> null
+        game.path in cheats.played.launches || status?.file != null || status?.elsewhere != null -> statusText(game, status)
+        game.path !in cheats.picks -> null
         pick != null && pick.fit == CheatFit.OTHER_REGION -> stringResource(R.string.raCheatGameOtherRegion, pick.file.stem)
         pick != null -> stringResource(R.string.raCheatGameFound, pick.file.stem)
         game.path in cheats.choices.files -> stringResource(R.string.raCheatGameNone)
@@ -298,11 +336,10 @@ private fun GameCards(state: RaUiModel, open: OpenGame, viewModel: RetroArchView
         if (game.system in cheats.loading) CardRowBox { Muted(stringResource(R.string.raCheatGettingList, game.system.label)) }
         cheats.indexes[game.system]?.let { index -> CheatFileRows(open, index, game.path in cheats.choices.files, viewModel) }
         CoreRows(state, open, viewModel)
-        AddRow(state, open, viewModel)
+        SaveRows(state, open, viewModel)
     }
     if (open.loading) NoteCard(stringResource(R.string.raCheatGettingFile))
-    if (open.writing) NoteCard(stringResource(R.string.raCheatWriting))
-    if (open.file != null) CheatListCard(open, viewModel)
+    if (open.file != null) CheatListCard(open, viewModel) { SaveRows(state, open, viewModel) }
 }
 
 /** The cheat file in use; a tap opens the ones to choose from and a search through the console's whole list. */
@@ -373,16 +410,23 @@ private fun CheatFileRows(open: OpenGame, index: CheatIndex, chosen: Boolean, vi
     }
 }
 
-/** The name RetroArch loads, the cores whose folders get the file, and games that share that name. */
+/** The names RetroArch loads, the cores whose folders get the file, and games that share that name. */
 @Composable
 private fun CoreRows(state: RaUiModel, open: OpenGame, viewModel: RetroArchViewModel) {
     val game = open.game
-    CardRowBox { Muted(stringResource(R.string.raCheatLoadsAs, RomNames.cheatFile(game.name, state.found?.version))) }
+    if (open.names.isNotEmpty()) {
+        CardRowBox { Muted(stringResource(R.string.raCheatLoadsAs, open.names.joinToString(", ") { "“$it”" })) }
+    }
     if (open.targets.isEmpty()) CardRowBox { Warning(stringResource(R.string.raCheatNoCore, game.system.label)) }
     open.targets.forEach { target ->
         val parts = listOfNotNull(
-            stringResource(R.string.raCheatCorePlayed).takeIf { target.played },
-            target.installed?.let { stringResource(R.string.raCheatCoreHas, it.count, it.on) },
+            stringResource(R.string.raCheatCoreLastPlayed).takeIf { target.lastPlayed },
+            when {
+                target.core in open.other -> stringResource(R.string.raCheatCoreOther)
+                target.installed != null -> stringResource(R.string.raCheatCoreHas, target.installed.count, target.installed.on)
+                else -> null
+            },
+            stringResource(R.string.raCheatCoreNoCheats).takeIf { target.takesCheats == false },
         ).ifEmpty { listOf(stringResource(R.string.raCheatCoreInstalled)) }
         CardCheckRow(
             title = target.core,
@@ -392,26 +436,61 @@ private fun CoreRows(state: RaUiModel, open: OpenGame, viewModel: RetroArchViewM
             onChange = { on -> viewModel.tickCore(target.core, on) },
         )
     }
+    val elsewhere = open.elsewhere.map { it.core }.distinct()
+    if (elsewhere.isNotEmpty()) CardRowBox { Warning(stringResource(R.string.raCheatElsewhere, elsewhere.joinToString(", "))) }
     val sharing = CheatPlan.sharing(game, state.cheats.games, state.found?.version)
     if (sharing.isNotEmpty()) CardRowBox { Warning(stringResource(R.string.raCheatShared, sharing.joinToString(", ") { it.title })) }
 }
 
+/**
+ * How saving by itself stands once the game's cheats are in RetroArch; the button that adds them to the ticked cores
+ * that don't have them yet; the one that replaces other cheats in cores holding them.
+ */
 @Composable
-private fun AddRow(state: RaUiModel, open: OpenGame, viewModel: RetroArchViewModel) {
-    val update = open.installed.isNotEmpty()
-    val backup = RomNames.cheatFile(open.game.name, state.found?.version) + RetroArchFiles.BACKUP_SUFFIX
-    CardRow(
-        title = stringResource(if (update) R.string.raCheatUpdate else R.string.raCheatAdd, open.ticks.size),
-        info = if (update) stringResource(R.string.raCheatUpdateInfo, backup) else stringResource(R.string.raCheatAddInfo),
-        icon = Icons.Rounded.AddCircleOutline,
-        enabled = open.file != null && open.cores.isNotEmpty() && !open.writing && state.cheats.side != null && state.config != null,
-        onClick = viewModel::addCheats,
-    )
+private fun SaveRows(state: RaUiModel, open: OpenGame, viewModel: RetroArchViewModel) {
+    val ready = open.file != null && open.cores.isNotEmpty() && !open.writing && state.cheats.side != null && state.config != null
+    val backup = open.names.firstOrNull().orEmpty() + RetroArchFiles.BACKUP_SUFFIX
+    val replace = open.cores.filter { it in open.other }.sorted()
+    val missing = open.cores.filter { it !in open.same && it !in open.other }.sorted()
+    if (open.added) {
+        CardRowBox {
+            Muted(
+                when {
+                    open.writing -> stringResource(R.string.raCheatSaving)
+                    open.pending -> stringResource(R.string.raCheatSavingSoon)
+                    open.saved != null -> stringResource(R.string.raCheatSavedTo, open.saved.joinToString(", "))
+                    else -> stringResource(R.string.raCheatAutoSave, open.same.sorted().joinToString(", "))
+                },
+            )
+        }
+    }
+    if (missing.isNotEmpty()) {
+        CardRow(
+            title = if (open.same.isEmpty() && replace.isEmpty()) {
+                stringResource(R.string.raCheatAdd, open.ticks.size)
+            } else {
+                stringResource(R.string.raCheatAddTo, missing.joinToString(", "), open.ticks.size)
+            },
+            info = stringResource(if (open.writing) R.string.raCheatWriting else R.string.raCheatAddInfo),
+            icon = Icons.Rounded.AddCircleOutline,
+            enabled = ready,
+            onClick = { viewModel.addCheats(replace = false) },
+        )
+    }
+    if (replace.isNotEmpty()) {
+        CardRow(
+            title = stringResource(R.string.raCheatReplaceOther, replace.joinToString(", ")),
+            info = stringResource(R.string.raCheatReplaceInfo, replace.joinToString(", "), backup),
+            icon = Icons.Rounded.AddCircleOutline,
+            enabled = ready,
+            onClick = { viewModel.addCheats(replace = true) },
+        )
+    }
 }
 
-/** The file's cheats to tick, the first [SHOWN] the search finds. */
+/** The file's cheats to tick, the first [SHOWN] the search finds, then [footer]. */
 @Composable
-private fun CheatListCard(open: OpenGame, viewModel: RetroArchViewModel) {
+private fun CheatListCard(open: OpenGame, viewModel: RetroArchViewModel, footer: @Composable () -> Unit) {
     val all = open.file?.cheats.orEmpty()
     val (shown, total) = open.shownCheats(SHOWN)
     SettingsCard(contentPadding = PaddingValues()) {
@@ -435,6 +514,7 @@ private fun CheatListCard(open: OpenGame, viewModel: RetroArchViewModel) {
             )
         }
         if (total > shown.size) CardRowBox { Muted(stringResource(R.string.raCheatShowing, shown.size, total)) }
+        footer()
     }
 }
 

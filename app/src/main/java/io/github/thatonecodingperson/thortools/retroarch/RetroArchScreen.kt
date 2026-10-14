@@ -40,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -65,6 +66,7 @@ import io.github.thatonecodingperson.thortools.ui.composables.SwitchCard
 fun RetroArchScreen(viewModel: RetroArchViewModel = hiltViewModel(), onBack: () -> Unit) {
     val state by viewModel.uiState.collectAsState()
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh() }
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { viewModel.flushCheats() }
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree(), viewModel::onBiosFolderPicked)
     val romFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree(), viewModel::onRomFolderPicked)
     val context = LocalContext.current
@@ -83,6 +85,7 @@ fun RetroArchScreen(viewModel: RetroArchViewModel = hiltViewModel(), onBack: () 
                 RaTab.HOTKEYS -> HotkeysTab(state, viewModel)
                 RaTab.BIOS -> BiosTab(state, viewModel, pickFolder)
                 RaTab.CHEATS -> CheatsTab(state, viewModel, pickRomFolder)
+                RaTab.SHADERS -> ShadersTab(state, viewModel)
             }
         }
     }
@@ -187,6 +190,21 @@ private fun Checks(state: RaUiModel, viewModel: RetroArchViewModel) {
             caution = true,
             actionLabel = stringResource(R.string.raOtherStyleAction),
             onAction = viewModel::applyForThisStyle,
+        )
+    }
+    val misplaced = state.cheats.misplaced(state.found?.version)
+    if (misplaced.isNotEmpty()) {
+        any = true
+        NoteCard(
+            pluralStringResource(
+                R.plurals.raCheckCheatsMisplaced,
+                misplaced.size,
+                misplaced.size,
+                misplaced.take(3).joinToString(", ") { it.title },
+            ),
+            caution = true,
+            actionLabel = stringResource(R.string.raBiosFix),
+            onAction = viewModel::showMisplaced,
         )
     }
     if (!any) NoteCard(stringResource(R.string.raCheckFine))

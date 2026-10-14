@@ -35,7 +35,7 @@ Shizuku or ADB to set up.
   <tr>
     <td valign="top"><a href="#controller-and-the-two-screens"><b>Two screens</b></a><br>Swap apps, move and lock the controller</td>
     <td valign="top"><a href="#gesture-navigation"><b>Gesture navigation</b></a><br>Android's swipes off for good, or just the white bar</td>
-    <td valign="top"><a href="#retroarch-assistant"><b>RetroArch assistant</b></a><br>Menus, speeds, hotkeys, BIOS files and cheats</td>
+    <td valign="top"><a href="#retroarch-assistant"><b>RetroArch assistant</b></a><br>Menus, speeds, hotkeys, BIOS files, cheats and shaders</td>
   </tr>
   <tr>
     <td valign="top"><a href="#wii-profiles-for-dolphin"><b>Wii profiles for Dolphin</b></a><br>Wii Remote, Nunchuk and Classic Controller layouts</td>
@@ -250,15 +250,16 @@ hotkeys instead.
 
 ## RetroArch assistant
 
-RetroArch's most useful settings in plain words, written straight into its settings file for you, with an undo.
+RetroArch's most useful settings in plain words, written straight into its settings file for you, with an undo. Its
+cheats land where RetroArch looks for them, and its shaders sit sorted by console in RetroArch's own Shaders menu.
 
 <table>
   <tr>
-    <td valign="top" width="50%"><img src="screenshots/retroarch.png" alt="RetroArch assistant, Menu and speed tab"></td>
+    <td valign="top" width="50%"><img src="screenshots/retroarch-shaders.png" alt="RetroArch assistant, Shaders tab"></td>
     <td valign="top" width="50%"><img src="screenshots/retroarch-hotkeys.png" alt="RetroArch assistant, Hotkeys tab"></td>
   </tr>
   <tr>
-    <td align="center">Menu look and speeds</td>
+    <td align="center">Shaders sorted by console, more from a link</td>
     <td align="center">Controller hotkeys, ready to use</td>
   </tr>
 </table>
@@ -267,7 +268,10 @@ RetroArch's most useful settings in plain words, written straight into its setti
 - Hotkeys made easy: what "hotkey enable" means, a ready-made set (Select + Start quits, Select + R1 saves, Select +
   R2 fast-forwards) and an editor for each one
 - BIOS finder: copies the right BIOS files from your download folder to where RetroArch's cores look for them
-- Cheats: matches your games to libretro's cheat database and adds the cheats you tick
+- Cheats: lists the games you played in RetroArch, matches them to libretro's cheat database and adds the cheats you
+  tick for every core that can play them, in the folder RetroArch itself reads; later ticks save by themselves
+- Shaders: libretro's shaders sorted into RetroArch's own Shaders menu, a folder per console plus "Any console", with
+  a step-by-step guide; paste a link to add more
 
 <details>
 <summary><b>Everything it does</b></summary>
@@ -279,9 +283,17 @@ RetroArch's most useful settings in plain words, written straight into its setti
 - The hotkeys follow the controller style, and the assistant says when they were set in the other one
 - BIOS files are recognised by their contents, whatever their names, for 21 consoles, and marked when they're the
   right file
-- Cheats: point it at your game folders; it lists your games by console, finds the matching cheat files (downloaded
-  per game or as one pack), shows which cores you have for them, and writes the cheats where RetroArch loads them by
-  itself
+- Cheats: reads RetroArch's history, so the games you played are listed first with the core you used, and points out
+  cheats sitting in a folder RetroArch doesn't read; point it at your game folders for the rest. It finds the matching
+  cheat files (downloaded per game or as one pack) and writes them into the folder RetroArch itself uses for each core
+- Shaders: copies RetroArch's own shader collection to its folder on storage (or downloads libretro's) and sorts it
+  into plain-named shortcuts: "Any console" by kind (CRT TVs, Scanlines, Sharp pixels, Smooth edges, LCD screens) and a
+  folder per console with shaders made for it, only for your cores' consoles or for all; RetroArch's Load Preset then
+  opens on them. A guide explains loading, keeping (Save Core / Game / Content Directory / Global Preset) and removing
+- Shaders from a link: a GitHub, GitLab or Codeberg repository (or a folder or file in it) or a link straight to a
+  preset. Each preset gets a plain name and the folder its name points to (a console's, a kind under "Any console");
+  everything it needs is downloaded with it, files it takes from libretro's collection come from the copy on your Thor,
+  and presets you already have are marked instead of added twice
 
 </details>
 

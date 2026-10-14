@@ -344,6 +344,21 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
         get() = prefs.getString(KEY_RETROARCH_CHEAT_SOURCE, null)
         set(value) = prefs.edit().putString(KEY_RETROARCH_CHEAT_SOURCE, value).apply()
 
+    /** RetroArch's sorted shader folders are made for every console with console-made shaders, not only the cores'. */
+    var retroArchShadersAllConsoles: Boolean
+        get() = prefs.getBoolean(KEY_RETROARCH_SHADERS_ALL, false)
+        set(value) = prefs.edit().putBoolean(KEY_RETROARCH_SHADERS_ALL, value).apply()
+
+    /** The links shaders were added from, newest first, to look at again. */
+    var retroArchShaderLinks: List<String>
+        get() = prefs.getString(KEY_RETROARCH_SHADER_LINKS, null)?.lines()?.filter { it.isNotBlank() }.orEmpty()
+        set(value) = prefs.edit().putString(KEY_RETROARCH_SHADER_LINKS, value.joinToString("\n")).apply()
+
+    /** Shortcuts of the shader catalogue the user moved or removed (their paths), so they aren't made again. */
+    var retroArchShadersDismissed: Set<String>
+        get() = prefs.getString(KEY_RETROARCH_SHADERS_DISMISSED, null)?.lines()?.filter { it.isNotBlank() }?.toSet().orEmpty()
+        set(value) = prefs.edit().putString(KEY_RETROARCH_SHADERS_DISMISSED, value.sorted().joinToString("\n")).apply()
+
     /** AYN's own light settings from before Thor Tools first changed them; null while they are AYN's again. */
     var ledAynSaved: String?
         get() = prefs.getString(KEY_LED_AYN_SAVED, null)
@@ -544,6 +559,9 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
         private const val KEY_WII_SUGGESTIONS = "wii_suggestions"
         private const val KEY_RETROARCH_HOTKEY_STYLE = "retroarch_hotkey_style"
         private const val KEY_RETROARCH_BIOS_FOLDERS = "retroarch_bios_folders"
+        private const val KEY_RETROARCH_SHADERS_ALL = "retroarch_shaders_all_consoles"
+        private const val KEY_RETROARCH_SHADERS_DISMISSED = "retroarch_shaders_dismissed"
+        private const val KEY_RETROARCH_SHADER_LINKS = "retroarch_shader_links"
         private const val KEY_RETROARCH_ROM_FOLDERS = "retroarch_rom_folders"
         private const val KEY_RETROARCH_CHEAT_SOURCE = "retroarch_cheat_source"
         private const val KEY_DESKTOP_ENABLED = "desktop_enabled"
