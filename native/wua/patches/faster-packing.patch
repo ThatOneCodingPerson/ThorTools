@@ -1,0 +1,183 @@
+diff --git a/include/zarchive/zarchivewriter.h b/include/zarchive/zarchivewriter.h
+index 6d00f7a..0d0512f 100644
+--- a/include/zarchive/zarchivewriter.h
++++ b/include/zarchive/zarchivewriter.h
+@@ -37,6 +37,8 @@ public:
+ 	void AppendData(const void* data, size_t size); // appends data to currently active file
+ 	bool MakeDir(const char* path, bool recursive = false);
+ 	void Finalize();
++	// blocks are compressed on this many threads at once (1: one by one); the archive is the same either way
++	void SetThreadCount(int threadCount);
+ 
+ private:
+ 	PathNode* GetNodeByPath(PathNode* root, std::string_view path);
+@@ -48,6 +50,8 @@ private:
+ 	uint64_t GetCurrentOutputOffset() const;
+ 
+ 	void StoreBlock(const uint8_t* uncompressedData);
++	void WriteBlock(const uint8_t* uncompressedData, const uint8_t* compressedData, size_t compressedSize);
++	void FlushBlocks();
+ 
+ 	void WriteOffsetRecords();
+ 	void WriteNameTable();
+@@ -60,6 +64,9 @@ private:
+ 	CB_NewOutputFile m_cbNewOutputFile;
+ 	CB_WriteOutputData m_cbWriteOutputData;
+ 	void* m_cbCtx;
++	// blocks waiting to be compressed together
++	int m_threadCount{ 1 };
++	std::vector<uint8_t> m_pendingBlocks;
+ 	// file tree
+ 	PathNode m_rootNode;
+ 	PathNode* m_currentFileNode{ nullptr };
+diff --git a/src/sha_256.c b/src/sha_256.c
+index 527d2a9..69ae4fa 100644
+--- a/src/sha_256.c
++++ b/src/sha_256.c
+@@ -43,7 +43,7 @@ static const uint32_t _sha256_k[] = {
+  *
+  * @note This is the SHA-256 work horse.
+  */
+-static inline void consume_chunk(uint32_t *h, const uint8_t *p)
++static inline void consume_chunk_soft(uint32_t *h, const uint8_t *p)
+ {
+ 	unsigned i, j;
+ 	uint32_t ah[8];
+@@ -121,6 +121,47 @@ static inline void consume_chunk(uint32_t *h, const uint8_t *p)
+ 		h[i] += ah[i];
+ }
+ 
++#if defined(__aarch64__) && defined(__ARM_FEATURE_SHA2)
++#include <arm_neon.h>
++#include <sys/auxv.h>
++#include <asm/hwcap.h>
++
++/* The same chunk on the ARMv8 SHA-256 instructions, four rounds per step. */
++static void consume_chunk_arm(uint32_t *h, const uint8_t *p)
++{
++	uint32x4_t abcd = vld1q_u32(h);
++	uint32x4_t efgh = vld1q_u32(h + 4);
++	const uint32x4_t abcd0 = abcd;
++	const uint32x4_t efgh0 = efgh;
++	uint32x4_t m[4];
++	for (int i = 0; i < 4; i++)
++		m[i] = vreinterpretq_u32_u8(vrev32q_u8(vld1q_u8(p + 16 * i)));
++	for (int step = 0; step < 16; step++) {
++		if (step >= 4)
++			m[step % 4] = vsha256su1q_u32(vsha256su0q_u32(m[step % 4], m[(step + 1) % 4]), m[(step + 2) % 4], m[(step + 3) % 4]);
++		const uint32x4_t wk = vaddq_u32(m[step % 4], vld1q_u32(_sha256_k + 4 * step));
++		const uint32x4_t before = abcd;
++		abcd = vsha256hq_u32(abcd, efgh, wk);
++		efgh = vsha256h2q_u32(efgh, before, wk);
++	}
++	vst1q_u32(h, vaddq_u32(abcd, abcd0));
++	vst1q_u32(h + 4, vaddq_u32(efgh, efgh0));
++}
++
++static void consume_chunk(uint32_t *h, const uint8_t *p)
++{
++	static int arm = -1;
++	if (arm < 0)
++		arm = (getauxval(AT_HWCAP) & HWCAP_SHA2) != 0;
++	if (arm)
++		consume_chunk_arm(h, p);
++	else
++		consume_chunk_soft(h, p);
++}
++#else
++#define consume_chunk consume_chunk_soft
++#endif
++
+ /*
+  * Public functions. See header file for documentation.
+  */
+diff --git a/src/zarchivewriter.cpp b/src/zarchivewriter.cpp
+index b4ee074..a52cb9d 100644
+--- a/src/zarchivewriter.cpp
++++ b/src/zarchivewriter.cpp
+@@ -11,6 +11,7 @@
+ 
+ #include <cassert>
+ #include <algorithm>
++#include <thread>
+ 
+ ZArchiveWriter::ZArchiveWriter(CB_NewOutputFile cbNewOutputFile, CB_WriteOutputData cbWriteOutputData, void* ctx) : m_cbCtx(ctx), m_cbNewOutputFile(cbNewOutputFile), m_cbWriteOutputData(cbWriteOutputData)
+ {
+@@ -134,13 +135,58 @@ uint64_t ZArchiveWriter::GetCurrentOutputOffset() const
+ 	return m_currentCompressedWriteIndex;
+ }
+ 
++void ZArchiveWriter::SetThreadCount(int threadCount)
++{
++	FlushBlocks();
++	m_threadCount = threadCount < 1 ? 1 : threadCount;
++}
++
+ void ZArchiveWriter::StoreBlock(const uint8_t* uncompressedData)
+ {
++	if (m_threadCount > 1)
++	{
++		// kept until a batch is full, then compressed together (FlushBlocks)
++		m_pendingBlocks.insert(m_pendingBlocks.end(), uncompressedData, uncompressedData + _ZARCHIVE::COMPRESSED_BLOCK_SIZE);
++		if (m_pendingBlocks.size() >= (size_t)m_threadCount * 16 * _ZARCHIVE::COMPRESSED_BLOCK_SIZE)
++			FlushBlocks();
++		return;
++	}
+ 	// compress and store
+-	uint64_t compressedWriteOffset = GetCurrentOutputOffset();
+ 	m_compressionBuffer.resize(ZSTD_compressBound(_ZARCHIVE::COMPRESSED_BLOCK_SIZE));
+ 	size_t outputSize = ZSTD_compress(m_compressionBuffer.data(), m_compressionBuffer.size(), uncompressedData, _ZARCHIVE::COMPRESSED_BLOCK_SIZE, 6);
+-	assert(outputSize >= 0);
++	WriteBlock(uncompressedData, m_compressionBuffer.data(), outputSize);
++}
++
++// compresses the waiting blocks on m_threadCount threads, then writes them in their order, as StoreBlock would have
++void ZArchiveWriter::FlushBlocks()
++{
++	size_t count = m_pendingBlocks.size() / _ZARCHIVE::COMPRESSED_BLOCK_SIZE;
++	if (count == 0)
++		return;
++	size_t bound = ZSTD_compressBound(_ZARCHIVE::COMPRESSED_BLOCK_SIZE);
++	std::vector<uint8_t> compressed(count * bound);
++	std::vector<size_t> sizes(count);
++	size_t threadCount = std::min<size_t>((size_t)m_threadCount, count);
++	std::vector<std::thread> threads;
++	for (size_t t = 0; t < threadCount; t++)
++	{
++		threads.emplace_back([&, t]() {
++			ZSTD_CCtx* cctx = ZSTD_createCCtx();
++			for (size_t i = t; i < count; i += threadCount)
++				sizes[i] = ZSTD_compressCCtx(cctx, compressed.data() + i * bound, bound, m_pendingBlocks.data() + i * _ZARCHIVE::COMPRESSED_BLOCK_SIZE, _ZARCHIVE::COMPRESSED_BLOCK_SIZE, 6);
++			ZSTD_freeCCtx(cctx);
++		});
++	}
++	for (auto& thread : threads)
++		thread.join();
++	for (size_t i = 0; i < count; i++)
++		WriteBlock(m_pendingBlocks.data() + i * _ZARCHIVE::COMPRESSED_BLOCK_SIZE, compressed.data() + i * bound, sizes[i]);
++	m_pendingBlocks.clear();
++}
++
++void ZArchiveWriter::WriteBlock(const uint8_t* uncompressedData, const uint8_t* compressedData, size_t outputSize)
++{
++	uint64_t compressedWriteOffset = GetCurrentOutputOffset();
+ 	if (outputSize >= _ZARCHIVE::COMPRESSED_BLOCK_SIZE)
+ 	{
+ 		// store block uncompressed if it is equal or larger than the input after compression
+@@ -149,7 +195,7 @@ void ZArchiveWriter::StoreBlock(const uint8_t* uncompressedData)
+ 	}
+ 	else
+ 	{
+-		OutputData(m_compressionBuffer.data(), outputSize);
++		OutputData(compressedData, outputSize);
+ 	}
+ 	// add offset translation record
+ 	if ((m_numWrittenOffsetRecords % _ZARCHIVE::ENTRIES_PER_OFFSETRECORD) == 0)
+@@ -199,6 +245,7 @@ void ZArchiveWriter::Finalize()
+ 		padBuffer.resize(_ZARCHIVE::COMPRESSED_BLOCK_SIZE - m_currentWriteBuffer.size());
+ 		AppendData(padBuffer.data(), padBuffer.size());
+ 	}
++	FlushBlocks();
+ 	m_footer.sectionCompressedData.offset = 0;
+ 	m_footer.sectionCompressedData.size = GetCurrentOutputOffset();
+ 	// pad to 8 byte

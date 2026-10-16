@@ -3,6 +3,7 @@ package io.github.thatonecodingperson.thortools.main
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import android.text.format.Formatter
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AppSettingsAlt
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Compress
 import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Handshake
@@ -188,9 +190,20 @@ private fun sections(state: MainUiModel): List<Section> {
         stringResource(R.string.homeLeds, stringResource(modeName(summary.ledMode))),
         summary.keyboard?.let { stringResource(R.string.homeKeyboard, stringResource(it.textRes)) },
     )
+    val context = LocalContext.current
+    val roms = when {
+        summary.romConsoles > 0 -> listOfNotNull(
+            summary.romSaving.takeIf { it > 0 }?.let { stringResource(R.string.homeRomSaving, Formatter.formatShortFileSize(context, it)) },
+            pluralStringResource(R.plurals.homeRomGames, summary.romGames, summary.romGames) + " · " +
+                pluralStringResource(R.plurals.homeRomConsoles, summary.romConsoles, summary.romConsoles),
+        )
+        summary.romFolders -> listOf(stringResource(R.string.homeRomNone))
+        else -> listOf(stringResource(R.string.homeRomStart))
+    }
     return listOf(
         Section(Icons.Rounded.SportsEsports, stringResource(R.string.controllerAndButtons), controller, Routes.CONTROLLER),
         Section(Icons.Rounded.Dashboard, stringResource(R.string.quickPanel), panel, Routes.QUICK_PANEL),
+        Section(Icons.Rounded.Compress, stringResource(R.string.romTitle), roms, Routes.ROMS),
         Section(Icons.Rounded.AppSettingsAlt, stringResource(R.string.appProfiles), profiles, Routes.PROFILES),
         Section(Icons.Rounded.BatteryChargingFull, stringResource(R.string.powerManagement), power, Routes.CHARGING),
         Section(Icons.Rounded.Palette, stringResource(R.string.display), display, Routes.DISPLAY),

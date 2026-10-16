@@ -22,7 +22,7 @@ class CheatMatchTest {
 
     @Test
     fun `saves and states are named after the file without its last extension, as on the Thor`() {
-        // states/Mupen64Plus-Next/Castlevania (USA) (Rev B).n64.state on the owner's Thor.
+        // states/Mupen64Plus-Next/Castlevania (USA) (Rev B).n64.state on a Thor.
         assertEquals("Castlevania (USA) (Rev B).n64", RomNames.base("Castlevania (USA) (Rev B).n64.zip"))
     }
 
@@ -88,7 +88,7 @@ class CheatMatchTest {
     )
 
     @Test
-    fun `the owner's Castlevania gets a USA file nearest its revision, other regions last`() {
+    fun `a Castlevania ROM gets a USA file nearest its revision, other regions last`() {
         val picks = n64.candidates("Castlevania (USA) (Rev B).n64.zip")
         assertEquals("Castlevania (U) (V1.1).cht", picks.first().file.name)
         assertEquals(CheatFit.SAME_REGION, picks.first().fit)

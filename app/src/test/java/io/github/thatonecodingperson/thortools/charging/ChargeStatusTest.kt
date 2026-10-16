@@ -22,7 +22,7 @@ class ChargeStatusTest {
 
     @Test
     fun `watts from what the charger offered and what comes in`() {
-        // The owner's PC port: 900 mA at 5 V offered, 450 mA at 4.74 V coming in.
+        // A PC port: 900 mA at 5 V offered, 450 mA at 4.74 V coming in.
         assertEquals(4.5f, ChargeStatus.offeredWatts(900_000, 5_000_000)!!, 0.01f)
         assertEquals(4.5f, ChargeStatus.offeredWatts(900_000, -1)!!, 0.01f)
         assertNull(ChargeStatus.offeredWatts(-1, 5_000_000))

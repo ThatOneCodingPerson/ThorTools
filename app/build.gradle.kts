@@ -23,8 +23,8 @@ android {
         applicationId = "io.github.thatonecodingperson.thortools"
         minSdk = 33
         targetSdk = 36
-        versionCode = 77
-        versionName = "0.50.1"
+        versionCode = 87
+        versionName = "0.58.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -62,6 +62,10 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+        // libchdman.so is a program: installed as a file in the native library folder so it can be run
+        jniLibs {
+            useLegacyPackaging = true
         }
     }
 }

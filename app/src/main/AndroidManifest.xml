@@ -88,6 +88,10 @@
             android:name=".charging.ChargeAlertActionReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name=".roms.RomJobActions"
+            android:exported="false" />
+
         <service
             android:name=".panel.MediaListener"
             android:exported="true"

@@ -52,6 +52,9 @@ import io.github.thatonecodingperson.thortools.oled.OledScreen
 import io.github.thatonecodingperson.thortools.panel.PanelEditorScreen
 import io.github.thatonecodingperson.thortools.panel.PanelSettingsScreen
 import io.github.thatonecodingperson.thortools.retroarch.RetroArchScreen
+import io.github.thatonecodingperson.thortools.roms.RomCompressionScreen
+import io.github.thatonecodingperson.thortools.roms.RomConsoleScreen
+import io.github.thatonecodingperson.thortools.roms.RomGameScreen
 import io.github.thatonecodingperson.thortools.service.ServiceStatus
 import io.github.thatonecodingperson.thortools.setup.FirstRun
 import io.github.thatonecodingperson.thortools.setup.PermissionsScreen
@@ -133,6 +136,10 @@ class MainActivity : ComponentActivity() {
                         // The action check brings its screen back after a check that left it.
                         if (request == OPEN_DEBUG && navController.currentDestination?.route != Routes.DEBUG) {
                             navController.navigate(Routes.DEBUG) { launchSingleTop = true }
+                        }
+                        // The compressing notification opens the ROM page, unless a ROM page is open already.
+                        if (request == OPEN_ROMS && navController.currentDestination?.route?.startsWith(Routes.ROMS) != true) {
+                            navController.navigate(Routes.ROMS) { launchSingleTop = true }
                         }
                         openRequest.value = null
                     }
@@ -240,6 +247,24 @@ class MainActivity : ComponentActivity() {
                                 onBack = back,
                             )
                         }
+                        composable(Routes.ROMS) {
+                            RomCompressionScreen(onConsole = { navController.navigate(Routes.romConsole(it.id)) }, onBack = back)
+                        }
+                        composable(Routes.ROM_CONSOLE) {
+                            RomConsoleScreen(onGame = { navController.navigate(Routes.romGame(it.key)) }, onBack = back)
+                        }
+                        composable(
+                            Routes.ROM_GAME,
+                            arguments = listOf(
+                                navArgument("game") {
+                                    type = NavType.StringType
+                                    nullable = true
+                                    defaultValue = null
+                                },
+                            ),
+                        ) {
+                            RomGameScreen(onBack = back)
+                        }
                         composable(Routes.GESTURES) {
                             GestureNavScreen(onProfiles = { navController.navigate(Routes.OVERRIDE_LIST) }, onBack = back)
                         }
@@ -273,5 +298,8 @@ class MainActivity : ComponentActivity() {
 
         /** [EXTRA_OPEN] value: the debug toolkit. */
         const val OPEN_DEBUG = "debug"
+
+        /** [EXTRA_OPEN] value: ROM compression (the compressing notification). */
+        const val OPEN_ROMS = "roms"
     }
 }

@@ -4,3 +4,5 @@
 gradlew text eol=lf
 *.jar binary
 *.png binary
+*.so binary
+native/wua/patches/*.patch -text

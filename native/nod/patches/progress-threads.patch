@@ -1,0 +1,155 @@
+diff --git a/nodtool/src/cmd/convert.rs b/nodtool/src/cmd/convert.rs
+index 5df9603..33877f3 100644
+--- a/nodtool/src/cmd/convert.rs
++++ b/nodtool/src/cmd/convert.rs
+@@ -7,7 +7,7 @@ use nod::{
+     write::FormatOptions,
+ };
+ 
+-use crate::util::{path_display, redump, shared::convert_and_verify};
++use crate::util::{path_display, redump, shared::convert_and_verify_threads};
+ 
+ #[derive(FromArgs, Debug)]
+ /// Converts a disc image to ISO.
+@@ -37,6 +37,9 @@ pub struct Args {
+     #[argp(switch, short = 's')]
+     /// performs scrubbing on the disc image
+     scrub: bool,
++    #[argp(option, short = 'j')]
++    /// number of worker threads (default: one per core)
++    threads: Option<usize>,
+ }
+ 
+ pub fn run(args: Args) -> nod::Result<()> {
+@@ -56,7 +59,7 @@ pub fn run(args: Args) -> nod::Result<()> {
+             }
+         },
+         #[cfg(feature = "threading")]
+-        preloader_threads: 4,
++        preloader_threads: args.threads.map_or(4, |n| n.clamp(1, 4)),
+     };
+     let format = match args.out.extension() {
+         Some(ext)
+@@ -88,5 +91,13 @@ pub fn run(args: Args) -> nod::Result<()> {
+     compression.validate_level()?;
+     let format_options =
+         FormatOptions { format, compression, block_size: format.default_block_size() };
+-    convert_and_verify(&args.file, Some(&args.out), args.md5, args.scrub, &options, &format_options)
++    convert_and_verify_threads(
++        &args.file,
++        Some(&args.out),
++        args.md5,
++        args.scrub,
++        &options,
++        &format_options,
++        args.threads,
++    )
+ }
+diff --git a/nodtool/src/cmd/verify.rs b/nodtool/src/cmd/verify.rs
+index ce0905a..3556868 100644
+--- a/nodtool/src/cmd/verify.rs
++++ b/nodtool/src/cmd/verify.rs
+@@ -6,7 +6,7 @@ use nod::{
+     write::FormatOptions,
+ };
+ 
+-use crate::util::{redump, shared::convert_and_verify};
++use crate::util::{redump, shared::convert_and_verify_threads};
+ 
+ #[derive(FromArgs, Debug)]
+ /// Verifies disc images.
+@@ -27,6 +27,9 @@ pub struct Args {
+     #[argp(switch)]
+     /// encrypt Wii partition data
+     encrypt: bool,
++    #[argp(option, short = 'j')]
++    /// number of worker threads (default: one per core)
++    threads: Option<usize>,
+ }
+ 
+ pub fn run(args: Args) -> nod::Result<()> {
+@@ -46,11 +49,11 @@ pub fn run(args: Args) -> nod::Result<()> {
+             }
+         },
+         #[cfg(feature = "threading")]
+-        preloader_threads: 4.min(num_cpus::get()),
++        preloader_threads: args.threads.map_or(4.min(num_cpus::get()), |n| n.clamp(1, 4)),
+     };
+     let format_options = FormatOptions::default();
+     for file in &args.file {
+-        convert_and_verify(file, None, args.md5, false, &options, &format_options)?;
++        convert_and_verify_threads(file, None, args.md5, false, &options, &format_options, args.threads)?;
+         println!();
+     }
+     Ok(())
+diff --git a/nodtool/src/util/shared.rs b/nodtool/src/util/shared.rs
+index bad0405..d0ce9a1 100644
+--- a/nodtool/src/util/shared.rs
++++ b/nodtool/src/util/shared.rs
+@@ -1,7 +1,7 @@
+ use std::{
+     fmt,
+     fs::File,
+-    io::{Seek, Write},
++    io::{IsTerminal, Seek, Write},
+     path::Path,
+ };
+ 
+@@ -49,6 +49,19 @@ pub fn convert_and_verify(
+     scrub: bool,
+     options: &DiscOptions,
+     format_options: &FormatOptions,
++) -> Result<()> {
++    convert_and_verify_threads(in_file, out_file, md5, scrub, options, format_options, None)
++}
++
++/// [convert_and_verify] with at most `threads` worker threads (`None`: one per core).
++pub fn convert_and_verify_threads(
++    in_file: &Path,
++    out_file: Option<&Path>,
++    md5: bool,
++    scrub: bool,
++    options: &DiscOptions,
++    format_options: &FormatOptions,
++    threads: Option<usize>,
+ ) -> Result<()> {
+     println!("Loading {}", path_display(in_file));
+     let disc = DiscReader::new(in_file, options)?;
+@@ -104,7 +117,7 @@ pub fn convert_and_verify(
+     #[cfg(feature = "threading")]
+     let processor_threads = {
+         use nod::write::DiscWriterWeight;
+-        let cpus = num_cpus::get();
++        let cpus = threads.unwrap_or_else(num_cpus::get).max(1);
+         match disc_writer.weight() {
+             DiscWriterWeight::Light => 0,
+             DiscWriterWeight::Medium => cpus / 2,
+@@ -112,6 +125,13 @@ pub fn convert_and_verify(
+         }
+     };
+ 
++    #[cfg(not(feature = "threading"))]
++    let _ = threads;
++
++    // Thor Tools: without a terminal the bar isn't drawn: a line per 0.1 % goes to stderr instead, so a caller can follow it.
++    let lines = !std::io::stderr().is_terminal();
++    let bound = disc_writer.progress_bound().max(1);
++    let mut shown = u64::MAX;
+     let mut total_written = 0u64;
+     let finalization = disc_writer.process(
+         |data, pos, _| {
+@@ -120,6 +140,14 @@ pub fn convert_and_verify(
+             }
+             total_written += data.len() as u64;
+             pb.set_position(pos);
++            if lines {
++                let tenths = (pos as u128 * 1000 / bound as u128).min(1000) as u64;
++                if tenths != shown {
++                    shown = tenths;
++                    let ratio = if pos > 0 { total_written as f64 * 100.0 / pos as f64 } else { 0.0 };
++                    eprintln!("progress {:.1}% ratio {:.1}%", tenths as f64 / 10.0, ratio);
++                }
++            }
+             Ok(())
+         },
+         &ProcessOptions {

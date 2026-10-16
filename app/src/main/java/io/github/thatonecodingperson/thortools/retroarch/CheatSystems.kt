@@ -29,7 +29,7 @@ enum class CheatSystem(val db: String?, val label: String, val aliases: List<Str
     NDS("Nintendo - Nintendo DS", "Nintendo DS", listOf("nds", "ds", "nintendods"), listOf("nds")),
     VIRTUAL_BOY("Nintendo - Virtual Boy", "Virtual Boy", listOf("vb", "virtualboy"), listOf("vb", "vboy")),
     PS1("Sony - PlayStation", "PlayStation", listOf("psx", "ps1", "ps", "playstation", "playstation1", "sonyplaystation")),
-    PSP("Sony - PlayStation Portable", "PlayStation Portable", listOf("psp", "playstationportable"), listOf("cso")),
+    PSP("Sony - PlayStation Portable", "PlayStation Portable", listOf("psp", "playstationportable", "pspminis"), listOf("cso")),
     MEGA_DRIVE(
         "Sega - Mega Drive - Genesis",
         "Mega Drive / Genesis",
@@ -87,11 +87,17 @@ enum class CheatSystem(val db: String?, val label: String, val aliases: List<Str
     ARCADE("FBNeo - Arcade Games", "Arcade (FinalBurn Neo)", listOf("fbneo", "arcade", "fba", "finalburn", "finalburnneo")),
     DOS("DOS", "DOS", listOf("dos", "msdos", "dosbox")),
 
-    PS2(null, "PlayStation 2", listOf("ps2", "playstation2")),
+    POKEMON_MINI(null, "Pokémon Mini", listOf("pokemini", "pokemonmini", "nintendopokemonmini"), listOf("min")),
+    VECTREX(null, "Vectrex", listOf("vectrex", "gcevectrex"), listOf("vec")),
+    ODYSSEY2(null, "Odyssey 2", listOf("odyssey2", "o2", "videopac", "magnavoxodyssey2")),
+    CHANNEL_F(null, "Channel F", listOf("channelf", "fairchild", "fairchildchannelf"), listOf("chf")),
+    SUPERVISION(null, "Supervision", listOf("supervision", "watara", "watarasupervision"), listOf("sv")),
+    MEGA_DUCK(null, "Mega Duck", listOf("megaduck", "cougarboy")),
+    PS2(null, "PlayStation 2", listOf("ps2", "playstation2", "sonyplaystation2")),
     GAMECUBE(null, "GameCube", listOf("gc", "gamecube", "ngc", "gcn"), listOf("gcm", "gcz")),
     WII(null, "Wii", listOf("wii"), listOf("wbfs", "wad")),
-    WII_U(null, "Wii U", listOf("wiiu"), listOf("wua", "wux", "rpx")),
-    N3DS(null, "Nintendo 3DS", listOf("3ds", "n3ds", "nintendo3ds"), listOf("3ds", "cia", "cci", "cxi", "3dsx")),
+    WII_U(null, "Wii U", listOf("wiiu"), listOf("wua", "wux", "wud", "rpx")),
+    N3DS(null, "Nintendo 3DS", listOf("3ds", "n3ds", "nintendo3ds"), listOf("3ds", "cia", "cci", "cxi", "3dsx", "zcci", "zcxi")),
     SWITCH(null, "Switch", listOf("switch", "nswitch", "nintendoswitch"), listOf("nsp", "xci")),
     PS3(null, "PlayStation 3", listOf("ps3", "playstation3")),
     PS_VITA(null, "PS Vita", listOf("psvita", "vita")),
@@ -106,7 +112,8 @@ enum class CheatSystem(val db: String?, val label: String, val aliases: List<Str
 object CheatSystems {
     /** Extensions any console's games may have: archives and disc images. */
     private val SHARED = setOf(
-        "zip", "7z", "chd", "iso", "cue", "m3u", "bin", "img", "pbp", "ccd", "toc", "mds", "ecm", "rom", "rvz", "elf",
+        "zip", "7z", "chd", "iso", "cue", "m3u", "bin", "img", "pbp", "ccd", "toc", "mds", "ecm", "rom", "rvz", "elf", "zso",
+        "wia", "ciso",
     )
 
     private val byExtension: Map<String, CheatSystem> =
@@ -127,14 +134,18 @@ object CheatSystems {
     /** The console only [extension] (any case) is used by, or null. */
     fun forExtension(extension: String): CheatSystem? = byExtension[extension.lowercase()]
 
+    /** Extensions one console has but another uses too (CSO: PSP and PS2; GCZ: GameCube and Wii): their folder decides first. */
+    private val FOLDER_FIRST = setOf("cso", "gcz")
+
     /**
      * The console of the game at [path]: an extension only one console uses (also the inner one of `.n64.zip`), else the
-     * nearest folder above it with a console's name.
+     * nearest folder above it with a console's name, else an extension a console shares with another.
      */
     fun of(path: String): CheatSystem? {
-        val name = path.substringAfterLast('/')
-        RomNames.extensions(name).firstNotNullOfOrNull(::forExtension)?.let { return it }
-        return path.substringBeforeLast('/', "").split('/').asReversed().firstNotNullOfOrNull { folder -> forFolder(folder) }
+        val extensions = RomNames.extensions(path.substringAfterLast('/'))
+        extensions.filter { it !in FOLDER_FIRST }.firstNotNullOfOrNull(::forExtension)?.let { return it }
+        path.substringBeforeLast('/', "").split('/').asReversed().firstNotNullOfOrNull { folder -> forFolder(folder) }?.let { return it }
+        return extensions.firstNotNullOfOrNull(::forExtension)
     }
 
     /** A name as aliases are written: letters and digits only, lower case. */

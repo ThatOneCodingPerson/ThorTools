@@ -43,6 +43,11 @@ data class HomeSummary(
     val ledMode: LedMode = LedMode.AYN,
     /** Where the keyboard appears; null until read. */
     val keyboard: KeyboardPlace? = null,
+    /** ROM compression: whether a ROM folder is set, about how many bytes compressing would save, games and consoles. */
+    val romFolders: Boolean = false,
+    val romSaving: Long = 0L,
+    val romGames: Int = 0,
+    val romConsoles: Int = 0,
 )
 
 /** [supporting]: a line under the title, e.g. what a mode does. */

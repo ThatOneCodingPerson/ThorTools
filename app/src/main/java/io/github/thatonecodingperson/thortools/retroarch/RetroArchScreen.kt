@@ -518,7 +518,7 @@ internal fun ResultNote(note: RaNote?) {
 private const val RETROARCH_DOWNLOADS = "https://www.retroarch.com/?page=platforms"
 
 /** Where the folder picker starts: the SD card when one is in, else the Thor's own storage. */
-private fun storageStart(context: Context): Uri? = runCatching {
+internal fun storageStart(context: Context): Uri? = runCatching {
     val card = context.getSystemService(StorageManager::class.java).storageVolumes
         .firstOrNull { it.isRemovable && it.state == Environment.MEDIA_MOUNTED && it.uuid != null }
     DocumentsContract.buildDocumentUri(EXTERNAL_STORAGE, "${card?.uuid ?: PRIMARY}:")

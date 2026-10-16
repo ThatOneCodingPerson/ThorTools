@@ -1,0 +1,67 @@
+--- a/cli/cli.cpp
++++ b/cli/cli.cpp
+@@ -419,9 +419,12 @@
+ 	uv_loop_t loop;
+ 	uv_tty_t tty;
+ 	uv_loop_init(&loop);
+-	uv_tty_init(&loop, &tty, 2, 0);
+-	uv_tty_set_mode(&tty, 0);
+-	bool formatting = uv_guess_handle(2) == UV_TTY && !args.quiet;
++	// Thor Tools: libuv refuses a tty handle for a file or pipe; then everything goes to stderr with fprintf.
++	bool ttyReady = uv_tty_init(&loop, &tty, 2, 0) == 0;
++	if (ttyReady) {
++		uv_tty_set_mode(&tty, 0);
++	}
++	bool formatting = ttyReady && uv_guess_handle(2) == UV_TTY && !args.quiet;
+ 
+ 	int64_t next = uv_hrtime();
+ 	int64_t lastPos = 0;
+@@ -434,7 +437,8 @@
+ 	uv_buf_t bufs[2];
+ 
+ 	maxcso::ProgressCallback progress = [&] (const maxcso::Task *task, maxcso::TaskStatus status, int64_t pos, int64_t total, int64_t written) {
+-		if (!formatting) {
++		// Thor Tools: progress is shown when stderr is a file too, so a caller can follow it.
++		if (args.quiet) {
+ 			return;
+ 		}
+ 
+@@ -448,14 +452,14 @@
+ 				double speed = 0.0;
+ 				int64_t diff = pos - lastPos;
+ 				if (diff > 0) {
+-					speed = (diff / 1024.0 / 1024.0) * interval_to_s;
++					speed = (diff / 1024.0 / 1024.0) * (formatting ? interval_to_s : interval_to_s / 10.0);
+ 				}
+ 
+ 				char temp[128];
+ 				sprintf(temp, "%3.0f%%, ratio=%3.0f%%, speed=%5.2f MB/s", percent, ratio, speed);
+ 				statusInfo = temp;
+ 
+-				next = now + interval_ns;
++				next = now + (formatting ? interval_ns : 10 * interval_ns);
+ 				lastPos = pos;
+ 			}
+ 		} else if (status == maxcso::TASK_SUCCESS) {
+@@ -483,6 +487,10 @@
+ 			statusInfo = task->input + ": " + statusInfo;
+ 		}
+ 
++		if (!formatting) {
++			fprintf(stderr, "%s%s", statusInfo.c_str(), status == maxcso::TASK_INPROGRESS ? "\r" : "");
++			return;
++		}
+ 		bufs[nbufs++] = uv_buf_init(statusInfo);
+ 		uv_write(&write_req, reinterpret_cast<uv_stream_t *>(&tty), bufs, nbufs, nullptr);
+ 	};
+@@ -498,6 +506,10 @@
+ 
+ 		const std::string prefix = status == maxcso::TASK_SUCCESS ? "" : "Error while processing ";
+ 		statusInfo = (formatting ? ANSI_RESET_LINE : "") + prefix + task->input + ": " + reason + "\n";
++		if (!formatting) {
++			fprintf(stderr, "%s", statusInfo.c_str());
++			return;
++		}
+ 		bufs[0] = uv_buf_init(statusInfo);
+ 		uv_write(&write_req, reinterpret_cast<uv_stream_t *>(&tty), bufs, 1, nullptr);
+ 	};

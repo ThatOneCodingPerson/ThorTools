@@ -1,5 +1,7 @@
 package io.github.thatonecodingperson.thortools.main
 
+import android.net.Uri
+
 object Routes {
     const val SETTINGS = "settings"
     const val CONTROLLER = "controller"
@@ -32,10 +34,18 @@ object Routes {
     const val OLED = "extras/oled"
     const val OLED_AYN = "extras/oled/ayn"
     const val GESTURES = "extras/gestures"
+    const val ROMS = "roms"
+    const val ROM_CONSOLE = "roms/console/{console}"
+    const val ROM_GAME = "roms/game?game={game}"
 
     fun override(packageName: String) = "override/$packageName"
 
     fun themeEdit(id: String) = "display/theme/$id"
+
+    fun romConsole(id: String) = "roms/console/$id"
+
+    /** A game's page; [id] is its path, encoded for the route. */
+    fun romGame(id: String) = "roms/game?game=${Uri.encode(id)}"
 
     /** A new theme that starts as a copy of the theme [from]. */
     fun themeCopy(from: String) = "display/theme/$NEW_THEME?from=$from"

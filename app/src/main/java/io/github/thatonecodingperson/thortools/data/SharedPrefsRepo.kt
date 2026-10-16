@@ -339,6 +339,23 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
         get() = prefs.getString(KEY_RETROARCH_ROM_FOLDERS, null)?.lines()?.filter { it.isNotBlank() }.orEmpty()
         set(value) = prefs.edit().putString(KEY_RETROARCH_ROM_FOLDERS, value.joinToString("\n")).apply()
 
+    /** ROM compression's ROM folders, as the Files app shows them. */
+    var romFolders: List<String>
+        get() = prefs.getString(KEY_ROM_FOLDERS, null)?.lines()?.filter { it.isNotBlank() }.orEmpty()
+        set(value) = prefs.edit().putString(KEY_ROM_FOLDERS, value.joinToString("\n")).apply()
+
+    /** How hard ROM compression works (a `RomSpeed` name). */
+    var romSpeed: String?
+        get() = prefs.getString(KEY_ROM_SPEED, null)
+        set(value) = prefs.edit().putString(KEY_ROM_SPEED, value).apply()
+
+    /** The format a console's list compresses into, by console id (`RomFormat` names). */
+    var romFormats: Map<String, String>
+        get() = prefs.getString(KEY_ROM_FORMATS, null)?.lines()?.mapNotNull { line ->
+            line.split('=', limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] }
+        }?.toMap().orEmpty()
+        set(value) = prefs.edit().putString(KEY_ROM_FORMATS, value.entries.joinToString("\n") { "${it.key}=${it.value}" }).apply()
+
     /** Where RetroArch cheats come from: libretro-database per game ("github", the default) or the whole pack ("pack"). */
     var retroArchCheatSource: String?
         get() = prefs.getString(KEY_RETROARCH_CHEAT_SOURCE, null)
@@ -563,6 +580,9 @@ class SharedPrefsRepo @Inject constructor(@ApplicationContext private val contex
         private const val KEY_RETROARCH_SHADERS_DISMISSED = "retroarch_shaders_dismissed"
         private const val KEY_RETROARCH_SHADER_LINKS = "retroarch_shader_links"
         private const val KEY_RETROARCH_ROM_FOLDERS = "retroarch_rom_folders"
+        private const val KEY_ROM_FOLDERS = "rom_folders"
+        private const val KEY_ROM_SPEED = "rom_speed"
+        private const val KEY_ROM_FORMATS = "rom_formats"
         private const val KEY_RETROARCH_CHEAT_SOURCE = "retroarch_cheat_source"
         private const val KEY_DESKTOP_ENABLED = "desktop_enabled"
         private const val KEY_DESKTOP_ONLY_IN = "desktop_only_in"

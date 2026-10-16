@@ -5,8 +5,8 @@
 <h1 align="center">Thor Tools</h1>
 
 <p align="center">
-  A companion app for the AYN Thor: a quick panel on the AYN button, hotkeys for both screens, desktop controls,
-  emulator helpers, OLED protection and more.
+  A companion app for the AYN Thor: a quick panel on the AYN button, hotkeys for both screens, ROM compression,
+  desktop controls, emulator helpers, OLED protection and more.
 </p>
 
 <p align="center">
@@ -30,26 +30,26 @@ Shizuku or ADB to set up.
   <tr>
     <td width="33%" valign="top"><a href="#quick-panel"><b>Quick panel</b></a><br>Tiles, sliders and 16 widgets, one tap of the AYN button away</td>
     <td width="33%" valign="top"><a href="#hotkeys"><b>Hotkeys</b></a><br>Taps, holds and combos of the Thor's buttons</td>
-    <td width="33%" valign="top"><a href="#desktop-controls"><b>Desktop controls</b></a><br>The controller as a mouse and keyboard</td>
+    <td width="33%" valign="top"><a href="#rom-compression"><b>ROM compression</b></a><br>Smaller games your emulators still open, checked before anything moves</td>
   </tr>
   <tr>
+    <td valign="top"><a href="#desktop-controls"><b>Desktop controls</b></a><br>The controller as a mouse and keyboard</td>
     <td valign="top"><a href="#controller-and-the-two-screens"><b>Two screens</b></a><br>Swap apps, move and lock the controller</td>
     <td valign="top"><a href="#gesture-navigation"><b>Gesture navigation</b></a><br>Android's swipes off for good, or just the white bar</td>
-    <td valign="top"><a href="#retroarch-assistant"><b>RetroArch assistant</b></a><br>Menus, speeds, hotkeys, BIOS files, cheats and shaders</td>
   </tr>
   <tr>
+    <td valign="top"><a href="#retroarch-assistant"><b>RetroArch assistant</b></a><br>Menus, speeds, hotkeys, BIOS files, cheats and shaders</td>
     <td valign="top"><a href="#wii-profiles-for-dolphin"><b>Wii profiles for Dolphin</b></a><br>Wii Remote, Nunchuk and Classic Controller layouts</td>
     <td valign="top"><a href="#oled-safety-beta"><b>OLED Safety</b></a><br>Pixel shifter, refresher and idle screens</td>
-    <td valign="top"><a href="#stick-lights"><b>Stick lights</b></a><br>Colours and effects for the rings around the sticks</td>
   </tr>
   <tr>
+    <td valign="top"><a href="#stick-lights"><b>Stick lights</b></a><br>Colours and effects for the rings around the sticks</td>
     <td valign="top"><a href="#power-and-the-lid"><b>Power and the lid</b></a><br>Charging help and what happens when the lid closes</td>
     <td valign="top"><a href="#app-profiles"><b>App profiles</b></a><br>Settings that follow the app in front</td>
-    <td valign="top"><a href="#themes"><b>Themes</b></a><br>Fifteen looks for the app and the panel, or your own</td>
   </tr>
   <tr>
+    <td valign="top"><a href="#themes"><b>Themes</b></a><br>Fifteen looks for the app and the panel, or your own</td>
     <td valign="top"><a href="#setup-and-diagnostics"><b>Setup</b></a><br>A guided start and one-tap fixes</td>
-    <td></td>
     <td></td>
   </tr>
 </table>
@@ -141,6 +141,52 @@ Back still does what it always did, and your games keep their buttons.
 - The action catalogue covers the controller, both screens, the system (Back, Home, Recent apps, notifications,
   screenshot, sleep, keep the screens on, gesture navigation on/off), brightness and volume, performance, fan and
   refresh rate
+
+</details>
+
+## ROM compression
+
+Space back on the Thor: your games compressed into the formats their emulators open directly. Every new file is read
+back and checked against the original before anything else happens, and your originals stay unless you choose
+otherwise.
+
+<table>
+  <tr>
+    <td valign="top" width="50%"><img src="screenshots/rom-compression.png" alt="ROM compression: your ROM folders and every console in them"></td>
+    <td valign="top" width="50%"><img src="screenshots/rom-console.png" alt="A console's page: its games, your emulators and the format to use"></td>
+  </tr>
+  <tr>
+    <td align="center">Every console in your ROM folders, with what it saves</td>
+    <td align="center">A console's games, your emulators and what they open</td>
+  </tr>
+</table>
+
+- PlayStation, PlayStation 2, PSP, GameCube, Wii, Wii U, Nintendo 3DS and 34 cartridge consoles (NES to Nintendo DS,
+  Genesis, PC Engine and more)
+- CHD for disc games, CSO for PS2 and PSP (and ZSO for PS2), RVZ for GameCube and Wii, ZIP or 7z for cartridges,
+  Z3DS for the 3DS (Azahar), WUA for the Wii U (Cemu)
+- Only formats your emulators open are offered; each console page lists your emulators, what each one opens and what
+  to update, and says when a front end (Cocoon, ES-DE, Daijishō) won't list a format
+- Originals kept, deleted or moved to a folder after the check; clean up later with the same check
+- Runs in the background with an estimate first, a notification with Pause and Stop, and the time left
+
+<details>
+<summary><b>Everything it does</b></summary>
+
+- Add your ROMs folders (internal storage or SD card); each console's folder is found by its usual name (psx, ps2,
+  gc, wiiu, 3ds, snes, ...)
+- Disc games as CUE/BIN (several tracks, or tracks one folder up), ISO or a raw image; `.m3u` playlists get the new
+  names and PS1 LibCrypt `.sbi` files stay with their game
+- PS2 and PSP: CHD (light to play or smallest), CSO, ZSO for PS2, or back to ISO; a compressed game can change format
+- GameCube and Wii: RVZ, also from WBFS, WIA, CISO and GCZ, or back to ISO; NKit images are left as they are
+- 3DS: decrypted `.3ds`, `.cci` and `.cxi` into Z3DS and back; encrypted games and CIAs are left as they are
+- Wii U: a game folder with its update and DLC into one WUA, and back into folders; console keys are never needed
+- Cartridge consoles: ZIP (what every emulator opens) or 7z, checked file by file; archives that aren't one game
+  (collections, HD packs) are left as they are
+- Speed: Gentle (the little cores), Normal or Fast; the estimates learn from your own games, and "Saved so far" adds
+  it up
+- Problems said plainly instead of guessed at: missing tracks, empty files, images that aren't a game
+- On the main menu: how much there is to save and how many games
 
 </details>
 
@@ -483,6 +529,10 @@ build-apk.cmd clean    from a clean build directory
 On the first run the script creates a personal signing key in `%USERPROFILE%\.thortools`. Back that folder up:
 updates must be signed with the same key.
 
+The ROM compression tools come ready-built in `app/src/main/jniLibs/arm64-v8a/`. To build one again from its sources,
+run `native/<tool>/build.sh` (Git Bash on Windows, with the Android NDK; nod also needs Rust); each script fetches the
+pinned sources, checks them and writes the tool and its licence notice into the app.
+
 ## Credits and license
 
 Based on [OdinTools](https://github.com/langerhans/OdinTools) © 2024 Maximilian Keller (langerhans), MIT licensed.
@@ -490,6 +540,13 @@ Thor Tools changes and additions are also MIT. See [LICENSE](LICENSE).
 
 Cheats come from [libretro-database](https://github.com/libretro/libretro-database) (CC BY-SA 4.0), downloaded onto
 the Thor when you ask for them; none are included in the app.
+
+ROM compression uses these tools, built from their sources and included in the app with their licences: chdman from
+[MAME](https://github.com/mamedev/mame) (BSD-3-Clause); [maxcso](https://github.com/unknownbrackets/maxcso) by
+Unknown W. Brackets (ISC, with parts of 7-Zip under the LGPL 2.1, Zopfli under Apache 2.0, libdeflate and libuv under
+MIT); [nod](https://github.com/encounter/nod-rs) by Luke Street (MIT or Apache 2.0); [7-Zip](https://www.7-zip.org)
+by Igor Pavlov (GNU LGPL, without its RAR code); [Zstandard](https://github.com/facebook/zstd) by Meta (BSD); and
+[ZArchive](https://github.com/Exzap/ZArchive) by Exzap (MIT No Attribution), the library Cemu uses.
 
 The Wii profile builder's suggested layouts follow RetroPup's
 [AYN Thor Ultimate Wii Setup Guide (2026)](https://www.youtube.com/watch?v=my5XRGNShqA). Thanks, RetroPup!

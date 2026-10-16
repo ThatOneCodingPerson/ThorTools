@@ -12,6 +12,7 @@ import io.github.thatonecodingperson.thortools.extras.KeyboardPlace
 import io.github.thatonecodingperson.thortools.hotkeys.HotkeyList
 import io.github.thatonecodingperson.thortools.models.ControllerStyle
 import io.github.thatonecodingperson.thortools.models.L2R2Style
+import io.github.thatonecodingperson.thortools.roms.RomShelf
 import io.github.thatonecodingperson.thortools.service.ServiceStatus
 import io.github.thatonecodingperson.thortools.service.ServiceWatchJob
 import io.github.thatonecodingperson.thortools.setup.AccessChecker
@@ -39,6 +40,7 @@ class MainViewModel @Inject constructor(
     private val status: ServiceStatus,
     private val executor: ShellExecutor,
     private val appOverrides: AppOverrideDao,
+    private val romShelf: RomShelf,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MainUiModel())
@@ -47,6 +49,22 @@ class MainViewModel @Inject constructor(
     init {
         viewModelScope.launch(Dispatchers.IO) { settings.applyRequiredSettings() }
         ServiceWatchJob.schedule(context, ServiceWatchJob.AFTER_OPEN_MS, afterBoot = false)
+        viewModelScope.launch {
+            romShelf.state.collect { shelf ->
+                val games = shelf.games.values.flatten()
+                val saving = games.filter { it.canCompress }.sumOf { (it.originalSize - romShelf.estimate(it).middle).coerceAtLeast(0) }
+                _uiState.update {
+                    it.copy(
+                        summary = it.summary.copy(
+                            romFolders = shelf.folders.isNotEmpty(),
+                            romSaving = saving,
+                            romGames = games.size,
+                            romConsoles = shelf.games.count { (_, list) -> list.isNotEmpty() },
+                        ),
+                    )
+                }
+            }
+        }
 
         // Device facts come through PServer, which never runs on the main thread (key events wait there).
         viewModelScope.launch {
@@ -64,6 +82,7 @@ class MainViewModel @Inject constructor(
 
     /** Again on every visit: the cards show what was changed in the sections meanwhile. */
     fun refresh() {
+        romShelf.peek()
         val layout = prefs.panelLayout
         _uiState.update {
             it.copy(

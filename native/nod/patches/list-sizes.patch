@@ -1,0 +1,64 @@
+diff --git a/nodtool/src/cmd/list.rs b/nodtool/src/cmd/list.rs
+index c8d8311..3731784 100644
+--- a/nodtool/src/cmd/list.rs
++++ b/nodtool/src/cmd/list.rs
+@@ -17,17 +17,26 @@ pub struct Args {
+     #[argp(positional)]
+     /// Path to disc image(s)
+     file: Vec<PathBuf>,
++    #[argp(switch, short = 's')]
++    /// list only files, each as its size in bytes, a tab and its name
++    sizes: bool,
+ }
+ 
+ pub fn run(args: Args) -> nod::Result<()> {
+     for file in &args.file {
+-        list_file(file)?;
++        list_file(file, args.sizes)?;
+     }
+     Ok(())
+ }
+ 
+-fn print_fst(fst: Fst, kind: Option<PartitionKind>) {
++fn print_fst(fst: Fst, kind: Option<PartitionKind>, sizes: bool) {
+     for (_idx, node, name) in fst.iter() {
++        if sizes {
++            if !node.is_dir() {
++                println!("{}\t{name}", node.length());
++            }
++            continue;
++        }
+         if let Some(kind) = kind {
+             print!("{kind}/");
+         }
+@@ -35,12 +44,12 @@ fn print_fst(fst: Fst, kind: Option<PartitionKind>) {
+     }
+ }
+ 
+-fn list_file(path: &Path) -> nod::Result<(), nod::Error> {
++fn list_file(path: &Path, sizes: bool) -> nod::Result<(), nod::Error> {
+     info!("Loading {}", path_display(path));
+ 
+     if path.ends_with("fst.bin") {
+         let bytes = std::fs::read(path)?;
+-        print_fst(Fst::new(&bytes)?, None);
++        print_fst(Fst::new(&bytes)?, None, sizes);
+         return Ok(());
+     }
+ 
+@@ -51,13 +60,13 @@ fn list_file(path: &Path) -> nod::Result<(), nod::Error> {
+         for (idx, info) in disc.partitions().iter().enumerate() {
+             let mut partition = disc.open_partition(idx, &PartitionOptions::default())?;
+             let meta = partition.meta()?;
+-            print_fst(meta.fst()?, Some(info.kind));
++            print_fst(meta.fst()?, Some(info.kind), sizes);
+         }
+     } else if header.is_gamecube() {
+         let mut partition =
+             disc.open_partition_kind(PartitionKind::Data, &PartitionOptions::default())?;
+         let meta = partition.meta()?;
+-        print_fst(meta.fst()?, None);
++        print_fst(meta.fst()?, None, sizes);
+     } else {
+         println!("Invalid GC/Wii magic: {:#x?}/{:#x?}", header.gcn_magic, header.wii_magic);
+     }

@@ -27,7 +27,7 @@ class CheatSystemsTest {
     }
 
     @Test
-    fun `the owner's ROM folders are recognised, any case`() {
+    fun `real ROM folder names are recognised, any case`() {
         val expected = mapOf(
             "3DS" to CheatSystem.N3DS,
             "GB" to CheatSystem.GB,
